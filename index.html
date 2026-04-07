@@ -5,25 +5,18 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="theme-color" content="#0a1628">
+<meta name="theme-color" content="#1c1c1e">
 <link rel="manifest" href="manifest.json">
 <title>栄ガーデン</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
-:root {
-  --bg-start: #0a1628;
-  --bg-end: #000;
-  --glass: rgba(255,255,255,0.07);
-  --glass-border: rgba(255,255,255,0.12);
-  --glass-hover: rgba(255,255,255,0.13);
-}
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{
   height:100%;
   font-family:'Noto Sans JP','Inter',sans-serif;
-  background:linear-gradient(170deg,var(--bg-start) 0%,#0d2818 45%,var(--bg-end) 100%);
-  color:#fff;
+  background:#e8e0d0;
+  color:#1c1c1e;
   overflow-x:hidden;
   -webkit-user-select:none;user-select:none;
   -webkit-tap-highlight-color:transparent;
@@ -31,13 +24,15 @@ html,body{
 
 /* ── ヘッダー ── */
 .header{
+  background:#1c1c1e;
+  color:#fff;
   text-align:center;
   padding:44px 16px 20px;
   position:relative;
 }
 .header::after{
   content:'';position:absolute;bottom:0;left:10%;right:10%;
-  height:1px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.12),transparent);
+  height:1px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.1),transparent);
 }
 
 /* ロゴ行 */
@@ -47,7 +42,7 @@ html,body{
 }
 .logo-svg{
   width:48px;height:48px;flex-shrink:0;
-  filter:drop-shadow(0 0 10px rgba(46,204,113,.35));
+  filter:drop-shadow(0 0 8px rgba(46,204,113,.3));
 }
 .logo-info{text-align:left}
 .logo-name{font-size:22px;font-weight:700;letter-spacing:2px;line-height:1.2}
@@ -69,7 +64,7 @@ html,body{
 }
 .clock-divider{
   width:40px;height:1px;margin:6px auto;
-  background:linear-gradient(90deg,transparent,rgba(255,255,255,.25),transparent);
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,.2),transparent);
 }
 .clock-time{
   font-family:'Inter',sans-serif;
@@ -86,73 +81,67 @@ html,body{
   gap:14px;
   max-width:400px;
   margin:0 auto;
-  padding:28px 20px 40px;
+  padding:24px 20px 40px;
 }
 
 /* ── アプリカード ── */
 .app{
-  text-decoration:none;color:#fff;
+  text-decoration:none;color:#1c1c1e;
   position:relative;overflow:hidden;
-  border-radius:24px;
-  background:var(--glass);
-  border:1px solid var(--glass-border);
-  backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
-  padding:24px 12px 18px;
+  border-radius:20px;
+  background:#fff;
+  box-shadow:0 2px 12px rgba(0,0,0,.08);
+  padding:24px 12px 16px;
   text-align:center;
-  transition:transform .18s,background .25s,box-shadow .25s;
+  transition:transform .18s,box-shadow .25s;
 }
-.app::before{
-  content:'';position:absolute;inset:0;border-radius:24px;
-  opacity:0;transition:opacity .3s;
-  pointer-events:none;
-}
-.app:active{transform:scale(.94)}
 .app:hover,.app:focus{
-  background:var(--glass-hover);
-  box-shadow:0 0 30px rgba(255,255,255,.06);
+  transform:translateY(-3px);
+  box-shadow:0 6px 20px rgba(0,0,0,.13);
 }
-/* カラーグロー */
-.app[data-color="green"]::before{background:radial-gradient(circle at 50% 30%,rgba(45,122,79,.35),transparent 70%)}
-.app[data-color="blue"]::before{background:radial-gradient(circle at 50% 30%,rgba(26,95,168,.35),transparent 70%)}
-.app[data-color="orange"]::before{background:radial-gradient(circle at 50% 30%,rgba(230,81,0,.3),transparent 70%)}
-.app[data-color="purple"]::before{background:radial-gradient(circle at 50% 30%,rgba(123,31,162,.3),transparent 70%)}
-.app[data-color="red"]::before{background:radial-gradient(circle at 50% 30%,rgba(192,57,43,.3),transparent 70%)}
-.app:hover::before,.app:active::before{opacity:1}
+.app:active{transform:scale(.95)}
 
-/* アイコン */
-.app .icon{
-  font-size:52px;line-height:1;
-  display:block;margin-bottom:10px;
-  filter:drop-shadow(0 2px 8px rgba(0,0,0,.3));
-  transition:transform .2s;
+/* 絵文字背景丸 */
+.app .icon-wrap{
+  width:64px;height:64px;
+  border-radius:16px;
+  display:flex;align-items:center;justify-content:center;
+  margin:0 auto 10px;
 }
-.app:active .icon{transform:scale(1.1)}
+.app[data-color="green"] .icon-wrap{background:#2d7a4f}
+.app[data-color="blue"] .icon-wrap{background:#1a5fa8}
+.app[data-color="orange"] .icon-wrap{background:#e65100}
+.app[data-color="purple"] .icon-wrap{background:#7b1fa2}
+.app[data-color="red"] .icon-wrap{background:#c0392b}
+
+.app .icon{
+  font-size:32px;line-height:1;
+  filter:drop-shadow(0 1px 3px rgba(0,0,0,.2));
+}
 .app .name{
   font-size:13px;font-weight:600;
-  opacity:.92;line-height:1.4;
+  line-height:1.4;
+  color:#1c1c1e;
 }
 
 /* リップル */
 .ripple{
   position:absolute;border-radius:50%;
-  background:rgba(255,255,255,.25);
+  background:rgba(0,0,0,.1);
   transform:scale(0);animation:ripple-anim .5s ease-out;
   pointer-events:none;
 }
 @keyframes ripple-anim{to{transform:scale(3);opacity:0}}
 
 /* 準備中オーバーレイ */
-.app.wip{pointer-events:auto}
 .app.wip .overlay{
-  position:absolute;inset:0;border-radius:24px;
-  background:rgba(0,0,0,.55);
-  backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px);
+  position:absolute;inset:0;border-radius:20px;
+  background:rgba(255,255,255,.7);
   display:flex;align-items:center;justify-content:center;
 }
 .app.wip .overlay span{
   font-size:11px;font-weight:700;
-  background:rgba(255,255,255,.15);
-  border:1px solid rgba(255,255,255,.2);
+  background:#888;color:#fff;
   padding:4px 12px;border-radius:20px;
   letter-spacing:1px;
 }
@@ -165,11 +154,10 @@ html,body{
   pointer-events:none;z-index:200;
 }
 .toast-inner{
-  background:rgba(30,30,30,.92);
-  backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
-  border:1px solid rgba(255,255,255,.1);
-  color:#fff;padding:12px 24px;border-radius:14px;
+  background:#1c1c1e;
+  color:#fff;padding:12px 24px;border-radius:12px;
   font-size:14px;font-weight:500;
+  box-shadow:0 4px 16px rgba(0,0,0,.2);
   transform:translateY(80px);opacity:0;
   transition:transform .3s cubic-bezier(.4,0,.2,1),opacity .3s;
 }
@@ -178,7 +166,7 @@ html,body{
 /* フッター */
 .footer{
   text-align:center;padding:0 20px 24px;
-  font-size:11px;color:rgba(255,255,255,.2);
+  font-size:11px;color:rgba(0,0,0,.25);
   font-family:'Inter',sans-serif;letter-spacing:.5px;
 }
 </style>
@@ -187,28 +175,7 @@ html,body{
 
 <div class="header">
   <div class="logo-row">
-    <svg class="logo-svg" viewBox="0 0 100 120" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <!-- 葉（左） -->
-      <ellipse cx="38" cy="18" rx="14" ry="7" transform="rotate(-30 38 18)"
-               fill="#2ecc71" opacity=".85"/>
-      <!-- 葉（右） -->
-      <ellipse cx="62" cy="18" rx="14" ry="7" transform="rotate(30 62 18)"
-               fill="#2ecc71" opacity=".85"/>
-      <!-- 茎 -->
-      <line x1="50" y1="24" x2="50" y2="32" stroke="#2ecc71" stroke-width="3" stroke-linecap="round"/>
-      <!-- 円枠 -->
-      <circle cx="50" cy="68" r="42" stroke="#2ecc71" stroke-width="5" fill="none"/>
-      <!-- 格子：横線 -->
-      <line x1="16" y1="55" x2="84" y2="55" stroke="#2ecc71" stroke-width="2.5" opacity=".7"/>
-      <line x1="16" y1="81" x2="84" y2="81" stroke="#2ecc71" stroke-width="2.5" opacity=".7"/>
-      <!-- 格子：縦線 -->
-      <line x1="50" y1="28" x2="50" y2="108" stroke="#2ecc71" stroke-width="2.5" opacity=".7"/>
-      <!-- 格子：斜め線 -->
-      <line x1="20" y1="38" x2="50" y2="68" stroke="#2ecc71" stroke-width="2" opacity=".45"/>
-      <line x1="80" y1="38" x2="50" y2="68" stroke="#2ecc71" stroke-width="2" opacity=".45"/>
-      <line x1="20" y1="98" x2="50" y2="68" stroke="#2ecc71" stroke-width="2" opacity=".45"/>
-      <line x1="80" y1="98" x2="50" y2="68" stroke="#2ecc71" stroke-width="2" opacity=".45"/>
-    </svg>
+    <img class="logo-svg" src="logo.png" alt="栄ガーデン ロゴ">
     <div class="logo-info">
       <div class="logo-name">栄ガーデン</div>
       <div class="logo-sub">Sakae Garden</div>
@@ -228,7 +195,6 @@ html,body{
 <div class="toast"><div class="toast-inner" id="toast"></div></div>
 
 <script>
-// ── アプリ定義 ──
 const APPS = [
   { emoji:'🚚', name:'配達日報',       url:'https://sakae-garden.github.io/nippo/',                color:'green'  },
   { emoji:'📊', name:'日報サマリー',   url:'https://sakae-garden.github.io/nippo/summary.html',    color:'blue'   },
@@ -237,7 +203,6 @@ const APPS = [
   { emoji:'📈', name:'収穫予測',       url:'https://sakae-garden.github.io/harvest/owner.html',    color:'red',   wip:true },
 ];
 
-// ── グリッド描画 ──
 const grid = document.getElementById('grid');
 APPS.forEach(app => {
   const a = document.createElement('a');
@@ -245,12 +210,11 @@ APPS.forEach(app => {
   a.className = 'app' + (app.wip ? ' wip' : '');
   a.dataset.color = app.color;
   a.innerHTML =
-    `<span class="icon">${app.emoji}</span>` +
+    `<div class="icon-wrap"><span class="icon">${app.emoji}</span></div>` +
     `<span class="name">${app.name}</span>` +
     (app.wip ? '<div class="overlay"><span>準備中</span></div>' : '');
 
   a.addEventListener('click', function(e) {
-    // リップル
     const rect = a.getBoundingClientRect();
     const r = document.createElement('span');
     r.className = 'ripple';
@@ -260,17 +224,14 @@ APPS.forEach(app => {
     r.style.top = (e.clientY - rect.top - size/2) + 'px';
     a.appendChild(r);
     setTimeout(() => r.remove(), 500);
-
     if (app.wip) {
       e.preventDefault();
       showToast('このアプリは現在準備中です');
     }
   });
-
   grid.appendChild(a);
 });
 
-// ── 時計 ──
 function updateClock() {
   const now = new Date();
   const y = now.getFullYear();
@@ -285,7 +246,6 @@ function updateClock() {
 updateClock();
 setInterval(updateClock, 10000);
 
-// ── トースト ──
 let toastTimer;
 function showToast(msg) {
   const t = document.getElementById('toast');
