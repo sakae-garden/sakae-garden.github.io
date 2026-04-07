@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>卸販売先入力 - 栄ガーデン</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Noto Sans JP',sans-serif;background:#f5f0e8;color:#333;min-height:100vh}
+header{background:#2c3e2d;color:#fff;padding:14px 16px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100}
+header h1{font-size:16px;font-weight:700}
+header .back{color:#a8d5a2;text-decoration:none;font-size:14px}
+.container{max-width:480px;margin:0 auto;padding:16px}
+
+/* カード */
+.card{background:#fff;border-radius:12px;padding:20px;margin-bottom:16px;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+.card h2{font-size:15px;font-weight:700;color:#2c3e2d;margin-bottom:14px;padding-bottom:8px;border-bottom:2px solid #e8e0d0}
+
+/* フォーム */
+label{display:block;font-size:13px;font-weight:500;color:#666;margin-bottom:4px}
+select,input[type="date"],input[type="number"],input[type="text"],textarea{
+  width:100%;padding:10px 12px;border:1.5px solid #d0c8b8;border-radius:8px;
+  font-size:16px;font-family:inherit;background:#faf8f4;margin-bottom:12px;-webkit-appearance:none}
+select:focus,input:focus,textarea:focus{outline:none;border-color:#2c3e2d;background:#fff}
+textarea{resize:vertical;min-height:60px}
+
+/* 品目行 */
+.item-row{display:flex;align-items:center;gap:8px;margin-bottom:8px;padding:10px;background:#faf8f4;border-radius:8px}
+.item-row .item-name{flex:0 0 72px;font-size:14px;font-weight:500}
+.item-row .item-price{flex:0 0 70px;font-size:11px;color:#888}
+.item-row input{flex:1;margin-bottom:0;text-align:right;max-width:72px}
+.item-row .item-subtotal{flex:0 0 72px;text-align:right;font-size:14px;font-weight:500;color:#2c3e2d}
+
+/* 合計 */
+.total-row{display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-top:2px solid #2c3e2d;margin-top:8px;font-weight:700;font-size:18px;color:#2c3e2d}
+
+/* ボタン */
+.btn{display:block;width:100%;padding:14px;border:none;border-radius:10px;font-size:16px;font-weight:700;font-family:inherit;cursor:pointer;transition:opacity .2s}
+.btn:active{opacity:.7}
+.btn-primary{background:#2c3e2d;color:#fff}
+.btn-secondary{background:#e8e0d0;color:#333;margin-top:8px}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+
+/* タブ */
+.tabs{display:flex;background:#fff;border-radius:10px;padding:4px;margin-bottom:16px;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+.tab{flex:1;padding:10px;text-align:center;font-size:13px;font-weight:500;border-radius:8px;cursor:pointer;transition:all .2s;color:#888}
+.tab.active{background:#2c3e2d;color:#fff}
+
+/* 履歴 */
+.history-item{padding:12px 0;border-bottom:1px solid #eee}
+.history-item:last-child{border-bottom:none}
+.history-header{display:flex;justify-content:space-between;align-items:center}
+.history-date{font-size:13px;color:#888}
+.history-amount{font-weight:700;color:#2c3e2d}
+.history-detail{font-size:12px;color:#999;margin-top:2px}
+.history-actions{margin-top:6px;display:flex;gap:8px}
+.history-actions button{font-size:11px;padding:4px 10px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-family:inherit}
+.history-actions .del{color:#c0392b;border-color:#c0392b}
+
+/* 集計 */
+.summary-row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #eee;font-size:14px}
+.summary-row:last-child{border-bottom:none}
+.summary-total{font-weight:700;font-size:16px;border-top:2px solid #2c3e2d;margin-top:4px;padding-top:8px}
+
+/* その他 */
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#2c3e2d;color:#fff;padding:12px 24px;border-radius:8px;font-size:14px;z-index:200;display:none}
+.loading{text-align:center;padding:40px;color:#888}
+.month-nav{display:flex;align-items:center;justify-content:center;gap:12px;margin-bottom:12px}
+.month-nav button{background:none;border:1px solid #ccc;border-radius:6px;padding:6px 12px;cursor:pointer;font-family:inherit;font-size:13px}
+.month-nav span{font-size:15px;font-weight:500;min-width:100px;text-align:center}
+</style>
+</head>
+<body>
+
+<header>
+  <a href="index.html" class="back">&lt; ホーム</a>
+  <h1>卸販売先入力</h1>
+  <span></span>
+</header>
+
+<div class="container">
+  <div class="tabs">
+    <div class="tab active" onclick="switchTab('input')">入力</div>
+    <div class="tab" onclick="switchTab('history')">履歴</div>
+    <div class="tab" onclick="switchTab('summary')">集計</div>
+  </div>
+
+  <!-- ===== 入力タブ ===== -->
+  <div id="tab-input">
+    <div class="card">
+      <h2>納品情報</h2>
+      <label>納品先</label>
+      <select id="customer" onchange="onCustomerChange()">
+        <option value="">選択してください</option>
+      </select>
+      <label>納品日</label>
+      <input type="date" id="delivery-date">
+    </div>
+    <div class="card" id="items-card" style="display:none">
+      <h2>品目・数量</h2>
+      <div id="items-container"></div>
+      <div class="total-row">
+        <span>合計（税抜）</span>
+        <span id="total-amount">¥0</span>
+      </div>
+    </div>
+    <div class="card" id="memo-card" style="display:none">
+      <h2>備考</h2>
+      <textarea id="memo" placeholder="特記事項があれば入力"></textarea>
+    </div>
+    <button class="btn btn-primary" id="submit-btn" style="display:none" onclick="submitForm()">保存する</button>
+  </div>
+
+  <!-- ===== 履歴タブ ===== -->
+  <div id="tab-history" style="display:none">
+    <div class="month-nav">
+      <button onclick="changeMonth(-1)">&lt; 前月</button>
+      <span id="history-month"></span>
+      <button onclick="changeMonth(1)">翌月 &gt;</button>
+    </div>
+    <div class="card">
+      <h2>納品履歴</h2>
+      <div id="history-list"><div class="loading">読み込み中...</div></div>
+    </div>
+  </div>
+
+  <!-- ===== 集計タブ ===== -->
+  <div id="tab-summary" style="display:none">
+    <div class="month-nav">
+      <button onclick="changeMonth(-1)">&lt; 前月</button>
+      <span id="summary-month"></span>
+      <button onclick="changeMonth(1)">翌月 &gt;</button>
+    </div>
+    <div class="card">
+      <h2>月別集計</h2>
+      <div id="summary-content"><div class="loading">読み込み中...</div></div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── 設定 ──
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbz9r6tLTdiJhqZlWX-_2ZWjPVKGHF-tQTXHLxSCbPuDXFSp4hhyfNzmaxhWR6HMfkmRgw/exec';
+
+const PRODUCT_DEFS = {
+  'ハーズ':    [{id:'toku',name:'特大',unitPrice:315,unit:'袋'},{id:'dai',name:'大',unitPrice:158,unit:'袋'}],
+  'やおとも':  [{id:'daikilo',name:'大キロ',unitPrice:1400,unit:'kg'},{id:'daibukuro',name:'大袋',unitPrice:170,unit:'袋'}],
+  'キューピー':[{id:'toku',name:'特大',unitPrice:350,unit:'袋'},{id:'sho',name:'小',unitPrice:95,unit:'袋'},{id:'hime',name:'ヒメ',unitPrice:95,unit:'袋'},{id:'rest',name:'レストラン',unitPrice:1400,unit:'kg'}],
+};
+
+let currentMonth = new Date().toISOString().slice(0,7);
+let currentTab = 'input';
+let editingId = null;
+let cachedRecords = [];
+
+// ── 初期化 ──
+(function init() {
+  const sel = document.getElementById('customer');
+  Object.keys(PRODUCT_DEFS).forEach(c => {
+    sel.innerHTML += `<option value="${c}">${c}</option>`;
+  });
+  document.getElementById('delivery-date').value = new Date().toISOString().slice(0,10);
+  updateMonthDisplay();
+})();
+
+// ── JSONP通信 ──
+let jsonpCounter = 0;
+function jsonp(params) {
+  return new Promise((resolve, reject) => {
+    const cbName = '_jsonp_cb_' + (++jsonpCounter);
+    window[cbName] = function(data) {
+      delete window[cbName];
+      document.head.removeChild(script);
+      resolve(data);
+    };
+    const qs = new URLSearchParams(params);
+    qs.set('callback', cbName);
+    const script = document.createElement('script');
+    script.src = GAS_URL + '?' + qs.toString();
+    script.onerror = () => {
+      delete window[cbName];
+      document.head.removeChild(script);
+      reject(new Error('JSONP request failed'));
+    };
+    document.head.appendChild(script);
+  });
+}
+
+// ── タブ切替 ──
+function switchTab(tab) {
+  currentTab = tab;
+  document.querySelectorAll('.tab').forEach((t,i) => {
+    t.classList.toggle('active', ['input','history','summary'][i]===tab);
+  });
+  document.getElementById('tab-input').style.display = tab==='input'?'':'none';
+  document.getElementById('tab-history').style.display = tab==='history'?'':'none';
+  document.getElementById('tab-summary').style.display = tab==='summary'?'':'none';
+  if (tab==='history' || tab==='summary') loadRecords();
+}
+
+function changeMonth(delta) {
+  const d = new Date(currentMonth + '-01');
+  d.setMonth(d.getMonth() + delta);
+  currentMonth = d.toISOString().slice(0,7);
+  updateMonthDisplay();
+  loadRecords();
+}
+
+function updateMonthDisplay() {
+  const [y,m] = currentMonth.split('-');
+  const text = `${y}年${parseInt(m)}月`;
+  document.getElementById('history-month').textContent = text;
+  document.getElementById('summary-month').textContent = text;
+}
+
+// ── 入力 ──
+function onCustomerChange() {
+  const customer = document.getElementById('customer').value;
+  const show = !!customer;
+  document.getElementById('items-card').style.display = show?'':'none';
+  document.getElementById('memo-card').style.display = show?'':'none';
+  document.getElementById('submit-btn').style.display = show?'':'none';
+  if (!customer) return;
+  renderItems(customer);
+}
+
+function renderItems(customer) {
+  const items = PRODUCT_DEFS[customer];
+  document.getElementById('items-container').innerHTML = items.map(item => `
+    <div class="item-row">
+      <span class="item-name">${item.name}</span>
+      <span class="item-price">@¥${item.unitPrice.toLocaleString()}/${item.unit}</span>
+      <input type="number" id="qty-${item.id}" placeholder="0"
+             inputmode="decimal" step="any" min="0" oninput="updateTotal()">
+      <span class="item-subtotal" id="sub-${item.id}">¥0</span>
+    </div>`).join('');
+  updateTotal();
+}
+
+function updateTotal() {
+  const customer = document.getElementById('customer').value;
+  if (!customer) return;
+  let total = 0;
+  PRODUCT_DEFS[customer].forEach(item => {
+    const qty = parseFloat(document.getElementById('qty-'+item.id).value) || 0;
+    const sub = Math.round(qty * item.unitPrice);
+    document.getElementById('sub-'+item.id).textContent = '¥'+sub.toLocaleString();
+    total += sub;
+  });
+  document.getElementById('total-amount').textContent = '¥'+total.toLocaleString();
+}
+
+// ── 保存 ──
+async function submitForm() {
+  const customer = document.getElementById('customer').value;
+  const date = document.getElementById('delivery-date').value;
+  const memo = document.getElementById('memo').value;
+  if (!customer || !date) { showToast('納品先と日付を入力してください'); return; }
+
+  const items = PRODUCT_DEFS[customer];
+  const quantities = {};
+  const itemDetails = [];
+  let total = 0;
+  items.forEach(item => {
+    const qty = parseFloat(document.getElementById('qty-'+item.id).value) || 0;
+    if (qty > 0) {
+      quantities[item.id] = String(qty);
+      const sub = Math.round(qty * item.unitPrice);
+      itemDetails.push({id:item.id,name:item.name,unitPrice:item.unitPrice,qty,unit:item.unit,subtotal:sub});
+      total += sub;
+    }
+  });
+  if (total === 0) { showToast('数量を入力してください'); return; }
+
+  const btn = document.getElementById('submit-btn');
+  btn.disabled = true;
+  btn.textContent = '保存中...';
+
+  try {
+    const record = {
+      id: editingId || crypto.randomUUID(),
+      customer, date,
+      quantities_json: JSON.stringify(quantities),
+      items_json: JSON.stringify(itemDetails),
+      exclTax: String(total),
+      memo,
+    };
+    const action = editingId ? 'updateRecord' : 'saveRecord';
+    await jsonp({ action, data: JSON.stringify(record) });
+    showToast(editingId ? '更新しました' : '保存しました');
+    resetForm();
+  } catch(e) {
+    showToast('保存に失敗しました');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '保存する';
+  }
+}
+
+function resetForm() {
+  editingId = null;
+  document.getElementById('customer').value = '';
+  document.getElementById('memo').value = '';
+  document.getElementById('items-card').style.display = 'none';
+  document.getElementById('memo-card').style.display = 'none';
+  document.getElementById('submit-btn').style.display = 'none';
+  document.getElementById('submit-btn').textContent = '保存する';
+}
+
+// ── 履歴読み込み ──
+async function loadRecords() {
+  try {
+    const data = await jsonp({ action:'getRecords', month:currentMonth });
+    cachedRecords = (data.records||[]).sort((a,b) => b.date.localeCompare(a.date));
+    if (currentTab==='history') renderHistory();
+    if (currentTab==='summary') renderSummary();
+  } catch(e) {
+    document.getElementById('history-list').innerHTML = '<div class="loading">読み込みエラー</div>';
+  }
+}
+
+function renderHistory() {
+  const list = document.getElementById('history-list');
+  if (cachedRecords.length === 0) { list.innerHTML='<div class="loading">データなし</div>'; return; }
+  list.innerHTML = cachedRecords.map(r => {
+    const items = JSON.parse(r.items_json||'[]');
+    const detail = items.map(i=>`${i.name} ${i.qty}${i.unit}`).join(' / ');
+    return `<div class="history-item">
+      <div class="history-header">
+        <div><strong>${r.customer}</strong> <span class="history-date">${r.date}</span></div>
+        <div class="history-amount">¥${Number(r.exclTax).toLocaleString()}</div>
+      </div>
+      <div class="history-detail">${detail}</div>
+      <div class="history-actions">
+        <button onclick="editRecord('${r.id}')">編集</button>
+        <button class="del" onclick="deleteRecord('${r.id}')">削除</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderSummary() {
+  const el = document.getElementById('summary-content');
+  if (cachedRecords.length === 0) { el.innerHTML='<div class="loading">データなし</div>'; return; }
+
+  const byCustomer = {};
+  cachedRecords.forEach(r => {
+    if (!byCustomer[r.customer]) byCustomer[r.customer] = 0;
+    byCustomer[r.customer] += Number(r.exclTax);
+  });
+  let grand = 0;
+  let html = '';
+  for (const [c, amt] of Object.entries(byCustomer).sort()) {
+    html += `<div class="summary-row"><span>${c}</span><span>¥${amt.toLocaleString()}</span></div>`;
+    grand += amt;
+  }
+  html += `<div class="summary-row summary-total"><span>合計（税抜）</span><span>¥${grand.toLocaleString()}</span></div>`;
+  el.innerHTML = html;
+}
+
+// ── 編集・削除 ──
+function editRecord(id) {
+  const r = cachedRecords.find(x => x.id === id);
+  if (!r) return;
+  editingId = id;
+  document.getElementById('customer').value = r.customer;
+  document.getElementById('delivery-date').value = r.date;
+  document.getElementById('memo').value = r.memo || '';
+  onCustomerChange();
+
+  const quantities = JSON.parse(r.quantities_json || '{}');
+  for (const [key, val] of Object.entries(quantities)) {
+    const el = document.getElementById('qty-' + key);
+    if (el) el.value = val;
+  }
+  updateTotal();
+  document.getElementById('submit-btn').textContent = '更新する';
+  switchTab('input');
+  window.scrollTo(0, 0);
+}
+
+async function deleteRecord(id) {
+  if (!confirm('この納品記録を削除しますか？')) return;
+  try {
+    await jsonp({ action:'deleteRecord', id });
+    showToast('削除しました');
+    loadRecords();
+  } catch(e) {
+    showToast('削除に失敗しました');
+  }
+}
+
+// ── ユーティリティ ──
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.display = 'block';
+  setTimeout(() => t.style.display = 'none', 2500);
+}
+</script>
+</body>
+</html>

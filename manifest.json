@@ -1,0 +1,16 @@
+{
+  "name": "栄ガーデン",
+  "short_name": "栄ガーデン",
+  "description": "栄ガーデン 業務アプリ",
+  "start_url": "/apps/index.html",
+  "display": "standalone",
+  "background_color": "#1a3a2a",
+  "theme_color": "#1a3a2a",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍄</text></svg>",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}

@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#1a3a2a">
+<link rel="manifest" href="manifest.json">
+<title>栄ガーデン</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body {
+  height: 100%;
+  font-family: 'Noto Sans JP', sans-serif;
+  background: linear-gradient(160deg, #1a3a2a 0%, #2d5a3f 40%, #1a3a2a 100%);
+  color: #fff;
+  overflow-x: hidden;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* ヘッダー */
+.header {
+  text-align: center;
+  padding: 50px 16px 20px;
+}
+.header .logo {
+  font-size: 48px;
+  line-height: 1;
+  margin-bottom: 8px;
+}
+.header h1 {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 2px;
+}
+.header .sub {
+  font-size: 12px;
+  color: rgba(255,255,255,0.5);
+  margin-top: 4px;
+  letter-spacing: 1px;
+}
+
+/* グリッド */
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  max-width: 400px;
+  margin: 0 auto;
+  padding: 20px 24px 40px;
+}
+
+/* アプリアイコン */
+.app {
+  text-align: center;
+  text-decoration: none;
+  color: #fff;
+  -webkit-tap-highlight-color: transparent;
+}
+.app .icon {
+  width: 72px;
+  height: 72px;
+  border-radius: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32px;
+  margin: 0 auto 8px;
+  position: relative;
+  transition: transform 0.15s;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+}
+.app:active .icon {
+  transform: scale(0.9);
+}
+.app .label {
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.3;
+  opacity: 0.9;
+}
+
+/* バッジ */
+.badge {
+  position: absolute;
+  top: -6px;
+  right: -10px;
+  background: #e74c3c;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 8px;
+  white-space: nowrap;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+}
+
+/* disabled */
+.app.disabled {
+  opacity: 0.5;
+}
+.app.disabled .icon {
+  filter: grayscale(0.5);
+}
+
+/* 下部 */
+.footer {
+  text-align: center;
+  padding: 20px;
+  font-size: 11px;
+  color: rgba(255,255,255,0.3);
+}
+
+/* ダイアログ */
+.dialog-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 100;
+  align-items: center;
+  justify-content: center;
+}
+.dialog-overlay.show { display: flex; }
+.dialog {
+  background: #fff;
+  color: #333;
+  border-radius: 14px;
+  padding: 24px;
+  max-width: 280px;
+  text-align: center;
+}
+.dialog p { font-size: 14px; margin-bottom: 16px; }
+.dialog button {
+  background: #2c3e2d;
+  color: #fff;
+  border: none;
+  padding: 10px 32px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-family: inherit;
+  font-weight: 500;
+  cursor: pointer;
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="logo">🍄</div>
+  <h1>栄ガーデン</h1>
+  <div class="sub">SAKAE GARDEN</div>
+</div>
+
+<div class="grid">
+  <a href="https://sakae-garden.github.io/nippo/" class="app">
+    <div class="icon" style="background:#2d7a4f">🚚</div>
+    <div class="label">配達日報</div>
+  </a>
+
+  <a href="https://sakae-garden.github.io/nippo/summary.html" class="app">
+    <div class="icon" style="background:#1a5fa8">📊</div>
+    <div class="label">日報サマリー</div>
+  </a>
+
+  <a href="https://sakae-garden.github.io/apps/oroshi.html" class="app">
+    <div class="icon" style="background:#e65100">📦</div>
+    <div class="label">卸販売先入力</div>
+  </a>
+
+  <a href="#" class="app disabled" onclick="showWip(event)">
+    <div class="icon" style="background:#7b1fa2">
+      🌱
+      <span class="badge">作成中</span>
+    </div>
+    <div class="label">日次作業入力</div>
+  </a>
+
+  <a href="#" class="app disabled" onclick="showWip(event)">
+    <div class="icon" style="background:#c0392b">
+      📈
+      <span class="badge">作成中</span>
+    </div>
+    <div class="label">収穫予測<br>(オーナー)</div>
+  </a>
+</div>
+
+<div class="footer">
+  &copy; 2026 栄ガーデン
+</div>
+
+<div class="dialog-overlay" id="dialog" onclick="hideDialog()">
+  <div class="dialog" onclick="event.stopPropagation()">
+    <p>このアプリは現在作成中です。<br>もうしばらくお待ちください。</p>
+    <button onclick="hideDialog()">OK</button>
+  </div>
+</div>
+
+<script>
+function showWip(e) {
+  e.preventDefault();
+  document.getElementById('dialog').classList.add('show');
+}
+function hideDialog() {
+  document.getElementById('dialog').classList.remove('show');
+}
+
+// PWA Service Worker登録（オフラインキャッシュ用）
+if ('serviceWorker' in navigator) {
+  // 軽量なので SW は省略。manifest.json だけでホーム追加は対応。
+}
+</script>
+</body>
+</html>
