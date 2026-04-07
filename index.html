@@ -32,24 +32,51 @@ html,body{
 /* ── ヘッダー ── */
 .header{
   text-align:center;
-  padding:48px 16px 12px;
+  padding:44px 16px 20px;
   position:relative;
 }
 .header::after{
   content:'';position:absolute;bottom:0;left:10%;right:10%;
-  height:1px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.15),transparent);
+  height:1px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.12),transparent);
 }
+
+/* ロゴ行 */
 .logo-row{
-  display:flex;align-items:center;justify-content:center;gap:10px;
-  margin-bottom:10px;
+  display:flex;align-items:center;justify-content:center;gap:14px;
+  margin-bottom:20px;
 }
-.logo-emoji{font-size:36px;filter:drop-shadow(0 0 12px rgba(120,200,120,.4))}
-.logo-text{font-size:24px;font-weight:700;letter-spacing:3px}
-.clock{
+.logo-svg{
+  width:48px;height:48px;flex-shrink:0;
+  filter:drop-shadow(0 0 10px rgba(46,204,113,.35));
+}
+.logo-info{text-align:left}
+.logo-name{font-size:22px;font-weight:700;letter-spacing:2px;line-height:1.2}
+.logo-sub{
+  font-family:'Inter',sans-serif;
+  font-size:11px;font-weight:600;
+  color:rgba(255,255,255,.4);
+  letter-spacing:2px;text-transform:uppercase;
+}
+
+/* 時計 */
+.clock-area{margin-top:4px}
+.clock-date{
   font-family:'Inter','Noto Sans JP',sans-serif;
-  font-size:13px;font-weight:600;
-  color:rgba(255,255,255,.45);
-  letter-spacing:1.5px;
+  font-size:16px;font-weight:600;
+  color:rgba(255,255,255,.7);
+  letter-spacing:1px;
+  margin-bottom:4px;
+}
+.clock-divider{
+  width:40px;height:1px;margin:6px auto;
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,.25),transparent);
+}
+.clock-time{
+  font-family:'Inter',sans-serif;
+  font-size:36px;font-weight:700;
+  color:#fff;
+  letter-spacing:4px;
+  line-height:1;
 }
 
 /* ── グリッド ── */
@@ -160,10 +187,38 @@ html,body{
 
 <div class="header">
   <div class="logo-row">
-    <span class="logo-emoji">🍄</span>
-    <span class="logo-text">栄ガーデン</span>
+    <svg class="logo-svg" viewBox="0 0 100 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <!-- 葉（左） -->
+      <ellipse cx="38" cy="18" rx="14" ry="7" transform="rotate(-30 38 18)"
+               fill="#2ecc71" opacity=".85"/>
+      <!-- 葉（右） -->
+      <ellipse cx="62" cy="18" rx="14" ry="7" transform="rotate(30 62 18)"
+               fill="#2ecc71" opacity=".85"/>
+      <!-- 茎 -->
+      <line x1="50" y1="24" x2="50" y2="32" stroke="#2ecc71" stroke-width="3" stroke-linecap="round"/>
+      <!-- 円枠 -->
+      <circle cx="50" cy="68" r="42" stroke="#2ecc71" stroke-width="5" fill="none"/>
+      <!-- 格子：横線 -->
+      <line x1="16" y1="55" x2="84" y2="55" stroke="#2ecc71" stroke-width="2.5" opacity=".7"/>
+      <line x1="16" y1="81" x2="84" y2="81" stroke="#2ecc71" stroke-width="2.5" opacity=".7"/>
+      <!-- 格子：縦線 -->
+      <line x1="50" y1="28" x2="50" y2="108" stroke="#2ecc71" stroke-width="2.5" opacity=".7"/>
+      <!-- 格子：斜め線 -->
+      <line x1="20" y1="38" x2="50" y2="68" stroke="#2ecc71" stroke-width="2" opacity=".45"/>
+      <line x1="80" y1="38" x2="50" y2="68" stroke="#2ecc71" stroke-width="2" opacity=".45"/>
+      <line x1="20" y1="98" x2="50" y2="68" stroke="#2ecc71" stroke-width="2" opacity=".45"/>
+      <line x1="80" y1="98" x2="50" y2="68" stroke="#2ecc71" stroke-width="2" opacity=".45"/>
+    </svg>
+    <div class="logo-info">
+      <div class="logo-name">栄ガーデン</div>
+      <div class="logo-sub">Sakae Garden</div>
+    </div>
   </div>
-  <div class="clock" id="clock"></div>
+  <div class="clock-area">
+    <div class="clock-date" id="clock-date"></div>
+    <div class="clock-divider"></div>
+    <div class="clock-time" id="clock-time"></div>
+  </div>
 </div>
 
 <div class="grid" id="grid"></div>
@@ -177,7 +232,7 @@ html,body{
 const APPS = [
   { emoji:'🚚', name:'配達日報',       url:'https://sakae-garden.github.io/nippo/',                color:'green'  },
   { emoji:'📊', name:'日報サマリー',   url:'https://sakae-garden.github.io/nippo/summary.html',    color:'blue'   },
-  { emoji:'📦', name:'卸販売先入力',   url:'oroshi.html',                                          color:'orange' },
+  { emoji:'📦', name:'卸販売先入力',   url:'https://sakae-garden.github.io/oroshi.html',           color:'orange' },
   { emoji:'🌱', name:'日次作業入力',   url:'https://sakae-garden.github.io/harvest/employee.html', color:'purple', wip:true },
   { emoji:'📈', name:'収穫予測',       url:'https://sakae-garden.github.io/harvest/owner.html',    color:'red',   wip:true },
 ];
@@ -219,13 +274,13 @@ APPS.forEach(app => {
 function updateClock() {
   const now = new Date();
   const y = now.getFullYear();
-  const mo = now.getMonth() + 1;
-  const d = now.getDate();
+  const mo = String(now.getMonth()+1).padStart(2,'0');
+  const d = String(now.getDate()).padStart(2,'0');
   const wd = ['日','月','火','水','木','金','土'][now.getDay()];
   const h = String(now.getHours()).padStart(2,'0');
   const mi = String(now.getMinutes()).padStart(2,'0');
-  document.getElementById('clock').textContent =
-    `${y}.${String(mo).padStart(2,'0')}.${String(d).padStart(2,'0')} (${wd})  ${h}:${mi}`;
+  document.getElementById('clock-date').textContent = `${y}.${mo}.${d} (${wd})`;
+  document.getElementById('clock-time').textContent = `${h}:${mi}`;
 }
 updateClock();
 setInterval(updateClock, 10000);
