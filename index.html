@@ -41,17 +41,17 @@ html,body{
   margin-bottom:20px;
 }
 .logo-svg{
-  width:48px;height:48px;flex-shrink:0;
+  width:56px;height:56px;flex-shrink:0;
   object-fit:contain;
   filter:drop-shadow(0 0 8px rgba(46,204,113,.3));
 }
-.logo-info{text-align:left}
-.logo-name{font-size:22px;font-weight:700;letter-spacing:2px;line-height:1.2}
-.logo-sub{
-  font-family:'Inter',sans-serif;
-  font-size:11px;font-weight:600;
-  color:rgba(255,255,255,.4);
-  letter-spacing:2px;text-transform:uppercase;
+.logo-name{
+  font-family:'Noto Sans JP',sans-serif;
+  font-size:32px;font-weight:900;
+  color:#2ecc71;
+  letter-spacing:2px;
+  text-shadow:0 0 20px rgba(46,204,113,.25);
+  line-height:1;
 }
 
 /* 時計 */
@@ -177,10 +177,7 @@ html,body{
 <div class="header">
   <div class="logo-row">
     <img class="logo-svg" src="logo.png" alt="栄ガーデン ロゴ">
-    <div class="logo-info">
-      <div class="logo-name">栄ガーデン</div>
-      <div class="logo-sub">Sakae Garden</div>
-    </div>
+    <span class="logo-name">栄ガーデン</span>
   </div>
   <div class="clock-area">
     <div class="clock-date" id="clock-date"></div>
