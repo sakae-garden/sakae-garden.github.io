@@ -9,7 +9,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:'Noto Sans JP',sans-serif;background:#f5f0e8;color:#333;min-height:100vh}
+body{font-family:'Noto Sans JP',sans-serif;background:#f5f0e8;color:#333;min-height:100vh;padding-bottom:60px}
 header{background:#2c3e2d;color:#fff;padding:14px 16px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100}
 header h1{font-size:16px;font-weight:700}
 header .back{color:#a8d5a2;text-decoration:none;font-size:14px}
@@ -403,5 +403,9 @@ function showToast(msg) {
   setTimeout(() => t.style.display = 'none', 2500);
 }
 </script>
+
+<footer style="position:fixed;bottom:0;left:0;width:100%;height:52px;background:#1c1c1e;display:flex;align-items:center;justify-content:center;z-index:100">
+  <a href="https://sakae-garden.github.io/" style="color:#fff;text-decoration:none;font-size:15px;font-weight:500;font-family:'Noto Sans JP',sans-serif">🏠 ホームに戻る</a>
+</footer>
 </body>
 </html>
