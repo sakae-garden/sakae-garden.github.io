@@ -85,6 +85,7 @@ textarea{resize:vertical;min-height:60px}
 .line-row input,.line-row select{margin-bottom:0;padding:8px;font-size:14px;width:auto;flex:0 1 auto;min-width:0}
 .line-row .line-unit{flex:1 1 70px;max-width:90px;text-align:right}
 .line-row .line-qty{flex:1 1 56px;max-width:70px;text-align:right}
+.line-row .line-kg{flex:1 1 70px;max-width:90px;text-align:right}
 .line-row .line-bag{flex:1 1 80px;max-width:100px}
 .line-row .line-sep{flex:0 0 auto;color:#666;font-weight:500}
 .line-row .line-sub{flex:1 1 auto;text-align:right;font-weight:500;color:#2c3e2d;font-size:13px;min-width:60px}
@@ -177,9 +178,9 @@ const PRODUCT_DEFS = {
 
 // やおとも用：明細行式カテゴリー定義
 const YAOTOMO_CATS = [
-  {key:'weight', label:'① 生椎茸 重量納品（キロ単位）', sub:'@¥1,400/kg', price:1400, defaultOpen:true},
-  {key:'bag',    label:'② 生椎茸 袋納品（120〜130g）', sub:'@¥170/袋',    price:170,  defaultOpen:false},
-  {key:'count',  label:'③ 生椎茸 個数納品',            sub:'重量換算@¥1,400/kg', price:1400, defaultOpen:false},
+  {key:'weight', label:'① 生椎茸 重量納品',  sub:'@¥1,400/kg', price:1400, defaultOpen:true},
+  {key:'bag',    label:'② 生椎茸 袋納品',    sub:'@¥170/袋',    price:170,  defaultOpen:false},
+  {key:'count',  label:'③ 生椎茸 個数納品',  sub:'@¥1,400/kg', price:1400, defaultOpen:false},
 ];
 const YAOTOMO_CAT_NAMES = {weight:'重量', bag:'袋', count:'個数'};
 
@@ -310,7 +311,7 @@ function renderYaotomo() {
       </div>
       <div class="accordion-body">
         <div class="lines-container" id="lines-${cat.key}"></div>
-        <button type="button" class="btn-add-line" onclick="addLine('${cat.key}')">＋行を追加</button>
+        ${cat.key === 'bag' ? '' : `<button type="button" class="btn-add-line" onclick="addLine('${cat.key}')">＋行を追加</button>`}
         <div class="cat-subtotal">
           <span>小計</span>
           <strong id="catsub-${cat.key}">¥0</strong>
@@ -319,6 +320,8 @@ function renderYaotomo() {
     </div>
   `).join('');
   document.getElementById('items-container').innerHTML = html;
+  // 袋は1行固定
+  addLine('bag');
   updateYaotomoTotal();
 }
 
@@ -334,30 +337,21 @@ function addLine(catKey, preset) {
   let rowHtml = '';
   if (catKey === 'weight') {
     rowHtml = `
-      <input type="number" class="line-unit" inputmode="decimal" step="any" min="0" placeholder="0.2" oninput="updateYaotomoTotal()">
-      <span class="line-sep">kg ×</span>
-      <input type="number" class="line-qty" inputmode="numeric" step="1" min="0" placeholder="10" oninput="updateYaotomoTotal()">
-      <span class="line-sep">個</span>
+      <input type="number" class="line-kg" inputmode="decimal" step="any" min="0" placeholder="0.2" oninput="updateYaotomoTotal()">
+      <span class="line-sep">kg</span>
       <span class="line-sub">¥0</span>
       <button type="button" class="line-del" onclick="removeLine(this)" aria-label="削除">×</button>`;
   } else if (catKey === 'bag') {
     rowHtml = `
-      <select class="line-bag" onchange="updateYaotomoTotal()">
-        <option value="120g">120g袋</option>
-        <option value="130g">130g袋</option>
-      </select>
-      <span class="line-sep">×</span>
       <input type="number" class="line-qty" inputmode="numeric" step="1" min="0" placeholder="20" oninput="updateYaotomoTotal()">
-      <span class="line-sep">個</span>
-      <span class="line-sub">¥0</span>
-      <button type="button" class="line-del" onclick="removeLine(this)" aria-label="削除">×</button>`;
+      <span class="line-sep">袋</span>
+      <span class="line-sub">¥0</span>`;
   } else if (catKey === 'count') {
     rowHtml = `
       <input type="number" class="line-qty" inputmode="numeric" step="1" min="0" placeholder="10" oninput="updateYaotomoTotal()">
-      <span class="line-sep">個 ×</span>
-      <input type="number" class="line-gram" inputmode="numeric" step="any" min="0" placeholder="250" oninput="updateYaotomoTotal()">
-      <span class="line-sep">g =</span>
-      <span class="line-kg">0kg</span>
+      <span class="line-sep">個</span>
+      <input type="number" class="line-kg" inputmode="decimal" step="any" min="0" placeholder="2.5" oninput="updateYaotomoTotal()">
+      <span class="line-sep">kg</span>
       <span class="line-sub">¥0</span>
       <button type="button" class="line-del" onclick="removeLine(this)" aria-label="削除">×</button>`;
   }
@@ -371,16 +365,13 @@ function addLine(catKey, preset) {
   // プリセット値（編集復元用）
   if (preset) {
     if (catKey === 'weight') {
-      row.querySelector('.line-unit').value = preset.unit ?? '';
+      if (preset.kg != null) row.querySelector('.line-kg').value = preset.kg;
     } else if (catKey === 'bag') {
-      const bagSel = row.querySelector('.line-bag');
-      if (preset.bagType && [...bagSel.options].some(o => o.value === preset.bagType)) {
-        bagSel.value = preset.bagType;
-      }
+      if (preset.qty != null) row.querySelector('.line-qty').value = preset.qty;
     } else if (catKey === 'count') {
-      if (preset.gram != null) row.querySelector('.line-gram').value = preset.gram;
+      if (preset.qty != null) row.querySelector('.line-qty').value = preset.qty;
+      if (preset.kg != null) row.querySelector('.line-kg').value = preset.kg;
     }
-    row.querySelector('.line-qty').value = preset.qty ?? '';
   }
   updateYaotomoTotal();
 }
@@ -393,20 +384,18 @@ function removeLine(btn) {
 
 function calcLineSubtotal(row) {
   const cat = row.dataset.cat;
-  const qty = parseFloat(row.querySelector('.line-qty')?.value) || 0;
   if (cat === 'weight') {
-    const unit = parseFloat(row.querySelector('.line-unit')?.value) || 0;
-    return {unit, qty, subtotal: Math.round(unit * qty * 1400)};
+    const kg = parseFloat(row.querySelector('.line-kg')?.value) || 0;
+    return {kg, subtotal: Math.round(kg * 1400)};
   } else if (cat === 'bag') {
-    const bagType = row.querySelector('.line-bag')?.value || '';
-    return {unit: 170, qty, bagType, subtotal: Math.round(170 * qty)};
+    const qty = parseFloat(row.querySelector('.line-qty')?.value) || 0;
+    return {qty, subtotal: Math.round(qty * 170)};
   } else if (cat === 'count') {
-    const gram = parseFloat(row.querySelector('.line-gram')?.value) || 0;
-    const subtotal_g = gram * qty;
-    const subtotal_kg = Math.round((subtotal_g / 1000) * 1000) / 1000;
-    return {gram, qty, subtotal_kg, subtotal: Math.round(subtotal_kg * 1400)};
+    const qty = parseFloat(row.querySelector('.line-qty')?.value) || 0;
+    const kg = parseFloat(row.querySelector('.line-kg')?.value) || 0;
+    return {qty, kg, subtotal: Math.round(kg * 1400)};
   }
-  return {unit:0, qty:0, subtotal:0};
+  return {subtotal:0};
 }
 
 function updateYaotomoTotal() {
@@ -418,8 +407,6 @@ function updateYaotomoTotal() {
     container.querySelectorAll('.line-row').forEach(row => {
       const d = calcLineSubtotal(row);
       row.querySelector('.line-sub').textContent = '¥' + d.subtotal.toLocaleString();
-      const kgEl = row.querySelector('.line-kg');
-      if (kgEl) kgEl.textContent = (d.subtotal_kg || 0) + 'kg';
       catSum += d.subtotal;
     });
     const catSubEl = document.getElementById('catsub-'+cat.key);
@@ -449,17 +436,17 @@ async function submitForm() {
       if (!container) return;
       container.querySelectorAll('.line-row').forEach(row => {
         const d = calcLineSubtotal(row);
-        if (d.qty > 0 && d.subtotal > 0) {
-          let entry;
-          if (cat.key === 'count') {
-            entry = {category:'個数', qty:d.qty, gram:d.gram, subtotal_kg:d.subtotal_kg, subtotal:d.subtotal};
-          } else {
-            entry = {category: YAOTOMO_CAT_NAMES[cat.key], unit: d.unit, qty: d.qty, subtotal: d.subtotal};
-            if (d.bagType) entry.bagType = d.bagType;
-          }
-          itemDetails.push(entry);
-          total += d.subtotal;
+        if (d.subtotal <= 0) return;
+        let entry;
+        if (cat.key === 'weight') {
+          entry = {category:'重量', kg: d.kg, subtotal: d.subtotal};
+        } else if (cat.key === 'bag') {
+          entry = {category:'袋', qty: d.qty, subtotal: d.subtotal};
+        } else if (cat.key === 'count') {
+          entry = {category:'個数', qty: d.qty, kg: d.kg, subtotal: d.subtotal};
         }
+        itemDetails.push(entry);
+        total += d.subtotal;
       });
     });
   } else {
@@ -528,9 +515,9 @@ async function loadRecords() {
 function formatItemDetail(items) {
   return items.map(i => {
     if (i.category) {
-      if (i.category === '重量')  return `${i.unit}kg×${i.qty}`;
-      if (i.category === '袋')    return `${i.bagType||'袋'}×${i.qty}`;
-      if (i.category === '個数')  return `${i.qty}個×${i.gram}g`;
+      if (i.category === '重量')  return `${i.kg}kg`;
+      if (i.category === '袋')    return `${i.qty}袋`;
+      if (i.category === '個数')  return `${i.qty}個(${i.kg}kg)`;
       return `${i.category} ${i.qty}`;
     }
     return `${i.name} ${i.qty}${i.unit||''}`;
@@ -590,15 +577,22 @@ function editRecord(id) {
   if (r.customer === 'やおとも') {
     let items = [];
     try { items = JSON.parse(r.items_json||'[]'); } catch(e){}
+    // renderYaotomoで自動追加された行をリセット
+    ['weight','bag','count'].forEach(k => {
+      const c = document.getElementById('lines-'+k);
+      if (c) c.innerHTML = '';
+    });
     const nameToKey = {'重量':'weight','袋':'bag','個数':'count'};
-    // 入っているカテゴリーは開いた状態に
     const usedCats = new Set();
     items.forEach(it => {
       const key = nameToKey[it.category];
       if (!key) return;
       usedCats.add(key);
-      addLine(key, {unit: it.unit, qty: it.qty, bagType: it.bagType, gram: it.gram});
+      addLine(key, {kg: it.kg, qty: it.qty});
     });
+    // 袋は常に1行必要
+    const bagContainer = document.getElementById('lines-bag');
+    if (bagContainer && bagContainer.children.length === 0) addLine('bag');
     document.querySelectorAll('.accordion').forEach(acc => {
       if (usedCats.has(acc.dataset.cat)) acc.dataset.open = 'true';
     });
