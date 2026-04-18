@@ -94,6 +94,11 @@ textarea{resize:vertical;min-height:60px}
 .btn-add-line:active{opacity:.6}
 .cat-subtotal{display:flex;justify-content:space-between;align-items:center;margin-top:10px;padding-top:8px;border-top:1px dashed #d0c8b8;font-size:13px;color:#666}
 .cat-subtotal strong{color:#2c3e2d;font-size:14px}
+
+/* キューピー小計 */
+.kewpie-subtotals{margin-top:12px;padding:12px;background:#faf8f4;border-radius:8px}
+.kewpie-subtotals .kewpie-sub-row{display:flex;justify-content:space-between;align-items:center;padding:6px 0;font-size:14px;color:#555}
+.kewpie-subtotals .kewpie-sub-row strong{color:#2c3e2d}
 </style>
 </head>
 <body>
@@ -197,7 +202,11 @@ let lineSeq = 0;
   ['ハーズ','やおとも','キューピー'].forEach(c => {
     sel.innerHTML += `<option value="${c}">${c}</option>`;
   });
-  document.getElementById('delivery-date').value = new Date().toISOString().slice(0,10);
+  const today = new Date();
+  const yyyy = today.getFullYear();
+  const mm = String(today.getMonth() + 1).padStart(2, '0');
+  const dd = String(today.getDate()).padStart(2, '0');
+  document.getElementById('delivery-date').value = `${yyyy}-${mm}-${dd}`;
   updateMonthDisplay();
 })();
 
@@ -277,7 +286,7 @@ function onCustomerChange() {
 // ── ハーズ・キューピー：固定品目 ──
 function renderItems(customer) {
   const items = PRODUCT_DEFS[customer];
-  document.getElementById('items-container').innerHTML = items.map(item => `
+  let html = items.map(item => `
     <div class="item-row">
       <span class="item-name">${item.name}</span>
       <span class="item-price">@¥${item.unitPrice.toLocaleString()}/${item.unit}</span>
@@ -285,6 +294,14 @@ function renderItems(customer) {
              inputmode="decimal" step="any" min="0" oninput="updateTotal()">
       <span class="item-subtotal" id="sub-${item.id}">¥0</span>
     </div>`).join('');
+  if (customer === 'キューピー') {
+    html += `
+      <div class="kewpie-subtotals">
+        <div class="kewpie-sub-row"><span>袋物小計（特大・小・ヒメ）</span><strong id="kewpie-bag-sub">¥0</strong></div>
+        <div class="kewpie-sub-row"><span>レストラン用小計</span><strong id="kewpie-rest-sub">¥0</strong></div>
+      </div>`;
+  }
+  document.getElementById('items-container').innerHTML = html;
   updateTotal();
 }
 
@@ -292,12 +309,22 @@ function updateTotal() {
   const customer = document.getElementById('customer').value;
   if (!customer || customer === 'やおとも') return;
   let total = 0;
+  let bagSubtotal = 0;
+  let restSubtotal = 0;
   PRODUCT_DEFS[customer].forEach(item => {
     const qty = parseFloat(document.getElementById('qty-'+item.id).value) || 0;
     const sub = Math.round(qty * item.unitPrice);
     document.getElementById('sub-'+item.id).textContent = '¥'+sub.toLocaleString();
     total += sub;
+    if (customer === 'キューピー') {
+      if (item.id === 'rest') restSubtotal += sub;
+      else bagSubtotal += sub;
+    }
   });
+  if (customer === 'キューピー') {
+    document.getElementById('kewpie-bag-sub').textContent = '¥'+bagSubtotal.toLocaleString();
+    document.getElementById('kewpie-rest-sub').textContent = '¥'+restSubtotal.toLocaleString();
+  }
   document.getElementById('total-amount').textContent = '¥'+total.toLocaleString();
 }
 
