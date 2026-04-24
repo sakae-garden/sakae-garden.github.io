@@ -194,6 +194,9 @@ let currentTab = 'input';
 let editingId = null;
 let cachedRecords = [];
 let lineSeq = 0;
+// 送信中のID。タイムアウトで失敗してもサーバ側で成功している可能性があるため、
+// 再送信時は同じIDを使ってGAS側のID重複チェックで弾かれるようにする。
+let pendingSubmitId = null;
 
 // ── 初期化 ──
 (function init() {
@@ -273,6 +276,8 @@ function updateMonthDisplay() {
 
 // ── 入力：顧客切替 ──
 function onCustomerChange() {
+  // 顧客を切り替えたら別エントリ扱い → 失敗中のID再利用を解除
+  pendingSubmitId = null;
   const customer = document.getElementById('customer').value;
   const show = !!customer;
   document.getElementById('items-card').style.display = show?'':'none';
@@ -494,9 +499,13 @@ async function submitForm() {
   btn.disabled = true;
   btn.textContent = '保存中...';
 
+  // 新規保存時は pendingSubmitId を保持して再送信でも同じIDを使う
+  if (!editingId && !pendingSubmitId) pendingSubmitId = crypto.randomUUID();
+  const recordId = editingId || pendingSubmitId;
+
   try {
     const record = {
-      id: editingId || crypto.randomUUID(),
+      id: recordId,
       customer, date,
       quantities_json: JSON.stringify(quantities),
       items_json: JSON.stringify(itemDetails),
@@ -505,9 +514,11 @@ async function submitForm() {
     };
     const action = editingId ? 'updateRecord' : 'saveRecord';
     await jsonp({ action, data: JSON.stringify(record) });
+    pendingSubmitId = null;
     showToast(editingId ? '更新しました' : '保存しました');
     resetForm();
   } catch(e) {
+    // pendingSubmitId は残す（再送信で同じIDを使う）
     showToast('保存に失敗しました。再度お試しください。');
   } finally {
     btn.disabled = false;
@@ -517,6 +528,7 @@ async function submitForm() {
 
 function resetForm() {
   editingId = null;
+  pendingSubmitId = null;
   document.getElementById('customer').value = '';
   document.getElementById('memo').value = '';
   document.getElementById('items-container').innerHTML = '';
