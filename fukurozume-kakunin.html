@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="袋詰め確認">
+<meta name="theme-color" content="#2c3e2d">
+<link rel="manifest" href="fukurozume-kakunin-manifest.json">
+<link rel="apple-touch-icon" href="logo.png">
+<title>袋詰め確認</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@500;700;900&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;font-family:'Noto Sans JP',sans-serif;background:#1c1c1e;color:#fff;overflow-x:hidden}
+body{-webkit-user-select:none;user-select:none;display:flex;flex-direction:column;min-height:100vh}
+
+.header{background:#2c3e2d;padding:20px 16px 14px;text-align:center;position:relative}
+.header h1{font-size:18px;font-weight:700;color:#fff;letter-spacing:1px}
+.header .date-row{margin-top:6px;font-size:13px;color:#a8d5a2;font-weight:500}
+.header .reload{position:absolute;right:14px;top:50%;transform:translateY(-50%);background:rgba(255,255,255,.15);border:none;color:#fff;width:36px;height:36px;border-radius:50%;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.header .reload:active{background:rgba(255,255,255,.3)}
+
+.status-banner{padding:8px 16px;text-align:center;font-size:13px;font-weight:500}
+.status-confirmed{background:#155724;color:#d4edda}
+.status-default{background:#856404;color:#fff3cd}
+.status-error{background:#721c24;color:#f8d7da}
+
+.container{flex:1;padding:14px 12px;max-width:560px;margin:0 auto;width:100%}
+
+.group{background:#2a2a2c;border-radius:14px;margin-bottom:14px;overflow:hidden;border:1px solid #3a3a3c}
+.group-header{padding:10px 16px;background:#3a3a3c;font-size:14px;font-weight:700;color:#a8d5a2;letter-spacing:1px}
+.group-body{padding:8px 0}
+
+.item{display:flex;align-items:center;padding:14px 18px;border-bottom:1px solid #3a3a3c}
+.item:last-child{border-bottom:none}
+.item .name{flex:1;font-size:18px;font-weight:600;color:#fff}
+.item .price{flex:0 0 60px;font-size:12px;color:#888;text-align:right;padding-right:14px}
+.item .qty-wrap{display:flex;align-items:baseline;gap:6px;color:#2ecc71}
+.item .qty{font-size:42px;font-weight:900;line-height:1;letter-spacing:1px;font-feature-settings:"tnum"}
+.item .unit{font-size:14px;font-weight:600;color:#a8d5a2}
+.item.zero .qty{color:#666}
+.item.zero .unit{color:#666}
+
+.loading{text-align:center;padding:80px 20px;color:#888;font-size:14px}
+
+.footer{padding:14px;text-align:center;font-size:11px;color:#555;letter-spacing:1px}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>本日の袋詰め指示</h1>
+  <div class="date-row" id="date-row">--</div>
+  <button class="reload" onclick="loadData()" aria-label="再読込">↻</button>
+</div>
+
+<div class="status-banner" id="status-banner" style="display:none"></div>
+
+<div class="container" id="container">
+  <div class="loading">読み込み中…</div>
+</div>
+
+<div class="footer">SAKAE GARDEN</div>
+
+<script>
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbxVocJJ1vbqMH7YBbGaB_2TlvGX35JGRPfqiSNnhOHyAWtuN6RDIk8Wi8R8HVwwUhe0/exec';
+
+const PRODUCTS = [
+  {group:'ヤオコー', key:'yaoko_99',     name:'¥99袋',    price:99},
+  {group:'ヤオコー', key:'yaoko_198',    name:'¥198袋',   price:198},
+  {group:'ヤオコー', key:'yaoko_398',    name:'¥398袋',   price:398},
+  {group:'ヤオコー', key:'yaoko_598',    name:'¥598袋',   price:598},
+  {group:'直売所',   key:'chokubai_200', name:'¥200袋',   price:200},
+  {group:'直売所',   key:'chokubai_380', name:'¥380袋',   price:380},
+  {group:'その他',   key:'other_misc',   name:'その他',    price:0},
+];
+
+const WEEKDAYS = ['日','月','火','水','木','金','土'];
+
+let jsonpCounter = 0;
+function jsonp(params) {
+  return new Promise((resolve, reject) => {
+    const cbName = '_jsonp_cb_' + (++jsonpCounter);
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      delete window[cbName];
+      if (script.parentNode) script.parentNode.removeChild(script);
+      reject(new Error('タイムアウト'));
+    }, 30000);
+    window[cbName] = function(data) {
+      if (timedOut) return;
+      clearTimeout(timer);
+      delete window[cbName];
+      if (script.parentNode) script.parentNode.removeChild(script);
+      resolve(data);
+    };
+    const qs = new URLSearchParams(params);
+    qs.set('callback', cbName);
+    const script = document.createElement('script');
+    script.src = GAS_URL + '?' + qs.toString();
+    script.onerror = () => {
+      if (timedOut) return;
+      clearTimeout(timer);
+      delete window[cbName];
+      if (script.parentNode) script.parentNode.removeChild(script);
+      reject(new Error('通信失敗'));
+    };
+    document.head.appendChild(script);
+  });
+}
+
+function today() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth()+1).padStart(2,'0');
+  const dd = String(d.getDate()).padStart(2,'0');
+  return {iso: `${y}-${m}-${dd}`, dow: WEEKDAYS[d.getDay()], display: `${y}.${m}.${dd} (${WEEKDAYS[d.getDay()]})`};
+}
+
+function renderBanner(state, text) {
+  const b = document.getElementById('status-banner');
+  b.style.display = '';
+  b.className = 'status-banner status-' + state;
+  b.textContent = text;
+}
+
+function renderItems(data) {
+  const groups = {};
+  PRODUCTS.forEach(p => {
+    if (!groups[p.group]) groups[p.group] = [];
+    groups[p.group].push(p);
+  });
+  let html = '';
+  Object.entries(groups).forEach(([g, items]) => {
+    html += `<div class="group"><div class="group-header">${g}</div><div class="group-body">`;
+    items.forEach(p => {
+      const q = (data && data[p.key] != null) ? Number(data[p.key]) : 0;
+      const priceText = p.price > 0 ? `¥${p.price}` : '';
+      html += `<div class="item ${q===0?'zero':''}">
+        <span class="name">${p.name}</span>
+        <span class="price">${priceText}</span>
+        <span class="qty-wrap"><span class="qty">${q}</span><span class="unit">袋</span></span>
+      </div>`;
+    });
+    html += '</div></div>';
+  });
+  document.getElementById('container').innerHTML = html;
+}
+
+async function loadData() {
+  const t = today();
+  document.getElementById('date-row').textContent = t.display;
+  document.getElementById('container').innerHTML = '<div class="loading">読み込み中…</div>';
+  try {
+    const inst = await jsonp({action:'getInstruction', date: t.iso});
+    if (inst.confirmed) {
+      renderBanner('confirmed', '✓ 確定済み');
+      renderItems(inst.data);
+    } else {
+      const def = await jsonp({action:'getDefaults', dayOfWeek: t.dow});
+      renderBanner('default', `⚠ 未確定 — ${t.dow}曜デフォルト値`);
+      renderItems(def.data);
+    }
+  } catch(e) {
+    renderBanner('error', '通信エラー: 再読込してください');
+    document.getElementById('container').innerHTML = '<div class="loading">データを取得できませんでした</div>';
+  }
+}
+
+loadData();
+// 5分ごとに自動更新
+setInterval(loadData, 5*60*1000);
+// 画面復帰時に再読み込み
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) loadData();
+});
+</script>
+</body>
+</html>

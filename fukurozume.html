@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>袋詰め指示 - 栄ガーデン</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Noto Sans JP',sans-serif;background:#f5f0e8;color:#333;min-height:100vh;padding-bottom:80px}
+header{background:#2c3e2d;color:#fff;padding:14px 16px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100}
+header h1{font-size:16px;font-weight:700}
+header .back{color:#a8d5a2;text-decoration:none;font-size:14px}
+.container{max-width:480px;margin:0 auto;padding:16px}
+
+.card{background:#fff;border-radius:12px;padding:18px;margin-bottom:14px;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+.card h2{font-size:15px;font-weight:700;color:#2c3e2d;margin-bottom:12px;padding-bottom:8px;border-bottom:2px solid #e8e0d0;display:flex;align-items:center;justify-content:space-between}
+.card h2 .badge{font-size:11px;padding:3px 8px;border-radius:10px;font-weight:600}
+.badge-default{background:#fff3cd;color:#856404}
+.badge-confirmed{background:#d4edda;color:#155724}
+
+label{display:block;font-size:13px;font-weight:500;color:#666;margin-bottom:4px}
+input[type="date"],select{
+  width:100%;padding:10px 12px;border:1.5px solid #d0c8b8;border-radius:8px;
+  font-size:16px;font-family:inherit;background:#faf8f4;margin-bottom:8px;-webkit-appearance:none}
+input:focus,select:focus{outline:none;border-color:#2c3e2d;background:#fff}
+
+.tabs{display:flex;background:#fff;border-radius:10px;padding:4px;margin-bottom:14px;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+.tab{flex:1;padding:10px;text-align:center;font-size:13px;font-weight:500;border-radius:8px;cursor:pointer;color:#888}
+.tab.active{background:#2c3e2d;color:#fff}
+
+.group-title{font-size:13px;font-weight:700;color:#2c3e2d;margin:14px 0 6px;padding-left:8px;border-left:3px solid #2c3e2d}
+.group-title:first-child{margin-top:0}
+
+.item-row{display:flex;align-items:center;gap:8px;margin-bottom:6px;padding:10px 12px;background:#faf8f4;border-radius:8px}
+.item-row .name{flex:1;font-size:14px;font-weight:500}
+.item-row .price{flex:0 0 60px;font-size:11px;color:#888;text-align:right}
+.item-row input[type="number"]{
+  width:84px;padding:8px;border:1.5px solid #d0c8b8;border-radius:6px;
+  font-size:16px;font-family:inherit;background:#fff;text-align:right;margin:0;-webkit-appearance:none}
+.item-row .unit{flex:0 0 24px;font-size:13px;color:#666}
+
+.confirmed-info{font-size:12px;color:#155724;background:#d4edda;padding:8px 12px;border-radius:6px;margin-bottom:10px}
+
+.btn{display:block;width:100%;padding:14px;border:none;border-radius:10px;font-size:16px;font-weight:700;font-family:inherit;cursor:pointer;transition:opacity .2s;margin-top:10px}
+.btn:active{opacity:.7}
+.btn-primary{background:#2c3e2d;color:#fff}
+.btn-secondary{background:#e8e0d0;color:#333}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+
+.toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#2c3e2d;color:#fff;padding:12px 24px;border-radius:8px;font-size:14px;z-index:200;display:none}
+.loading{text-align:center;padding:40px;color:#888;font-size:14px}
+
+.day-tabs{display:flex;gap:4px;margin-bottom:12px;flex-wrap:wrap}
+.day-tab{flex:1;min-width:36px;padding:8px 0;text-align:center;font-size:13px;font-weight:600;border:1.5px solid #d0c8b8;border-radius:6px;background:#fff;cursor:pointer;color:#888}
+.day-tab.active{background:#2c3e2d;color:#fff;border-color:#2c3e2d}
+.day-tab.weekend{color:#c0392b}
+.day-tab.weekend.active{color:#fff}
+</style>
+</head>
+<body>
+
+<header>
+  <a href="index.html" class="back">&lt; ホーム</a>
+  <h1>袋詰め指示（管理者）</h1>
+  <span></span>
+</header>
+
+<div class="container">
+  <div class="tabs">
+    <div class="tab active" onclick="switchTab('today')">本日の指示</div>
+    <div class="tab" onclick="switchTab('default')">曜日デフォルト</div>
+  </div>
+
+  <!-- ===== 本日の指示タブ ===== -->
+  <div id="tab-today">
+    <div class="card">
+      <label>対象日</label>
+      <input type="date" id="target-date" onchange="loadDate()">
+      <div id="status-info"></div>
+    </div>
+
+    <div id="instruction-card" class="card" style="display:none">
+      <h2>袋詰め数<span id="status-badge" class="badge"></span></h2>
+      <div id="items-area"></div>
+      <button class="btn btn-primary" onclick="saveInstruction()" id="save-btn">保存して確定する</button>
+    </div>
+  </div>
+
+  <!-- ===== デフォルト編集タブ ===== -->
+  <div id="tab-default" style="display:none">
+    <div class="card">
+      <label>曜日を選択</label>
+      <div class="day-tabs" id="day-tabs"></div>
+    </div>
+    <div class="card">
+      <h2>袋詰め数（デフォルト）</h2>
+      <div id="default-items-area"><div class="loading">読み込み中...</div></div>
+      <button class="btn btn-primary" onclick="saveDefault()" id="save-default-btn">デフォルトを保存</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbxVocJJ1vbqMH7YBbGaB_2TlvGX35JGRPfqiSNnhOHyAWtuN6RDIk8Wi8R8HVwwUhe0/exec';
+
+const PRODUCTS = [
+  {group:'ヤオコー', key:'yaoko_99',     name:'¥99袋',    price:99},
+  {group:'ヤオコー', key:'yaoko_198',    name:'¥198袋',   price:198},
+  {group:'ヤオコー', key:'yaoko_398',    name:'¥398袋',   price:398},
+  {group:'ヤオコー', key:'yaoko_598',    name:'¥598袋',   price:598},
+  {group:'直売所',   key:'chokubai_200', name:'¥200袋',   price:200},
+  {group:'直売所',   key:'chokubai_380', name:'¥380袋',   price:380},
+  {group:'その他',   key:'other_misc',   name:'その他',    price:0},
+];
+
+const WEEKDAYS = ['日','月','火','水','木','金','土'];
+let currentTab = 'today';
+let currentDayOfWeek = '月';
+let allDefaults = null;
+
+(function init() {
+  const today = new Date();
+  const yyyy = today.getFullYear();
+  const mm = String(today.getMonth()+1).padStart(2,'0');
+  const dd = String(today.getDate()).padStart(2,'0');
+  document.getElementById('target-date').value = `${yyyy}-${mm}-${dd}`;
+  renderDayTabs();
+  loadDate();
+})();
+
+// ── JSONP通信 ──
+let jsonpCounter = 0;
+function jsonp(params) {
+  return new Promise((resolve, reject) => {
+    const cbName = '_jsonp_cb_' + (++jsonpCounter);
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      delete window[cbName];
+      if (script.parentNode) script.parentNode.removeChild(script);
+      reject(new Error('タイムアウト'));
+    }, 30000);
+    window[cbName] = function(data) {
+      if (timedOut) return;
+      clearTimeout(timer);
+      delete window[cbName];
+      if (script.parentNode) script.parentNode.removeChild(script);
+      resolve(data);
+    };
+    const qs = new URLSearchParams(params);
+    qs.set('callback', cbName);
+    const script = document.createElement('script');
+    script.src = GAS_URL + '?' + qs.toString();
+    script.onerror = () => {
+      if (timedOut) return;
+      clearTimeout(timer);
+      delete window[cbName];
+      if (script.parentNode) script.parentNode.removeChild(script);
+      reject(new Error('通信失敗'));
+    };
+    document.head.appendChild(script);
+  });
+}
+
+function switchTab(tab) {
+  currentTab = tab;
+  document.querySelectorAll('.tabs .tab').forEach((t,i) => {
+    t.classList.toggle('active', ['today','default'][i]===tab);
+  });
+  document.getElementById('tab-today').style.display = tab==='today'?'':'none';
+  document.getElementById('tab-default').style.display = tab==='default'?'':'none';
+  if (tab==='default') loadAllDefaults();
+}
+
+function renderDayTabs() {
+  const days = ['月','火','水','木','金','土','日'];
+  document.getElementById('day-tabs').innerHTML = days.map(d => {
+    const isWeekend = d==='土' || d==='日';
+    return `<div class="day-tab ${isWeekend?'weekend':''} ${d===currentDayOfWeek?'active':''}" onclick="selectDay('${d}')">${d}</div>`;
+  }).join('');
+}
+
+function selectDay(d) {
+  currentDayOfWeek = d;
+  renderDayTabs();
+  renderDefaultItems();
+}
+
+function renderItemsArea(targetId, data) {
+  const groups = {};
+  PRODUCTS.forEach(p => {
+    if (!groups[p.group]) groups[p.group] = [];
+    groups[p.group].push(p);
+  });
+  let html = '';
+  Object.entries(groups).forEach(([g, items]) => {
+    html += `<div class="group-title">${g}</div>`;
+    items.forEach(p => {
+      const val = (data && data[p.key] != null) ? data[p.key] : 0;
+      const priceText = p.price > 0 ? `¥${p.price}` : '';
+      html += `
+        <div class="item-row">
+          <span class="name">${p.name}</span>
+          <span class="price">${priceText}</span>
+          <input type="number" id="${targetId}-${p.key}" value="${val}" min="0" step="1" inputmode="numeric">
+          <span class="unit">袋</span>
+        </div>`;
+    });
+  });
+  return html;
+}
+
+async function loadDate() {
+  const date = document.getElementById('target-date').value;
+  if (!date) return;
+  const dow = WEEKDAYS[new Date(date+'T00:00:00').getDay()];
+  document.getElementById('instruction-card').style.display = 'none';
+  document.getElementById('status-info').innerHTML = '<div class="loading">読み込み中...</div>';
+  try {
+    const inst = await jsonp({action:'getInstruction', date});
+    let data, badge;
+    if (inst.confirmed) {
+      data = inst.data;
+      badge = `<span class="badge badge-confirmed">確定済み</span>`;
+      document.getElementById('status-info').innerHTML =
+        `<div class="confirmed-info">✓ 確定済み (${formatDateTime(inst.confirmedAt)})<br>編集して再保存すると上書きされます</div>`;
+    } else {
+      const def = await jsonp({action:'getDefaults', dayOfWeek: dow});
+      data = def.data || {};
+      badge = `<span class="badge badge-default">${dow}曜デフォルト</span>`;
+      document.getElementById('status-info').innerHTML =
+        `<div class="confirmed-info" style="background:#fff3cd;color:#856404">⚠ 未確定 — ${dow}曜のデフォルト値を表示しています</div>`;
+    }
+    document.getElementById('status-badge').outerHTML = badge.replace('class="badge ','id="status-badge" class="badge ');
+    document.getElementById('items-area').innerHTML = renderItemsArea('item', data);
+    document.getElementById('instruction-card').style.display = '';
+  } catch(e) {
+    document.getElementById('status-info').innerHTML = `<div class="loading">読み込みエラー: ${e.message}</div>`;
+  }
+}
+
+async function saveInstruction() {
+  const btn = document.getElementById('save-btn');
+  btn.disabled = true;
+  btn.textContent = '保存中...';
+  const date = document.getElementById('target-date').value;
+  const data = {};
+  PRODUCTS.forEach(p => {
+    const v = parseInt(document.getElementById('item-'+p.key).value) || 0;
+    data[p.key] = v;
+  });
+  try {
+    await jsonp({action:'saveInstruction', date, data: JSON.stringify(data)});
+    showToast('確定しました');
+    loadDate();
+  } catch(e) {
+    showToast('保存失敗: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '保存して確定する';
+  }
+}
+
+async function loadAllDefaults() {
+  document.getElementById('default-items-area').innerHTML = '<div class="loading">読み込み中...</div>';
+  try {
+    const r = await jsonp({action:'getAllDefaults'});
+    allDefaults = r.data || {};
+    renderDefaultItems();
+  } catch(e) {
+    document.getElementById('default-items-area').innerHTML = `<div class="loading">読み込みエラー</div>`;
+  }
+}
+
+function renderDefaultItems() {
+  const data = (allDefaults && allDefaults[currentDayOfWeek]) || {};
+  document.getElementById('default-items-area').innerHTML = renderItemsArea('def', data);
+}
+
+async function saveDefault() {
+  const btn = document.getElementById('save-default-btn');
+  btn.disabled = true;
+  btn.textContent = '保存中...';
+  const data = {};
+  PRODUCTS.forEach(p => {
+    const v = parseInt(document.getElementById('def-'+p.key).value) || 0;
+    data[p.key] = v;
+  });
+  try {
+    await jsonp({action:'saveDefaults', dayOfWeek: currentDayOfWeek, data: JSON.stringify(data)});
+    if (allDefaults) allDefaults[currentDayOfWeek] = data;
+    showToast(currentDayOfWeek + '曜デフォルトを保存しました');
+  } catch(e) {
+    showToast('保存失敗: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'デフォルトを保存';
+  }
+}
+
+function formatDateTime(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d)) return iso;
+  return `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.display = 'block';
+  setTimeout(() => t.style.display = 'none', 2500);
+}
+</script>
+
+<footer style="position:fixed;bottom:0;left:0;width:100%;height:52px;background:#1c1c1e;display:flex;align-items:center;justify-content:center;z-index:100">
+  <a href="https://sakae-garden.github.io/" style="color:#fff;text-decoration:none;font-size:15px;font-weight:500">🏠 ホームに戻る</a>
+</footer>
+</body>
+</html>
