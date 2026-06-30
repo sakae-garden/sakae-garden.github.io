@@ -75,54 +75,57 @@ html,body{
   line-height:1;
 }
 
-/* ── グリッド ── */
+/* ── グリッド（2×2） ── */
 .grid{
   display:grid;
   grid-template-columns:1fr 1fr;
-  gap:14px;
-  max-width:400px;
+  gap:16px;
+  max-width:420px;
   margin:0 auto;
-  padding:24px 20px 40px;
+  padding:28px 20px 40px;
 }
 
 /* ── アプリカード ── */
 .app{
   text-decoration:none;color:#1c1c1e;
   position:relative;overflow:hidden;
-  border-radius:20px;
+  border-radius:22px;
   background:#fff;
-  box-shadow:0 2px 12px rgba(0,0,0,.08);
-  padding:24px 12px 16px;
+  box-shadow:0 2px 14px rgba(0,0,0,.08);
+  padding:32px 12px 22px;
   text-align:center;
   transition:transform .18s,box-shadow .25s;
+  aspect-ratio:1/1;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;
 }
 .app:hover,.app:focus{
   transform:translateY(-3px);
-  box-shadow:0 6px 20px rgba(0,0,0,.13);
+  box-shadow:0 6px 22px rgba(0,0,0,.14);
 }
 .app:active{transform:scale(.95)}
 
 /* 絵文字背景丸 */
 .app .icon-wrap{
-  width:64px;height:64px;
-  border-radius:16px;
+  width:78px;height:78px;
+  border-radius:20px;
   display:flex;align-items:center;justify-content:center;
-  margin:0 auto 10px;
+  box-shadow:inset 0 -3px 8px rgba(0,0,0,.18),0 4px 14px rgba(0,0,0,.12);
 }
-.app[data-color="green"] .icon-wrap{background:#2d7a4f}
-.app[data-color="blue"] .icon-wrap{background:#1a5fa8}
-.app[data-color="orange"] .icon-wrap{background:#e65100}
-.app[data-color="purple"] .icon-wrap{background:#7b1fa2}
-.app[data-color="red"] .icon-wrap{background:#c0392b}
+.app[data-color="green"]  .icon-wrap{background:linear-gradient(140deg,#36a063,#2d7a4f)}
+.app[data-color="blue"]   .icon-wrap{background:linear-gradient(140deg,#3478c8,#1a5fa8)}
+.app[data-color="orange"] .icon-wrap{background:linear-gradient(140deg,#f57c00,#e65100)}
+.app[data-color="purple"] .icon-wrap{background:linear-gradient(140deg,#9c27b0,#6a1b9a)}
+.app[data-color="red"]    .icon-wrap{background:linear-gradient(140deg,#d44637,#c0392b)}
 
 .app .icon{
-  font-size:32px;line-height:1;
-  filter:drop-shadow(0 1px 3px rgba(0,0,0,.2));
+  font-size:38px;line-height:1;
+  filter:drop-shadow(0 1px 3px rgba(0,0,0,.25));
 }
 .app .name{
-  font-size:13px;font-weight:600;
-  line-height:1.4;
+  font-size:15px;font-weight:700;
+  line-height:1.3;
   color:#1c1c1e;
+  letter-spacing:.04em;
 }
 
 /* リップル */
@@ -193,17 +196,20 @@ html,body{
 <div class="toast"><div class="toast-inner" id="toast"></div></div>
 
 <script>
+// 表示するアプリ（2×2 配置・色被りなし）
+// 左上→右上→左下→右下 の順で並ぶ
 const APPS = [
-  { emoji:'🚚', name:'配達日報',       url:'https://sakae-garden.github.io/nippo/',                color:'green'  },
-  { emoji:'📊', name:'日報サマリー',   url:'https://sakae-garden.github.io/nippo/summary.html',    color:'blue'   },
-  { emoji:'📦', name:'配達商品情報',   url:'https://sakae-garden.github.io/nippo/haitatsu.html',   color:'green'  },
-  { emoji:'📦', name:'卸販売先入力',   url:'https://sakae-garden.github.io/oroshi.html',           color:'orange' },
-  { emoji:'🚛', name:'出荷情報',       url:'https://sakae-garden.github.io/shipping.html',         color:'green'  },
-  { emoji:'🛍️', name:'袋詰め指示',     url:'https://sakae-garden.github.io/fukurozume.html',       color:'orange' },
-  { emoji:'👀', name:'袋詰め確認',     url:'https://sakae-garden.github.io/fukurozume-kakunin.html', color:'blue' },
-  { emoji:'🌱', name:'日次作業入力',   url:'https://sakae-garden.github.io/harvest/employee.html', color:'purple', wip:true },
-  { emoji:'📈', name:'収穫予測',       url:'https://sakae-garden.github.io/harvest/owner.html',    color:'red',   wip:true },
+  { emoji:'🚚', name:'日報',     url:'https://sakae-garden.github.io/nippo/',              color:'green'  },
+  { emoji:'🤝', name:'卸販売',   url:'https://sakae-garden.github.io/oroshi.html',         color:'orange' },
+  { emoji:'📊', name:'サマリー', url:'https://sakae-garden.github.io/nippo/summary.html',  color:'blue'   },
+  { emoji:'🛒', name:'配達商品', url:'https://sakae-garden.github.io/nippo/haitatsu.html', color:'purple' },
 ];
+// 非表示中（必要になったら APPS に戻す。URLで直接アクセス可）
+// { emoji:'🚛', name:'出荷情報',     url:'https://sakae-garden.github.io/shipping.html',           color:'green'  },
+// { emoji:'🛍️', name:'袋詰め指示',   url:'https://sakae-garden.github.io/fukurozume.html',         color:'orange' },
+// { emoji:'👀', name:'袋詰め確認',   url:'https://sakae-garden.github.io/fukurozume-kakunin.html', color:'blue'   },
+// { emoji:'🌱', name:'日次作業入力', url:'https://sakae-garden.github.io/harvest/employee.html',   color:'purple', wip:true },
+// { emoji:'📈', name:'収穫予測',     url:'https://sakae-garden.github.io/harvest/owner.html',      color:'red',    wip:true },
 
 const grid = document.getElementById('grid');
 APPS.forEach(app => {
