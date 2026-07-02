@@ -213,7 +213,9 @@ let pendingSubmitId = null;
   updateMonthDisplay();
 })();
 
-// ── JSONP通信（タイムアウト30秒、リトライなし） ──
+// ── JSONP通信（タイムアウト45秒。コールドスタート対策で30→45秒に延長） ──
+// save/update/delete は冪等性の観点からリトライしない（同じIDでも二重登録の余地あり）。
+// getRecords 等の読み取り系はここでは1回のみ。呼び出し側 loadRecords で追加リトライを行う。
 let jsonpCounter = 0;
 function jsonp(params) {
   return new Promise((resolve, reject) => {
@@ -223,8 +225,8 @@ function jsonp(params) {
       timedOut = true;
       delete window[cbName];
       if (script.parentNode) script.parentNode.removeChild(script);
-      reject(new Error('タイムアウト（30秒）'));
-    }, 30000);
+      reject(new Error('タイムアウト（45秒）'));
+    }, 45000);
     window[cbName] = function(data) {
       if (timedOut) return;
       clearTimeout(timer);
@@ -540,14 +542,33 @@ function resetForm() {
 }
 
 // ── 履歴読み込み ──
+// コールドスタート等の失敗に備え、1回だけ2秒後に自動リトライ。
+// 履歴取得は冪等なので二重リトライしても副作用なし。
 async function loadRecords() {
+  const list = document.getElementById('history-list');
+  const targetMonth = currentMonth;
   try {
-    const data = await jsonp({ action:'getRecords', month:currentMonth });
+    const data = await jsonp({ action:'getRecords', month:targetMonth });
+    // ユーザーが月切替を挟んでいたら結果を捨てる
+    if (targetMonth !== currentMonth) return;
     cachedRecords = (data.records||[]).sort((a,b) => b.date.localeCompare(a.date));
     if (currentTab==='history') renderHistory();
     if (currentTab==='summary') renderSummary();
-  } catch(e) {
-    document.getElementById('history-list').innerHTML = '<div class="loading">読み込みエラー</div>';
+  } catch(_first) {
+    if (targetMonth !== currentMonth) return;
+    if (list) list.innerHTML = '<div class="loading">再取得中…</div>';
+    await new Promise(r => setTimeout(r, 2000));
+    if (targetMonth !== currentMonth) return;
+    try {
+      const data2 = await jsonp({ action:'getRecords', month:targetMonth });
+      if (targetMonth !== currentMonth) return;
+      cachedRecords = (data2.records||[]).sort((a,b) => b.date.localeCompare(a.date));
+      if (currentTab==='history') renderHistory();
+      if (currentTab==='summary') renderSummary();
+    } catch(_second) {
+      if (targetMonth !== currentMonth) return;
+      if (list) list.innerHTML = '<div class="loading">読み込みエラー <button onclick="loadRecords()" style="margin-left:8px;font-size:12px;padding:4px 10px;border:1px solid #2c3e2d;border-radius:6px;background:#fff;cursor:pointer;font-family:inherit">再読み込み</button></div>';
+    }
   }
 }
 
