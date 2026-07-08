@@ -213,40 +213,50 @@ let pendingSubmitId = null;
   updateMonthDisplay();
 })();
 
-// ── JSONP通信（タイムアウト45秒。コールドスタート対策で30→45秒に延長） ──
-// save/update/delete は冪等性の観点からリトライしない（同じIDでも二重登録の余地あり）。
-// getRecords 等の読み取り系はここでは1回のみ。呼び出し側 loadRecords で追加リトライを行う。
+// ── JSONP通信（タイムアウト既定45秒。コールドスタート対策で30→45秒に延長） ──
+// GASの /exec は HTTP 200 で HTML 中間ページ（ログイン/リダイレクト）を返すことがある。
+// そのときスクリプトは「読み込み成功」扱いになり onerror も発火しないため、onload 後に
+// コールバックが呼ばれたかを確認して失敗判定する（無検知だとタイムアウトまで無言で待つ）。
+// settled ラッチで resolve/reject の二重呼び出しを防ぐ。
+// save/update/delete は自動リトライしない。手動再送時は同じ id を使い、GAS側の id 重複検知で弾く。
 let jsonpCounter = 0;
-function jsonp(params) {
+function jsonp(params, timeoutMs) {
   return new Promise((resolve, reject) => {
     const cbName = '_jsonp_cb_' + (++jsonpCounter);
-    let timedOut = false;
-    const timer = setTimeout(() => {
-      timedOut = true;
-      delete window[cbName];
-      if (script.parentNode) script.parentNode.removeChild(script);
-      reject(new Error('タイムアウト（45秒）'));
-    }, 45000);
-    window[cbName] = function(data) {
-      if (timedOut) return;
+    let settled = false;
+    function cleanup() {
       clearTimeout(timer);
       delete window[cbName];
       if (script.parentNode) script.parentNode.removeChild(script);
-      resolve(data);
+    }
+    function fail(msg) {
+      if (settled) return;
+      settled = true; cleanup(); reject(new Error(msg));
+    }
+    const timer = setTimeout(() => fail('タイムアウト'), timeoutMs || 45000);
+    window[cbName] = function(data) {
+      if (settled) return;
+      settled = true; cleanup(); resolve(data);
     };
     const qs = new URLSearchParams(params);
     qs.set('callback', cbName);
     const script = document.createElement('script');
     script.src = GAS_URL + '?' + qs.toString();
-    script.onerror = () => {
-      if (timedOut) return;
-      clearTimeout(timer);
-      delete window[cbName];
-      if (script.parentNode) script.parentNode.removeChild(script);
-      reject(new Error('JSONP request failed'));
+    script.onload = () => {
+      // script は実行完了したがコールバックが呼ばれていなければ失敗扱い（HTML中間ページ等）
+      if (settled) return;
+      setTimeout(() => fail('サーバから不正な応答が返りました'), 200);
     };
+    script.onerror = () => fail('JSONP request failed');
     document.head.appendChild(script);
   });
+}
+// GASの戻り値を検証。success:false を成功と誤認しないための共通チェック。
+function assertOk(res) {
+  if (!res || res.success !== true) {
+    throw new Error((res && res.error) ? res.error : 'サーバエラー');
+  }
+  return res;
 }
 
 // ── タブ切替 ──
@@ -515,7 +525,9 @@ async function submitForm() {
       memo,
     };
     const action = editingId ? 'updateRecord' : 'saveRecord';
-    await jsonp({ action, data: JSON.stringify(record) });
+    // success:false を成功と誤表示しないよう assertOk で検証。
+    // 通信エラー時は pendingSubmitId を残すので、再送信は同じ id → GAS側で重複検知される。
+    assertOk(await jsonp({ action, data: JSON.stringify(record) }));
     pendingSubmitId = null;
     showToast(editingId ? '更新しました' : '保存しました');
     resetForm();
@@ -671,14 +683,19 @@ function editRecord(id) {
   window.scrollTo(0, 0);
 }
 
+let deleteBusy = false;
 async function deleteRecord(id) {
+  if (deleteBusy) return;                       // 連打・多重削除の防止
   if (!confirm('この納品記録を削除しますか？')) return;
+  deleteBusy = true;
   try {
-    await jsonp({ action:'deleteRecord', id });
+    assertOk(await jsonp({ action:'deleteRecord', id }));
     showToast('削除しました');
     loadRecords();
   } catch(e) {
     showToast('削除に失敗しました');
+  } finally {
+    deleteBusy = false;
   }
 }
 
