@@ -160,8 +160,7 @@ footer a{color:#a8d5a2;text-decoration:none;font-size:14px;font-weight:700}
 <footer><a href="https://sakae-garden.github.io/">🏠 ホームに戻る</a></footer>
 
 <script>
-// TODO: 従業員アクセス対策としてパスコード認証の追加を検討
-//       （現状はランチャー非掲載＋URL秘匿が実質のアクセス制御）。
+// パスコード認証は不要と決定（ランチャー非掲載＋URL秘匿を実質のアクセス制御とする）。
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbytaOKrEGExTi0Ug3Md-xro0mw-gsSNjOiyBubeurm1XkJucxSR6jBLafHkb2PNyMqWFw/exec';
 
 // よく使う支払先（ワンタップ）。口座と区分を自動セット。月夜野は ruleId=tsukiyono で概算の二重計上を抑止。
@@ -276,7 +275,7 @@ function renderDashboard(d){
         '<span><i style="border-color:#e6a817;border-top-style:dotted"></i>警告日</span></div>'+
     '</div>'+
     '<div class="card">'+
-      '<h2>直近14日の入出金予定</h2>'+
+      '<h2>直近30日の入出金予定</h2>'+
       '<div id="flowlist"></div>'+
     '</div>';
 
