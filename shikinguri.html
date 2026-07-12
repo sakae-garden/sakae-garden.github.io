@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#2c3e2d">
+<link rel="manifest" href="shikinguri-manifest.json">
+<title>資金繰り - 栄ガーデン</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;900&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Noto Sans JP',sans-serif;background:#f5f0e8;color:#333;min-height:100vh;padding-bottom:72px;-webkit-tap-highlight-color:transparent}
+header{background:#2c3e2d;color:#fff;padding:14px 16px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100}
+header h1{font-size:16px;font-weight:700}
+header .upd{font-size:11px;color:#a8d5a2}
+.container{max-width:480px;margin:0 auto;padding:14px}
+
+.tabs{display:flex;background:#fff;border-radius:10px;padding:4px;margin-bottom:14px;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+.tab{flex:1;padding:11px;text-align:center;font-size:14px;font-weight:700;border-radius:8px;cursor:pointer;color:#888;transition:all .15s}
+.tab.active{background:#2c3e2d;color:#fff}
+
+.card{background:#fff;border-radius:12px;padding:16px;margin-bottom:14px;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+.card h2{font-size:14px;font-weight:700;color:#2c3e2d;margin-bottom:12px;padding-bottom:8px;border-bottom:2px solid #e8e0d0;display:flex;justify-content:space-between;align-items:baseline}
+.card h2 .sub{font-size:11px;font-weight:400;color:#999}
+
+/* サマリー */
+.big{font-size:30px;font-weight:900;color:#2c3e2d;line-height:1.1}
+.big.neg{color:#c0392b}
+.big-label{font-size:12px;color:#888;margin-bottom:2px}
+.kpi{display:flex;gap:10px;margin-top:14px}
+.kpi>div{flex:1;background:#faf8f4;border-radius:8px;padding:10px}
+.kpi .k-lbl{font-size:11px;color:#888}
+.kpi .k-val{font-size:16px;font-weight:700;margin-top:2px}
+.kpi .k-val.neg{color:#c0392b}
+.kpi .k-date{font-size:11px;color:#aaa;margin-top:1px}
+.warn-box{margin-top:12px;padding:10px 12px;border-radius:8px;background:#fff4e0;border:1px solid #f0d090;font-size:13px}
+.warn-box.none{background:#eaf5ea;border-color:#bcdcbc;color:#2c6b2c}
+.warn-box b{color:#c0392b}
+
+/* グラフ */
+.range-btns{display:flex;gap:6px;margin-bottom:10px}
+.range-btns button{flex:1;padding:7px;font-size:12px;font-weight:700;border:1.5px solid #d0c8b8;border-radius:7px;background:#faf8f4;color:#888;font-family:inherit;cursor:pointer}
+.range-btns button.active{background:#2c3e2d;color:#fff;border-color:#2c3e2d}
+.chart-wrap{width:100%;overflow:hidden}
+svg{display:block;width:100%;height:auto}
+.legend{display:flex;gap:16px;justify-content:center;margin-top:8px;font-size:11px;color:#666}
+.legend span{display:inline-flex;align-items:center;gap:5px}
+.legend i{width:16px;height:0;border-top-width:3px;border-top-style:solid;display:inline-block}
+
+/* 直近14日リスト */
+.day-group{margin-bottom:10px}
+.day-head{font-size:12px;font-weight:700;color:#666;padding:4px 0;border-bottom:1px solid #eee;display:flex;justify-content:space-between}
+.day-head .dow{color:#aaa;font-weight:400}
+.flow{display:flex;align-items:center;justify-content:space-between;padding:7px 0;font-size:13px}
+.flow .fl-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.flow .fl-acc{font-size:11px;color:#aaa;margin-left:6px}
+.flow .fl-amt{font-weight:700;margin-left:8px;white-space:nowrap}
+.flow.in .fl-amt{color:#2d7a4f}
+.flow.out .fl-amt{color:#c0392b}
+.flow .badge{font-size:10px;padding:1px 5px;border-radius:4px;margin-left:6px}
+.flow.in .badge{background:#eaf5ea;color:#2d7a4f}
+.flow.out .badge{background:#fdeaea;color:#c0392b}
+
+/* フォーム */
+label{display:block;font-size:13px;font-weight:500;color:#666;margin-bottom:4px;margin-top:12px}
+label:first-child{margin-top:0}
+select,input[type="date"],input[type="number"],input[type="text"]{
+  width:100%;padding:11px 12px;border:1.5px solid #d0c8b8;border-radius:8px;
+  font-size:16px;font-family:inherit;background:#faf8f4;-webkit-appearance:none}
+select:focus,input:focus{outline:none;border-color:#2c3e2d;background:#fff}
+.quick{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:4px}
+.quick button{padding:9px 14px;font-size:14px;font-weight:700;border:1.5px solid #2c3e2d;border-radius:20px;background:#fff;color:#2c3e2d;font-family:inherit;cursor:pointer}
+.quick button.active{background:#2c3e2d;color:#fff}
+.btn{display:block;width:100%;padding:15px;border:none;border-radius:10px;font-size:16px;font-weight:700;font-family:inherit;cursor:pointer;margin-top:16px}
+.btn:active{opacity:.7}
+.btn-primary{background:#2c3e2d;color:#fff}
+.btn:disabled{opacity:.4}
+
+/* 履歴 */
+.hist-item{padding:11px 0;border-bottom:1px solid #eee;display:flex;justify-content:space-between;align-items:center}
+.hist-item:last-child{border-bottom:none}
+.hist-main .h-payee{font-weight:700;font-size:14px}
+.hist-main .h-meta{font-size:11px;color:#999;margin-top:2px}
+.hist-right{text-align:right;display:flex;align-items:center;gap:10px}
+.hist-right .h-amt{font-weight:700;color:#c0392b;font-size:15px}
+.hist-del{font-size:11px;padding:5px 10px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-family:inherit;color:#888}
+
+.loading{text-align:center;color:#999;padding:30px;font-size:14px}
+.err{text-align:center;color:#c0392b;padding:20px;font-size:13px}
+.toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#2c3e2d;color:#fff;padding:12px 22px;border-radius:24px;font-size:14px;font-weight:700;z-index:200;display:none;box-shadow:0 4px 16px rgba(0,0,0,.25)}
+footer{position:fixed;bottom:0;left:0;right:0;background:#1c1c1e;padding:10px;text-align:center;z-index:100}
+footer a{color:#a8d5a2;text-decoration:none;font-size:14px;font-weight:700}
+</style>
+</head>
+<body>
+<header>
+  <h1>💰 資金繰り</h1>
+  <span class="upd" id="upd"></span>
+</header>
+
+<div class="container">
+  <div class="tabs">
+    <div class="tab active" id="tab-dash-btn" onclick="switchTab('dash')">📊 ダッシュボード</div>
+    <div class="tab" id="tab-input-btn" onclick="switchTab('input')">✏️ 支払入力</div>
+  </div>
+
+  <!-- ============ ダッシュボード ============ -->
+  <div id="tab-dash">
+    <div id="dash-body"><div class="loading">読み込み中…</div></div>
+  </div>
+
+  <!-- ============ 支払入力 ============ -->
+  <div id="tab-input" style="display:none">
+    <div class="card">
+      <h2>支払を入力</h2>
+      <label>よく使う支払先</label>
+      <div class="quick" id="quick-payees"></div>
+
+      <label>支払日</label>
+      <input type="date" id="f-date">
+
+      <label>支払区分</label>
+      <select id="f-kubun">
+        <option value="仕入">仕入</option>
+        <option value="変動費">変動費</option>
+        <option value="カード">カード</option>
+        <option value="税金">税金</option>
+        <option value="その他" selected>その他</option>
+      </select>
+
+      <label>支払先</label>
+      <input type="text" id="f-payee" placeholder="支払先の名前">
+
+      <label>金額（税込）</label>
+      <input type="number" id="f-amount" inputmode="numeric" pattern="[0-9]*" placeholder="0">
+
+      <label>引落口座</label>
+      <select id="f-account">
+        <option>GMOあおぞら</option><option>PayPay銀行</option><option>三井住友</option>
+        <option>埼玉縣信金</option><option>ふかや農協</option><option>武蔵野銀行</option>
+      </select>
+
+      <label>摘要（任意）</label>
+      <input type="text" id="f-memo" placeholder="メモ">
+
+      <button class="btn btn-primary" id="save-btn" onclick="submitPayment()">保存する</button>
+    </div>
+
+    <div class="card">
+      <h2>直近の入力履歴 <span class="sub">誤入力はここで削除</span></h2>
+      <div id="hist-body"><div class="loading">…</div></div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<footer><a href="https://sakae-garden.github.io/">🏠 ホームに戻る</a></footer>
+
+<script>
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbytaOKrEGExTi0Ug3Md-xro0mw-gsSNjOiyBubeurm1XkJucxSR6jBLafHkb2PNyMqWFw/exec';
+
+// よく使う支払先（ワンタップ）。口座と区分を自動セット。月夜野は ruleId=tsukiyono で概算の二重計上を抑止。
+const QUICK_PAYEES = [
+  {name:'月夜野',       full:'月夜野(ユ)カイト)',  kubun:'仕入',   account:'GMOあおぞら',  ruleId:'tsukiyono'},
+  {name:'アメックス',    full:'アメックス(法人)',    kubun:'カード', account:'PayPay銀行'},
+  {name:'三井住友カード', full:'三井住友カード(法人)', kubun:'カード', account:'三井住友'},
+  {name:'青嶋電気',      full:'青嶋電気',           kubun:'変動費', account:'GMOあおぞら'},
+];
+let selectedQuick = null;
+
+// ── JSONP（既存アプリと同じ: onloadで200ms以内にコールバック未発火ならHTML中間ページ失敗扱い） ──
+let jsonpCounter = 0;
+function jsonp(params, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    const cbName = '_scb_' + (++jsonpCounter);
+    let settled = false;
+    const script = document.createElement('script');
+    function cleanup(){ clearTimeout(timer); delete window[cbName]; if(script.parentNode) script.parentNode.removeChild(script); }
+    function fail(msg){ if(settled) return; settled=true; cleanup(); reject(new Error(msg)); }
+    const timer = setTimeout(()=>fail('タイムアウト'), timeoutMs||30000);
+    window[cbName] = function(data){ if(settled) return; settled=true; cleanup(); resolve(data); };
+    const qs = new URLSearchParams(params);
+    qs.set('callback', cbName);
+    qs.set('_cb', Date.now());              // リダイレクト状態のキャッシュ避け（冪等キーではない）
+    script.src = GAS_URL + '?' + qs.toString();
+    script.onload = () => { if(settled) return; setTimeout(()=>fail('サーバから不正な応答が返りました'), 200); };
+    script.onerror = () => fail('通信に失敗しました');
+    document.head.appendChild(script);
+  });
+}
+function assertOk(res){ if(!res || res.success !== true) throw new Error((res&&res.error)?res.error:'サーバエラー'); return res; }
+
+const yen = n => '¥' + Number(n||0).toLocaleString('ja-JP');
+const WEEK = ['日','月','火','水','木','金','土'];
+function dowOf(ds){ const p=ds.split('-'); return WEEK[new Date(+p[0],+p[1]-1,+p[2]).getDay()]; }
+function mdOf(ds){ const p=ds.split('-'); return (+p[1])+'/'+(+p[2]); }
+
+// ── タブ ──
+function switchTab(t){
+  document.getElementById('tab-dash-btn').classList.toggle('active', t==='dash');
+  document.getElementById('tab-input-btn').classList.toggle('active', t==='input');
+  document.getElementById('tab-dash').style.display = t==='dash'?'':'none';
+  document.getElementById('tab-input').style.display = t==='input'?'':'none';
+  window.scrollTo(0,0);
+}
+
+// ── ダッシュボード ──
+let dashData = null;
+let chartRange = 90;
+
+async function loadDashboard(){
+  const body = document.getElementById('dash-body');
+  try {
+    const d = assertOk(await jsonp({action:'getDashboard'}));
+    dashData = d;
+    document.getElementById('upd').textContent = '更新 ' + (d.updatedAt||'');
+    renderDashboard(d);
+  } catch(e){
+    body.innerHTML = '<div class="card"><div class="err">読み込みに失敗しました。<br>'+e.message+'<br><br>'+
+      '<button class="btn btn-primary" onclick="loadDashboard()">再読み込み</button></div></div>';
+  }
+}
+
+function sumVal(summary, key){ const r=summary.find(x=>x[0]===key); return r?r[1]:''; }
+
+function renderDashboard(d){
+  const s = d.summary;
+  const startBal = sumVal(s,'起点合算残高');
+  const known = /^\d/.test(String(startBal).replace(/,/g,''));
+  // 今日の合算残高見込 = forecast[0].m
+  const todayBal = d.forecast.length ? d.forecast[0].m : 0;
+  const low30 = sumVal(s,'今後30日の最低残高(見込)');
+  const low90 = sumVal(s,'今後90日の最低残高(見込)');
+  const breach = sumVal(s,'最低確保額を割る最初の日(見込)');
+
+  // 次の警告日＋原因
+  let warnHtml;
+  const firstWarn = d.forecast.find(p => p.w && p.w.length);
+  if (firstWarn){
+    // その日の主な支払（upcomingのout最大）を原因として表示
+    const cause = d.upcoming.filter(u=>u.dir==='out'&&u.date===firstWarn.d).sort((a,b)=>b.amount-a.amount)[0];
+    warnHtml = '<div class="warn-box">⚠ 次の警告 <b>'+firstWarn.d+'（'+dowOf(firstWarn.d)+'）</b> '+firstWarn.w+
+      (cause? '<br>原因: '+cause.name+' '+yen(cause.amount)+'（'+cause.account+'）':'')+'</div>';
+  } else {
+    warnHtml = '<div class="warn-box none">✓ 今後210日、最低確保額を割る見込みはありません</div>';
+  }
+
+  const notice = known ? '' :
+    '<div class="warn-box" style="margin-top:8px">起点残高が未入力です。口座残高シートに記帳残高を入れると絶対額が確定します。</div>';
+
+  document.getElementById('dash-body').innerHTML =
+    '<div class="card">'+
+      '<div class="big-label">今日の合算残高（見込）</div>'+
+      '<div class="big '+(todayBal<0?'neg':'')+'">'+yen(todayBal)+'</div>'+
+      '<div class="kpi">'+
+        '<div><div class="k-lbl">今後30日 最低</div><div class="k-val '+(String(low30).indexOf('-')>=0?'neg':'')+'">'+low30.split(' ')[0]+'</div><div class="k-date">'+(low30.match(/\((.*)\)/)?RegExp.$1:'')+'</div></div>'+
+        '<div><div class="k-lbl">今後90日 最低</div><div class="k-val '+(String(low90).indexOf('-')>=0?'neg':'')+'">'+low90.split(' ')[0]+'</div><div class="k-date">'+(low90.match(/\((.*)\)/)?RegExp.$1:'')+'</div></div>'+
+      '</div>'+ warnHtml + notice +
+      '<div style="font-size:11px;color:#aaa;margin-top:10px">数値は毎朝5:00に自動更新されます。</div>'+
+    '</div>'+
+    '<div class="card">'+
+      '<h2>残高推移</h2>'+
+      '<div class="range-btns">'+
+        '<button data-r="30" onclick="setRange(30)">30日</button>'+
+        '<button data-r="90" class="active" onclick="setRange(90)">90日</button>'+
+        '<button data-r="210" onclick="setRange(210)">210日</button>'+
+      '</div>'+
+      '<div class="chart-wrap" id="chart"></div>'+
+      '<div class="legend"><span><i style="border-color:#2d7a4f"></i>見込</span>'+
+        '<span><i style="border-color:#c0392b;border-top-style:dashed"></i>下限（売上停止時）</span>'+
+        '<span><i style="border-color:#e6a817;border-top-style:dotted"></i>警告日</span></div>'+
+    '</div>'+
+    '<div class="card">'+
+      '<h2>直近14日の入出金予定</h2>'+
+      '<div id="flowlist"></div>'+
+    '</div>';
+
+  renderChart();
+  renderFlows(d.upcoming);
+}
+
+function setRange(r){
+  chartRange = r;
+  document.querySelectorAll('.range-btns button').forEach(b=>b.classList.toggle('active', +b.dataset.r===r));
+  renderChart();
+}
+
+function renderChart(){
+  const pts = dashData.forecast.slice(0, chartRange);
+  if (!pts.length){ document.getElementById('chart').innerHTML=''; return; }
+  const W=340, H=170, PL=6, PR=6, PT=10, PB=18;
+  const iw=W-PL-PR, ih=H-PT-PB;
+  let lo=Infinity, hi=-Infinity;
+  pts.forEach(p=>{ lo=Math.min(lo,p.m,p.f); hi=Math.max(hi,p.m,p.f); });
+  if (lo>0) lo=0;                       // 0を必ず含める
+  if (hi<0) hi=0;
+  if (hi===lo) hi=lo+1;
+  const x=i=> PL + (pts.length===1?iw/2:(i/(pts.length-1))*iw);
+  const y=v=> PT + ih - ((v-lo)/(hi-lo))*ih;
+  const line = pts.map((p,i)=> (i?'L':'M')+x(i).toFixed(1)+' '+y(p.m).toFixed(1)).join(' ');
+  const lineF = pts.map((p,i)=> (i?'L':'M')+x(i).toFixed(1)+' '+y(p.f).toFixed(1)).join(' ');
+  const zeroY = y(0);
+  // 警告日マーカー（縦の点線）
+  let warnMarks='';
+  pts.forEach((p,i)=>{ if(p.w&&p.w.length) warnMarks += '<line x1="'+x(i).toFixed(1)+'" y1="'+PT+'" x2="'+x(i).toFixed(1)+'" y2="'+(PT+ih)+'" stroke="#e6a817" stroke-width="1" stroke-dasharray="2 2" opacity="0.6"/>'; });
+  // 最低見込点
+  let lowIdx=0; pts.forEach((p,i)=>{ if(p.m<pts[lowIdx].m) lowIdx=i; });
+  const lp=pts[lowIdx];
+  const labelX = Math.min(Math.max(x(lowIdx),40), W-40);
+  // x軸ラベル（両端＋中央）
+  const xl=(i)=>'<text x="'+x(i).toFixed(1)+'" y="'+(H-4)+'" font-size="9" fill="#aaa" text-anchor="middle">'+mdOf(pts[i].d)+'</text>';
+  document.getElementById('chart').innerHTML =
+    '<svg viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none">'+
+      warnMarks +
+      '<line x1="'+PL+'" y1="'+zeroY.toFixed(1)+'" x2="'+(W-PR)+'" y2="'+zeroY.toFixed(1)+'" stroke="#ccc" stroke-width="1"/>'+
+      '<text x="'+(PL+2)+'" y="'+(zeroY-3).toFixed(1)+'" font-size="9" fill="#bbb">0</text>'+
+      '<path d="'+lineF+'" fill="none" stroke="#c0392b" stroke-width="1.5" stroke-dasharray="4 3" opacity="0.85"/>'+
+      '<path d="'+line+'" fill="none" stroke="#2d7a4f" stroke-width="2.2"/>'+
+      '<circle cx="'+x(lowIdx).toFixed(1)+'" cy="'+y(lp.m).toFixed(1)+'" r="3" fill="#2d7a4f"/>'+
+      '<text x="'+labelX.toFixed(1)+'" y="'+(y(lp.m)-6).toFixed(1)+'" font-size="9" fill="#2d7a4f" text-anchor="middle" font-weight="700">最低 '+Math.round(lp.m/1000)+'千 ('+mdOf(lp.d)+')</text>'+
+      xl(0)+ xl(pts.length-1) + (pts.length>8?xl(Math.floor(pts.length/2)):'')+
+    '</svg>';
+}
+
+function renderFlows(upcoming){
+  if (!upcoming.length){ document.getElementById('flowlist').innerHTML='<div style="color:#aaa;font-size:13px;padding:10px 0">予定はありません</div>'; return; }
+  const byDate={};
+  upcoming.forEach(u=>{ (byDate[u.date]=byDate[u.date]||[]).push(u); });
+  let html='';
+  Object.keys(byDate).sort().forEach(date=>{
+    const items=byDate[date];
+    const net = items.reduce((s,u)=> s + (u.dir==='in'?u.amount:-u.amount), 0);
+    html += '<div class="day-group"><div class="day-head"><span>'+mdOf(date)+' <span class="dow">('+dowOf(date)+')</span></span>'+
+            '<span style="color:'+(net>=0?'#2d7a4f':'#c0392b')+'">'+(net>=0?'+':'')+yen(net)+'</span></div>';
+    items.forEach(u=>{
+      html += '<div class="flow '+u.dir+'"><span class="fl-name">'+(u.dir==='in'?'⬇ ':'⬆ ')+u.name+
+        '<span class="fl-acc">'+u.account+'</span></span>'+
+        '<span class="fl-amt">'+(u.dir==='in'?'+':'−')+yen(u.amount)+'</span>'+
+        '<span class="badge">'+(u.status||'')+'</span></div>';
+    });
+    html += '</div>';
+  });
+  document.getElementById('flowlist').innerHTML = html;
+}
+
+// ── 支払入力 ──
+function renderQuick(){
+  document.getElementById('quick-payees').innerHTML = QUICK_PAYEES.map((q,i)=>
+    '<button data-i="'+i+'" onclick="pickQuick('+i+')">'+q.name+'</button>').join('');
+}
+function pickQuick(i){
+  const q=QUICK_PAYEES[i];
+  selectedQuick = (selectedQuick===i)? null : i;
+  document.querySelectorAll('#quick-payees button').forEach((b,j)=>b.classList.toggle('active', j===selectedQuick));
+  if (selectedQuick===null) return;
+  document.getElementById('f-payee').value = q.full;
+  document.getElementById('f-kubun').value = q.kubun;
+  document.getElementById('f-account').value = q.account;
+  document.getElementById('f-amount').focus();
+}
+
+let pendingReqId = null;
+async function submitPayment(){
+  const btn = document.getElementById('save-btn');
+  if (btn.disabled) return;
+  const date = document.getElementById('f-date').value;
+  const payee = document.getElementById('f-payee').value.trim();
+  const amount = parseInt(document.getElementById('f-amount').value,10)||0;
+  const account = document.getElementById('f-account').value;
+  const kubun = document.getElementById('f-kubun').value;
+  const memo = document.getElementById('f-memo').value.trim();
+  if (!date){ showToast('支払日を入力してください'); return; }
+  if (!payee){ showToast('支払先を入力してください'); return; }
+  if (amount<=0){ showToast('金額を入力してください'); return; }
+
+  const ruleId = (selectedQuick!==null)? (QUICK_PAYEES[selectedQuick].ruleId||'') : '';
+  if (!pendingReqId) pendingReqId = (crypto.randomUUID? crypto.randomUUID() : String(Date.now())+Math.random());
+
+  btn.disabled=true; btn.textContent='保存中…';
+  try {
+    assertOk(await jsonp({action:'addPayment', data: JSON.stringify({
+      reqId: pendingReqId, date, kubun, payee, amount, account, memo,
+      ruleId, periodStart: date, periodEnd: date, user:'PWA', note:'アプリ入力'
+    })}));
+    pendingReqId=null;
+    showToast('保存しました');
+    resetForm();
+    loadHistory();
+  } catch(e){
+    showToast('保存に失敗: '+e.message);   // pendingReqId は残す → 再送で同一id（二重記録なし）
+  } finally {
+    btn.disabled=false; btn.textContent='保存する';
+  }
+}
+
+function resetForm(){
+  document.getElementById('f-payee').value='';
+  document.getElementById('f-amount').value='';
+  document.getElementById('f-memo').value='';
+  document.getElementById('f-kubun').value='その他';
+  selectedQuick=null;
+  document.querySelectorAll('#quick-payees button').forEach(b=>b.classList.remove('active'));
+}
+
+async function loadHistory(){
+  const body=document.getElementById('hist-body');
+  try {
+    const d = assertOk(await jsonp({action:'getRecentManual', limit:5}));
+    if (!d.rows.length){ body.innerHTML='<div style="color:#aaa;font-size:13px;padding:8px 0">まだ入力はありません</div>'; return; }
+    body.innerHTML = d.rows.map(r=>{
+      const delBtn = r.reqId ? '<button class="hist-del" onclick="delPayment(\''+r.reqId+'\')">削除</button>' : '';
+      return '<div class="hist-item"><div class="hist-main"><div class="h-payee">'+r.payee+'</div>'+
+        '<div class="h-meta">'+r.date+' ・ '+r.kubun+' ・ '+r.account+(r.memo?' ・ '+r.memo:'')+'</div></div>'+
+        '<div class="hist-right"><span class="h-amt">'+yen(r.amount)+'</span>'+delBtn+'</div></div>';
+    }).join('');
+  } catch(e){
+    body.innerHTML='<div class="err">履歴の取得に失敗しました</div>';
+  }
+}
+
+let delBusy=false;
+async function delPayment(reqId){
+  if (delBusy) return;
+  if (!confirm('この支払を削除しますか？')) return;
+  delBusy=true;
+  try { assertOk(await jsonp({action:'deletePayment', reqId})); showToast('削除しました'); loadHistory(); }
+  catch(e){ showToast('削除に失敗しました'); }
+  finally { delBusy=false; }
+}
+
+function showToast(msg){
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.style.display='block';
+  clearTimeout(t._tm); t._tm=setTimeout(()=>t.style.display='none', 2500);
+}
+
+// ── 初期化 ──
+(function init(){
+  const now=new Date();
+  const iso = now.getFullYear()+'-'+('0'+(now.getMonth()+1)).slice(-2)+'-'+('0'+now.getDate()).slice(-2);
+  document.getElementById('f-date').value = iso;
+  renderQuick();
+  loadDashboard();
+  loadHistory();
+})();
+</script>
+</body>
+</html>
