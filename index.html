@@ -208,9 +208,11 @@ const APPS = [
   { icon:'ti-building-store',  name:'卸販売',   url:'https://sakae-garden.github.io/oroshi.html',         color:'orange' },
   { icon:'ti-chart-bar',       name:'サマリー', url:'https://sakae-garden.github.io/nippo/summary.html',  color:'blue'   },
   { icon:'ti-package',         name:'配達商品', url:'https://sakae-garden.github.io/nippo/haitatsu.html', color:'purple' },
-  { icon:'ti-report-money',    name:'資金繰り', url:'https://sakae-garden.github.io/shikinguri.html',     color:'green'  },
 ];
 // 非表示中（必要になったら APPS に戻す。URLで直接アクセス可）
+// 資金繰りはランチャー非掲載。URL直アクセスのみ（従業員の目に触れさせない運用）。
+// TODO: 従業員アクセス対策としてパスコード認証の追加を検討（現状はURL秘匿が実質のアクセス制御）。
+// { icon:'ti-report-money',   name:'資金繰り',     url:'https://sakae-garden.github.io/shikinguri.html',         color:'green'  },
 // { icon:'ti-truck-delivery', name:'出荷情報',     url:'https://sakae-garden.github.io/shipping.html',           color:'green'  },
 // { icon:'ti-shopping-bag',   name:'袋詰め指示',   url:'https://sakae-garden.github.io/fukurozume.html',         color:'orange' },
 // { icon:'ti-eye-check',      name:'袋詰め確認',   url:'https://sakae-garden.github.io/fukurozume-kakunin.html', color:'blue'   },
