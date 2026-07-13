@@ -2,6 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -25,6 +26,16 @@ header .upd{font-size:11px;color:#a8d5a2}
 .card{background:#fff;border-radius:12px;padding:16px;margin-bottom:14px;box-shadow:0 1px 4px rgba(0,0,0,.08)}
 .card h2{font-size:14px;font-weight:700;color:#2c3e2d;margin-bottom:12px;padding-bottom:8px;border-bottom:2px solid #e8e0d0;display:flex;justify-content:space-between;align-items:baseline}
 .card h2 .sub{font-size:11px;font-weight:400;color:#999}
+
+/* 信号機バナー */
+.signal{border-radius:12px;padding:14px 16px;margin-bottom:14px;box-shadow:0 1px 4px rgba(0,0,0,.08);border:1.5px solid}
+.signal .sig-head{display:flex;align-items:center;gap:8px;font-size:20px;font-weight:900;line-height:1.15}
+.signal .sig-reason{font-size:14px;font-weight:700;margin-top:8px}
+.signal .sig-action{font-size:13px;margin-top:6px;padding:8px 10px;border-radius:8px;background:rgba(255,255,255,.6)}
+.signal .sig-action b{font-weight:700}
+.signal.red{background:#fdecea;border-color:#e6a294;color:#a5321f}
+.signal.yellow{background:#fff5e0;border-color:#f0cf88;color:#9a6a00}
+.signal.green{background:#eaf5ea;border-color:#b6d8b6;color:#2c6b2c}
 
 /* サマリー */
 .big{font-size:30px;font-weight:900;color:#2c3e2d;line-height:1.1}
@@ -57,9 +68,12 @@ svg{display:block;width:100%;height:auto}
 .flow{display:flex;align-items:center;justify-content:space-between;padding:7px 0;font-size:13px}
 .flow .fl-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .flow .fl-acc{font-size:11px;color:#aaa;margin-left:6px}
-.flow .fl-amt{font-weight:700;margin-left:8px;white-space:nowrap}
+.flow .fl-right{margin-left:8px;text-align:right;white-space:nowrap}
+.flow .fl-amt{font-weight:700;white-space:nowrap}
 .flow.in .fl-amt{color:#2d7a4f}
 .flow.out .fl-amt{color:#c0392b}
+.flow .fl-bal{display:block;font-size:11px;color:#999;margin-top:1px}
+.flow .fl-bal.neg{color:#c0392b;font-weight:700}
 .flow .badge{font-size:10px;padding:1px 5px;border-radius:4px;margin-left:6px}
 .flow.in .badge{background:#eaf5ea;color:#2d7a4f}
 .flow.out .badge{background:#fdeaea;color:#c0392b}
@@ -226,40 +240,49 @@ async function loadDashboard(){
 }
 
 function sumVal(summary, key){ const r=summary.find(x=>x[0]===key); return r?r[1]:''; }
+function numOf(str){ const n=parseInt(String(str).replace(/[^0-9-]/g,''),10); return isNaN(n)?0:n; }
+
+// forecast内の「今日」の位置。forecastは起点日(=今日より前のことがある)始まり。
+function todayIndex(d){
+  const i = d.forecast.findIndex(p => p.d === d.today);
+  return i >= 0 ? i : 0;
+}
 
 function renderDashboard(d){
   const s = d.summary;
   const startBal = sumVal(s,'起点合算残高');
   const known = /^\d/.test(String(startBal).replace(/,/g,''));
-  // 今日の合算残高見込 = forecast[0].m
-  const todayBal = d.forecast.length ? d.forecast[0].m : 0;
+  const tIdx = todayIndex(d);
+  // 今日の合算残高見込（forecast[0]は起点日なので今日の行を引く）
+  const todayBal = d.forecast.length ? d.forecast[tIdx].m : 0;
   const low30 = sumVal(s,'今後30日の最低残高(見込)');
   const low90 = sumVal(s,'今後90日の最低残高(見込)');
-  const breach = sumVal(s,'最低確保額を割る最初の日(見込)');
+  dashData.targetLine = numOf(sumVal(s,'目標ライン(合算最低確保額)'));
 
-  // 次の警告日＋原因
-  let warnHtml;
-  const firstWarn = d.forecast.find(p => p.w && p.w.length);
-  if (firstWarn){
-    // その日の主な支払（upcomingのout最大）を原因として表示
-    const cause = d.upcoming.filter(u=>u.dir==='out'&&u.date===firstWarn.d).sort((a,b)=>b.amount-a.amount)[0];
-    warnHtml = '<div class="warn-box">⚠ 次の警告 <b>'+firstWarn.d+'（'+dowOf(firstWarn.d)+'）</b> '+firstWarn.w+
-      (cause? '<br>原因: '+cause.name+' '+yen(cause.amount)+'（'+cause.account+'）':'')+'</div>';
-  } else {
-    warnHtml = '<div class="warn-box none">✓ 今後210日、最低確保額を割る見込みはありません</div>';
-  }
+  // 信号機バナー（Python側で動的判定した結果を表示）
+  const sigMark = sumVal(s,'信号');                 // 例: "🔴 危険"
+  const sigReason = sumVal(s,'判定理由');
+  const sigAction = sumVal(s,'必要アクション');
+  const lv = sigMark.indexOf('🔴')>=0 ? 'red' : (sigMark.indexOf('🟡')>=0 ? 'yellow' : 'green');
+  const signalHtml = sigMark ?
+    '<div class="signal '+lv+'">'+
+      '<div class="sig-head">'+sigMark+'</div>'+
+      (sigReason? '<div class="sig-reason">'+sigReason+'</div>':'')+
+      (sigAction && sigAction!=='特になし（通常運転）'? '<div class="sig-action">👉 <b>'+sigAction+'</b></div>':'')+
+    '</div>' : '';
 
   const notice = known ? '' :
     '<div class="warn-box" style="margin-top:8px">起点残高が未入力です。口座残高シートに記帳残高を入れると絶対額が確定します。</div>';
 
   document.getElementById('dash-body').innerHTML =
+    signalHtml +
     '<div class="card">'+
       '<div class="big-label">今日の合算残高（見込）</div>'+
       '<div class="big '+(todayBal<0?'neg':'')+'">'+yen(todayBal)+'</div>'+
       '<div class="kpi">'+
         '<div><div class="k-lbl">今後30日 最低</div><div class="k-val '+(String(low30).indexOf('-')>=0?'neg':'')+'">'+low30.split(' ')[0]+'</div><div class="k-date">'+(low30.match(/\((.*)\)/)?RegExp.$1:'')+'</div></div>'+
         '<div><div class="k-lbl">今後90日 最低</div><div class="k-val '+(String(low90).indexOf('-')>=0?'neg':'')+'">'+low90.split(' ')[0]+'</div><div class="k-date">'+(low90.match(/\((.*)\)/)?RegExp.$1:'')+'</div></div>'+
-      '</div>'+ warnHtml + notice +
+      '</div>'+ notice +
       '<div style="font-size:11px;color:#aaa;margin-top:10px">数値は毎朝5:00に自動更新されます。</div>'+
     '</div>'+
     '<div class="card">'+
@@ -272,10 +295,10 @@ function renderDashboard(d){
       '<div class="chart-wrap" id="chart"></div>'+
       '<div class="legend"><span><i style="border-color:#2d7a4f"></i>見込</span>'+
         '<span><i style="border-color:#c0392b;border-top-style:dashed"></i>下限（売上停止時）</span>'+
-        '<span><i style="border-color:#e6a817;border-top-style:dotted"></i>警告日</span></div>'+
+        '<span><i style="border-color:#e6a817;border-top-style:dashed"></i>目標ライン</span></div>'+
     '</div>'+
     '<div class="card">'+
-      '<h2>直近30日の入出金予定</h2>'+
+      '<h2>直近30日の入出金予定 <span class="sub">残＝差引後の合算見込</span></h2>'+
       '<div id="flowlist"></div>'+
     '</div>';
 
@@ -289,60 +312,119 @@ function setRange(r){
   renderChart();
 }
 
+// 「いい感じ」の目盛り刻み（1/2/5×10ⁿ）
+function niceStep(range, targetTicks){
+  const raw = range / targetTicks;
+  const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  const n = raw / mag;
+  const step = n<1.5?1 : n<3?2 : n<7?5 : 10;
+  return step * mag;
+}
+const manLabel = v => (v===0?'0':(v/10000).toLocaleString('ja-JP')+'万');
+
 function renderChart(){
-  const pts = dashData.forecast.slice(0, chartRange);
+  const fc = dashData.forecast;
+  if (!fc.length){ document.getElementById('chart').innerHTML=''; return; }
+  const tIdx = todayIndex(dashData);
+  const back = Math.min(tIdx, chartRange<=30?2:0);        // 今日の少し手前も文脈として描く
+  const startIdx = tIdx - back;
+  const pts = fc.slice(startIdx, tIdx + chartRange + 1);
   if (!pts.length){ document.getElementById('chart').innerHTML=''; return; }
-  const W=340, H=170, PL=6, PR=6, PT=10, PB=18;
+  const tPos = back;                                       // pts内の今日の位置
+
+  const W=340, H=196, PL=34, PR=8, PT=14, PB=24;
   const iw=W-PL-PR, ih=H-PT-PB;
+  const target = dashData.targetLine||0;
   let lo=Infinity, hi=-Infinity;
   pts.forEach(p=>{ lo=Math.min(lo,p.m,p.f); hi=Math.max(hi,p.m,p.f); });
-  if (lo>0) lo=0;                       // 0を必ず含める
-  if (hi<0) hi=0;
+  lo=Math.min(lo,0,target); hi=Math.max(hi,0,target);     // 0と目標ラインは必ず入れる
   if (hi===lo) hi=lo+1;
+  const pad=(hi-lo)*0.08; lo-=pad; hi+=pad;
   const x=i=> PL + (pts.length===1?iw/2:(i/(pts.length-1))*iw);
   const y=v=> PT + ih - ((v-lo)/(hi-lo))*ih;
+  const zeroY=y(0);
+
+  // マイナス圏の薄赤背景
+  let bg='';
+  if (lo<0){ const yTop=Math.max(zeroY,PT); bg='<rect x="'+PL+'" y="'+yTop.toFixed(1)+'" width="'+iw+'" height="'+(PT+ih-yTop).toFixed(1)+'" fill="#c0392b" opacity="0.06"/>'; }
+
+  // Y軸グリッド線＋万円ラベル
+  const step=niceStep(hi-lo,4);
+  let grid='';
+  const g0=Math.ceil(lo/step)*step;
+  for(let v=g0; v<=hi+1; v+=step){
+    const gy=y(v);
+    const isZero=Math.abs(v)<1;
+    grid+='<line x1="'+PL+'" y1="'+gy.toFixed(1)+'" x2="'+(W-PR)+'" y2="'+gy.toFixed(1)+'" stroke="'+(isZero?'#999':'#eee')+'" stroke-width="'+(isZero?1.2:1)+'"/>'+
+      '<text x="'+(PL-4)+'" y="'+(gy+3).toFixed(1)+'" font-size="8.5" fill="#aaa" text-anchor="end">'+manLabel(v)+'</text>';
+  }
+
+  // 目標ライン（黄色破線）
+  let tgt='';
+  if (target>0){ const ty=y(target); tgt='<line x1="'+PL+'" y1="'+ty.toFixed(1)+'" x2="'+(W-PR)+'" y2="'+ty.toFixed(1)+'" stroke="#e6a817" stroke-width="1.3" stroke-dasharray="5 3"/>'+
+    '<text x="'+(W-PR)+'" y="'+(ty-3).toFixed(1)+'" font-size="8" fill="#c99400" text-anchor="end">目標</text>'; }
+
+  // 今日の縦線＋ラベル
+  const tx=x(tPos);
+  const todayLine='<line x1="'+tx.toFixed(1)+'" y1="'+PT+'" x2="'+tx.toFixed(1)+'" y2="'+(PT+ih)+'" stroke="#2c3e2d" stroke-width="1" stroke-dasharray="3 2" opacity="0.55"/>'+
+    '<text x="'+tx.toFixed(1)+'" y="'+(PT-4)+'" font-size="8.5" fill="#2c3e2d" text-anchor="middle" font-weight="700">今日</text>';
+
+  // X軸目盛り（30日=週単位／90・210日=月単位）
+  let xticks='';
+  const seen={};
+  pts.forEach((p,i)=>{
+    const dd=p.d.split('-'); const dom=+dd[2];
+    let show=false, lbl='';
+    if (chartRange<=30){ const off=i-tPos; if(off>=0 && off%7===0){ show=true; lbl=mdOf(p.d); } }
+    else { if(dom===1 && !seen[p.d.slice(0,7)]){ seen[p.d.slice(0,7)]=1; show=true; lbl=(+dd[1])+'月'; } }
+    if(show){ xticks+='<line x1="'+x(i).toFixed(1)+'" y1="'+(PT+ih)+'" x2="'+x(i).toFixed(1)+'" y2="'+(PT+ih+3)+'" stroke="#ccc" stroke-width="1"/>'+
+      '<text x="'+x(i).toFixed(1)+'" y="'+(H-6)+'" font-size="8.5" fill="#aaa" text-anchor="middle">'+lbl+'</text>'; }
+  });
+
   const line = pts.map((p,i)=> (i?'L':'M')+x(i).toFixed(1)+' '+y(p.m).toFixed(1)).join(' ');
   const lineF = pts.map((p,i)=> (i?'L':'M')+x(i).toFixed(1)+' '+y(p.f).toFixed(1)).join(' ');
-  const zeroY = y(0);
-  // 警告日マーカー（縦の点線）
-  let warnMarks='';
-  pts.forEach((p,i)=>{ if(p.w&&p.w.length) warnMarks += '<line x1="'+x(i).toFixed(1)+'" y1="'+PT+'" x2="'+x(i).toFixed(1)+'" y2="'+(PT+ih)+'" stroke="#e6a817" stroke-width="1" stroke-dasharray="2 2" opacity="0.6"/>'; });
-  // 最低見込点
-  let lowIdx=0; pts.forEach((p,i)=>{ if(p.m<pts[lowIdx].m) lowIdx=i; });
+
+  // 最低見込点（今日以降）
+  let lowIdx=tPos; for(let i=tPos;i<pts.length;i++){ if(pts[i].m<pts[lowIdx].m) lowIdx=i; }
   const lp=pts[lowIdx];
-  const labelX = Math.min(Math.max(x(lowIdx),40), W-40);
-  // x軸ラベル（両端＋中央）
-  const xl=(i)=>'<text x="'+x(i).toFixed(1)+'" y="'+(H-4)+'" font-size="9" fill="#aaa" text-anchor="middle">'+mdOf(pts[i].d)+'</text>';
+  const labelX=Math.min(Math.max(x(lowIdx),PL+30), W-PR-30);
+
   document.getElementById('chart').innerHTML =
-    '<svg viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none">'+
-      warnMarks +
-      '<line x1="'+PL+'" y1="'+zeroY.toFixed(1)+'" x2="'+(W-PR)+'" y2="'+zeroY.toFixed(1)+'" stroke="#ccc" stroke-width="1"/>'+
-      '<text x="'+(PL+2)+'" y="'+(zeroY-3).toFixed(1)+'" font-size="9" fill="#bbb">0</text>'+
+    '<svg viewBox="0 0 '+W+' '+H+'">'+
+      bg + grid + tgt + todayLine + xticks +
       '<path d="'+lineF+'" fill="none" stroke="#c0392b" stroke-width="1.5" stroke-dasharray="4 3" opacity="0.85"/>'+
       '<path d="'+line+'" fill="none" stroke="#2d7a4f" stroke-width="2.2"/>'+
-      '<circle cx="'+x(lowIdx).toFixed(1)+'" cy="'+y(lp.m).toFixed(1)+'" r="3" fill="#2d7a4f"/>'+
-      '<text x="'+labelX.toFixed(1)+'" y="'+(y(lp.m)-6).toFixed(1)+'" font-size="9" fill="#2d7a4f" text-anchor="middle" font-weight="700">最低 '+Math.round(lp.m/1000)+'千 ('+mdOf(lp.d)+')</text>'+
-      xl(0)+ xl(pts.length-1) + (pts.length>8?xl(Math.floor(pts.length/2)):'')+
+      '<circle cx="'+x(lowIdx).toFixed(1)+'" cy="'+y(lp.m).toFixed(1)+'" r="3" fill="'+(lp.m<0?'#c0392b':'#2d7a4f')+'"/>'+
+      '<text x="'+labelX.toFixed(1)+'" y="'+(y(lp.m)+(lp.m<0?14:-6)).toFixed(1)+'" font-size="9" fill="'+(lp.m<0?'#c0392b':'#2d7a4f')+'" text-anchor="middle" font-weight="700">最低 '+manLabel(Math.round(lp.m/10000)*10000)+' ('+mdOf(lp.d)+')</text>'+
     '</svg>';
 }
 
 function renderFlows(upcoming){
   if (!upcoming.length){ document.getElementById('flowlist').innerHTML='<div style="color:#aaa;font-size:13px;padding:10px 0">予定はありません</div>'; return; }
+  // 日付→合算見込(その日の終値)。各行の「残高」はこの終値に整合させる。
+  const fcMap={}; dashData.forecast.forEach(p=>{ fcMap[p.d]=p.m; });
   const byDate={};
   upcoming.forEach(u=>{ (byDate[u.date]=byDate[u.date]||[]).push(u); });
   let html='';
+  let carry=null;
   Object.keys(byDate).sort().forEach(date=>{
     const items=byDate[date];
     const net = items.reduce((s,u)=> s + (u.dir==='in'?u.amount:-u.amount), 0);
+    // その日の終値（forecast）を基準に、当日フローを逆算して行ごとの残高を出す。
+    const closing = (fcMap[date]!=null)? fcMap[date] : ((carry!=null?carry:0)+net);
+    let running = closing - net;
     html += '<div class="day-group"><div class="day-head"><span>'+mdOf(date)+' <span class="dow">('+dowOf(date)+')</span></span>'+
             '<span style="color:'+(net>=0?'#2d7a4f':'#c0392b')+'">'+(net>=0?'+':'')+yen(net)+'</span></div>';
     items.forEach(u=>{
+      running += (u.dir==='in'? u.amount : -u.amount);
       html += '<div class="flow '+u.dir+'"><span class="fl-name">'+(u.dir==='in'?'⬇ ':'⬆ ')+u.name+
-        '<span class="fl-acc">'+u.account+'</span></span>'+
-        '<span class="fl-amt">'+(u.dir==='in'?'+':'−')+yen(u.amount)+'</span>'+
-        '<span class="badge">'+(u.status||'')+'</span></div>';
+        '<span class="fl-acc">'+u.account+'</span>'+
+        (u.status?'<span class="badge">'+u.status+'</span>':'')+'</span>'+
+        '<span class="fl-right"><span class="fl-amt">'+(u.dir==='in'?'+':'−')+yen(u.amount)+'</span>'+
+        '<span class="fl-bal'+(running<0?' neg':'')+'">残 '+yen(running)+'</span></span></div>';
     });
     html += '</div>';
+    carry = closing;
   });
   document.getElementById('flowlist').innerHTML = html;
 }
