@@ -51,6 +51,10 @@ header .upd{display:block;font-size:11px;color:#a8d5a2}
 .kpi .k-date{font-size:11px;color:#aaa;margin-top:1px}
 .warn-box{margin-top:12px;padding:10px 12px;border-radius:8px;background:#fff4e0;border:1px solid #f0d090;font-size:13px}
 .warn-box.none{background:#eaf5ea;border-color:#bcdcbc;color:#2c6b2c}
+.warn-box.miss{background:#fdecea;border-color:#e6a8a0}
+.miss-row{display:flex;justify-content:space-between;gap:8px;padding:3px 0;color:#c0392b;font-size:13px}
+.miss-row .m-name{font-weight:600}
+.fl-amt.miss{color:#c0392b;font-weight:700}
 .warn-box b{color:#c0392b}
 
 /* グラフ */
@@ -147,6 +151,8 @@ footer a{color:#a8d5a2;text-decoration:none;font-size:14px;font-weight:700}
         <option value="変動費">変動費</option>
         <option value="カード">カード</option>
         <option value="税金">税金</option>
+        <option value="個人向け支払い">個人向け支払い</option>
+        <option value="給与">給与（人件費の実額入力）</option>
         <option value="その他" selected>その他</option>
       </select>
 
@@ -180,8 +186,8 @@ footer a{color:#a8d5a2;text-decoration:none;font-size:14px;font-weight:700}
 
 <script>
 // アプリのバージョン。更新のたびに上げる（配信反映の目印。ヘッダ右上＋フッタ＋console.logに出す）。
-const APP_VERSION = 'v1.2';
-const BUILD_DATE = '07/14';   // 2026-07-14 ビルド
+const APP_VERSION = 'v1.3';
+const BUILD_DATE = '09/08';   // 2026-09-08 ビルド
 
 // パスコード認証は不要と決定（ランチャー非掲載＋URL秘匿を実質のアクセス制御とする）。
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbytaOKrEGExTi0Ug3Md-xro0mw-gsSNjOiyBubeurm1XkJucxSR6jBLafHkb2PNyMqWFw/exec';
@@ -192,6 +198,13 @@ const QUICK_PAYEES = [
   {name:'アメックス',    full:'アメックス(法人)',    kubun:'カード', account:'PayPay銀行'},
   {name:'三井住友カード', full:'三井住友カード(法人)', kubun:'カード', account:'三井住友'},
   {name:'青嶋電気',      full:'青嶋電気',           kubun:'変動費', account:'GMOあおぞら'},
+  // 人件費は「手動枠」のテンプレ行（金額空欄）が毎月出る。ruleId を付けて入力すると
+  // 同じ支払月のテンプレ行が翌朝の洗い替えで消え、二重に並ばない。
+  {name:'人件費(パート)',   full:'人件費(パート分)',    kubun:'給与', account:'GMOあおぞら', ruleId:'kyuyo-part',     monthly:true},
+  // フルタイムは 2027-01 支払分までが月末払い(kyuyo-full-tmp)、2027-02 以降は25日払い(kyuyo-full)。
+  // 支払月で ruleId が変わるので関数で出す。
+  {name:'人件費(フルタイム)',full:'人件費(フルタイム分)', kubun:'給与', account:'GMOあおぞら', monthly:true,
+   ruleIdFor:function(ym){ return ym <= '2027-01' ? 'kyuyo-full-tmp' : 'kyuyo-full'; }},
 ];
 let selectedQuick = null;
 
@@ -283,6 +296,16 @@ function renderDashboard(d){
   const notice = known ? '' :
     '<div class="warn-box" style="margin-top:8px">起点残高が未入力です。口座残高シートに記帳残高を入れると絶対額が確定します。</div>';
 
+  // 金額未入力の支払（手動枠のテンプレ行）。入るまで残高見込から抜け落ちるので赤で促す。
+  const miss = dashData.missingPayments || [];
+  const missHtml = miss.length ?
+    '<div class="warn-box miss" style="margin-top:8px">'+
+      '<b>未入力の支出が'+miss.length+'件あります</b>（金額が入るまで残高見込に反映されません）'+
+      miss.slice(0,8).map(m=>'<div class="miss-row"><span class="m-name">'+mdOf(m.date)+' '+m.name+'</span>'+
+        '<span>'+(m.memo||'')+'</span></div>').join('')+
+      (miss.length>8? '<div class="miss-row"><span>ほか'+(miss.length-8)+'件</span></div>':'')+
+    '</div>' : '';
+
   document.getElementById('dash-body').innerHTML =
     signalHtml +
     '<div class="card">'+
@@ -291,7 +314,7 @@ function renderDashboard(d){
       '<div class="kpi">'+
         '<div><div class="k-lbl">今後30日 最低</div><div class="k-val '+(String(low30).indexOf('-')>=0?'neg':'')+'">'+low30.split(' ')[0]+'</div><div class="k-date">'+(low30.match(/\((.*)\)/)?RegExp.$1:'')+'</div></div>'+
         '<div><div class="k-lbl">今後90日 最低</div><div class="k-val '+(String(low90).indexOf('-')>=0?'neg':'')+'">'+low90.split(' ')[0]+'</div><div class="k-date">'+(low90.match(/\((.*)\)/)?RegExp.$1:'')+'</div></div>'+
-      '</div>'+ notice +
+      '</div>'+ notice + missHtml +
       '<div style="font-size:11px;color:#aaa;margin-top:10px">数値は毎朝5:00に自動更新されます。</div>'+
     '</div>'+
     '<div class="card">'+
@@ -429,7 +452,8 @@ function renderFlows(upcoming){
       html += '<div class="flow '+u.dir+'"><span class="fl-name">'+(u.dir==='in'?'⬇ ':'⬆ ')+u.name+
         '<span class="fl-acc">'+u.account+'</span>'+
         (u.status?'<span class="badge">'+u.status+'</span>':'')+'</span>'+
-        '<span class="fl-right"><span class="fl-amt">'+(u.dir==='in'?'+':'−')+yen(u.amount)+'</span>'+
+        '<span class="fl-right"><span class="fl-amt'+(u.missing?' miss':'')+'">'+
+          (u.missing? '未入力' : (u.dir==='in'?'+':'−')+yen(u.amount))+'</span>'+
         '<span class="fl-bal'+(running<0?' neg':'')+'">残 '+yen(running)+'</span></span></div>';
     });
     html += '</div>';
@@ -468,14 +492,17 @@ async function submitPayment(){
   if (!payee){ showToast('支払先を入力してください'); return; }
   if (amount<=0){ showToast('金額を入力してください'); return; }
 
-  const ruleId = (selectedQuick!==null)? (QUICK_PAYEES[selectedQuick].ruleId||'') : '';
+  const quick = (selectedQuick!==null)? QUICK_PAYEES[selectedQuick] : null;
+  const ruleId = quick ? (quick.ruleIdFor ? quick.ruleIdFor(date.slice(0,7)) : (quick.ruleId||'')) : '';
+  // auto行の「対象期間(開始)」は支払月の1日。ここを揃えないとテンプレ行が消えない。
+  const periodStart = (quick && quick.monthly) ? date.slice(0,7)+'-01' : date;
   if (!pendingReqId) pendingReqId = (crypto.randomUUID? crypto.randomUUID() : String(Date.now())+Math.random());
 
   btn.disabled=true; btn.textContent='保存中…';
   try {
     assertOk(await jsonp({action:'addPayment', data: JSON.stringify({
       reqId: pendingReqId, date, kubun, payee, amount, account, memo,
-      ruleId, periodStart: date, periodEnd: date, user:'PWA', note:'アプリ入力'
+      ruleId, periodStart, periodEnd: date, user:'PWA', note:'アプリ入力'
     })}));
     pendingReqId=null;
     showToast('保存しました');
