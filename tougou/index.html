@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="栄ガーデン統合">
+<meta name="theme-color" content="#1c1c1e">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<title>栄ガーデン</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Noto+Sans+JP:wght@400;500;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.34.0/dist/tabler-icons.min.css">
+<link rel="stylesheet" href="styles/common.css">
+<link rel="stylesheet" href="launcher.css">
+</head>
+<body>
+
+<div class="header">
+  <div class="logo-row">
+    <img class="logo-img" src="icons/logo.png" alt="栄ガーデン ロゴ">
+    <span class="logo-name">栄ガーデン</span>
+  </div>
+  <div class="clock-area">
+    <div class="clock-date" id="clock-date"></div>
+    <div class="clock-divider"></div>
+    <div class="clock-time" id="clock-time"></div>
+  </div>
+</div>
+
+<!-- ランチャー（ログイン後） -->
+<div id="launcher" hidden>
+  <nav class="ptabs" id="tabs"></nav>
+  <div class="pages" id="pages"></div>
+  <div class="dots" id="dots"></div>
+
+  <div class="install" id="install" hidden>
+    <div class="install-title"><i class="ti ti-device-mobile-plus" aria-hidden="true"></i>ホーム画面に追加すると全画面で開けます</div>
+    <button type="button" class="install-btn" id="installBtn" hidden>ホーム画面に追加</button>
+    <div class="install-steps">
+      Android（Chrome）：右上の「︙」→「ホーム画面に追加」→「インストール」<br>
+      iPhone（Safari）：下の共有ボタン →「ホーム画面に追加」→「追加」
+    </div>
+  </div>
+
+  <div class="foot">
+    <span id="who"></span>
+    <button type="button" class="logout" id="logout">ログアウト</button>
+  </div>
+</div>
+
+<!-- ログイン -->
+<div id="login" class="login" hidden>
+  <div class="login-title">名前を選んでください</div>
+  <div class="notice ng" id="loginMsg" hidden></div>
+  <div class="names" id="names"></div>
+  <div class="pass-wrap" id="passWrap" hidden>
+    <label for="pass">パスコード</label>
+    <input type="password" id="pass" inputmode="numeric" autocomplete="current-password">
+  </div>
+  <button type="button" class="submit-btn login-btn" id="loginBtn" disabled>はじめる</button>
+</div>
+
+<div class="copyright">&copy; 2026 SAKAE GARDEN</div>
+<div class="toast"><div class="toast-inner" id="toast"></div></div>
+
+<script src="js/common.js"></script>
+<script src="launcher.js"></script>
+<script>TougouLauncher.init();</script>
+</body>
+</html>

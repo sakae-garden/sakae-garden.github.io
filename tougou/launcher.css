@@ -1,0 +1,139 @@
+/*
+ * 統合アプリ ランチャーだけの見た目（共通部品は styles/common.css。先に読み込む）。
+ * アイコンの並ぶ画面は、今のランチャー（sakae-garden.github.io/index.html）の配色・カード・ヘッダーを
+ * そのまま引き継ぐ（従業員が見慣れている形。今風に作り変えない）。
+ * ログインのボタン・お知らせ・トーストは common.css（配達日報と同じ部品）を使う。
+ */
+html,body{
+  min-height:100%;
+  font-family:'Noto Sans JP','Inter',sans-serif;
+  background:#e8e0d0;
+  color:#1c1c1e;
+  overflow-x:hidden;
+  -webkit-user-select:none;user-select:none;
+}
+/* common.css の body（幅480px・固定フッター分の下余白）を、フッターの無いランチャー用に戻す */
+body{max-width:none;padding-bottom:0}
+
+/* ── ヘッダー（今のランチャーと同じ） ── */
+.header{
+  background:#1c1c1e;color:#fff;text-align:center;
+  padding:calc(28px + env(safe-area-inset-top)) 16px 16px;
+  position:relative;
+}
+.logo-row{display:flex;align-items:center;justify-content:center;gap:12px;margin-bottom:12px}
+.logo-img{width:44px;height:44px;flex-shrink:0;object-fit:contain;filter:drop-shadow(0 0 8px rgba(46,204,113,.3))}
+.logo-name{font-size:28px;font-weight:900;color:#2ecc71;letter-spacing:2px;text-shadow:0 0 20px rgba(46,204,113,.25);line-height:1}
+.clock-date{font-family:'Inter','Noto Sans JP',sans-serif;font-size:14px;font-weight:600;color:rgba(255,255,255,.7);letter-spacing:1px}
+.clock-divider{width:40px;height:1px;margin:5px auto;background:linear-gradient(90deg,transparent,rgba(255,255,255,.2),transparent)}
+.clock-time{font-family:'Inter',sans-serif;font-size:30px;font-weight:700;color:#fff;letter-spacing:4px;line-height:1}
+
+/* ── ページの見出し（タップでも切り替えられる） ── */
+.ptabs{
+  display:flex;gap:6px;max-width:440px;margin:0 auto;padding:14px 20px 0;
+}
+.ptab{
+  flex:1;padding:9px 4px;border:1px solid rgba(0,0,0,.12);border-radius:20px;
+  background:rgba(255,255,255,.35);color:rgba(0,0,0,.5);
+  font-family:inherit;font-size:14px;font-weight:700;letter-spacing:.04em;
+}
+.ptab.on{background:#1c1c1e;color:#fff;border-color:#1c1c1e}
+
+/* ── 横にめくるページ ── */
+.pages{
+  display:flex;overflow-x:auto;overflow-y:hidden;
+  scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;
+  scrollbar-width:none;overscroll-behavior-x:contain;
+}
+.pages::-webkit-scrollbar{display:none}
+.page{flex:0 0 100%;scroll-snap-align:start;scroll-snap-stop:always}
+
+/* ── グリッド（今のランチャーと同じ2列） ── */
+.grid{
+  display:grid;grid-template-columns:1fr 1fr;gap:14px;
+  max-width:440px;margin:0 auto;padding:18px 20px 10px;
+}
+
+/* ── アプリカード（今のランチャーと同じ） ── */
+.app{
+  text-decoration:none;position:relative;overflow:hidden;
+  border-radius:18px;color:#fff;padding:18px 12px 16px;text-align:center;
+  transition:transform .18s,box-shadow .25s,filter .2s;
+  aspect-ratio:1/1;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;
+  box-shadow:0 4px 16px rgba(0,0,0,.18),inset 0 1px 0 rgba(255,255,255,.18);
+}
+.app::before{
+  content:'';position:absolute;inset:0;border-radius:inherit;pointer-events:none;
+  background:linear-gradient(180deg,rgba(255,255,255,.12),rgba(0,0,0,.08) 60%,rgba(0,0,0,.18));
+}
+.app:active{transform:scale(.96)}
+.app[data-color="green"] {background:linear-gradient(160deg,#22a35a,#16783f)}
+.app[data-color="orange"]{background:linear-gradient(160deg,#f47c14,#d65a0a)}
+.app[data-color="blue"]  {background:linear-gradient(160deg,#2e74d8,#1a52a3)}
+.app[data-color="purple"]{background:linear-gradient(160deg,#9b34c7,#6d22a0)}
+.app[data-color="teal"]  {background:linear-gradient(160deg,#0f9d8a,#0a6f61)}
+.app[data-color="gray"]  {background:linear-gradient(160deg,#6c6c70,#48484a)}
+.app .icon{position:relative;z-index:1;font-size:44px;line-height:1;color:#fff;filter:drop-shadow(0 2px 4px rgba(0,0,0,.25))}
+.app .name{position:relative;z-index:1;font-size:16px;font-weight:700;line-height:1.2;letter-spacing:.06em;text-shadow:0 1px 2px rgba(0,0,0,.2)}
+.app .note{position:relative;z-index:1;font-size:11px;opacity:.85;margin-top:-4px}
+
+.ripple{position:absolute;border-radius:50%;background:rgba(0,0,0,.1);transform:scale(0);animation:ripple-anim .5s ease-out;pointer-events:none}
+@keyframes ripple-anim{to{transform:scale(3);opacity:0}}
+
+/* 準備中（今のランチャーと同じ表示） */
+.app.wip{filter:grayscale(.6) brightness(.85)}
+.app.wip .overlay{position:absolute;inset:0;border-radius:inherit;background:rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;z-index:2}
+.app.wip .overlay span{font-size:11px;font-weight:700;background:#fff;color:#1c1c1e;padding:4px 12px;border-radius:20px;letter-spacing:1px}
+
+/* ── ページの点 ── */
+.dots{display:flex;justify-content:center;gap:8px;padding:6px 0 14px}
+.dot{width:8px;height:8px;border-radius:50%;background:rgba(0,0,0,.18)}
+.dot.on{background:#1c1c1e}
+
+/* ── ホーム画面への追加の案内 ── */
+.install{
+  max-width:400px;width:calc(100% - 40px);margin:0 auto 14px;padding:12px 14px;
+  background:rgba(255,255,255,.55);border:1px solid rgba(0,0,0,.1);border-radius:12px;
+  font-size:13px;color:#3a3a3c;
+}
+.install-title{font-weight:700;display:flex;align-items:center;gap:6px;margin-bottom:6px}
+.install-title i{font-size:18px}
+.install-steps{font-size:12px;line-height:1.7;color:#6c6c70}
+.install-btn{
+  width:100%;margin:4px 0 8px;padding:10px;border:0;border-radius:8px;
+  background:#2d7a4f;color:#fff;font-family:inherit;font-size:15px;font-weight:700;
+}
+
+/* ── 名前・ログアウト ── */
+.foot{
+  max-width:440px;margin:0 auto;padding:0 20px 10px;
+  display:flex;align-items:center;justify-content:center;gap:12px;
+  font-size:13px;color:rgba(0,0,0,.5);
+}
+.logout{
+  font-family:inherit;font-size:13px;color:rgba(0,0,0,.5);
+  background:rgba(255,255,255,.35);border:1px solid rgba(0,0,0,.12);border-radius:20px;padding:6px 14px;
+}
+
+/* ── ログイン ── */
+.login{max-width:440px;margin:0 auto;padding:20px 20px 10px}
+.login-title{font-size:16px;font-weight:700;margin-bottom:12px;text-align:center}
+.names{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.name-btn{
+  padding:16px 8px;font-size:17px;font-weight:700;font-family:inherit;color:#1c1c1e;
+  background:#fff;border:1px solid #e5e1d8;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,.06);
+}
+.name-btn.sel{background:#1c1c1e;color:#fff;border-color:#1c1c1e}
+.name-btn .lock{display:block;font-size:11px;font-weight:500;opacity:.7;margin-top:2px}
+.loading{grid-column:1/-1;text-align:center;color:#6c6c70;font-size:14px;padding:20px 0}
+.loading.err{color:#c0392b}
+.pass-wrap{margin-top:14px}
+.pass-wrap label{display:block;font-size:13px;color:#6c6c70;margin-bottom:4px}
+.pass-wrap input{width:100%;font-size:20px;padding:10px 12px;border:1px solid #e5e1d8;border-radius:8px;background:#fff;-webkit-user-select:text;user-select:text}
+.login-btn{margin-top:16px}
+
+/* ── コピーライト（今のランチャーと同じ）。common.css の固定フッター .footer とは別物なので名前を変えた ── */
+.copyright{text-align:center;padding:4px 20px calc(20px + env(safe-area-inset-bottom));font-size:11px;color:rgba(0,0,0,.25);font-family:'Inter',sans-serif;letter-spacing:.5px}
+/* トーストは common.css。ランチャーには固定フッターが無いので下端に寄せる */
+.toast{bottom:calc(28px + env(safe-area-inset-bottom))}

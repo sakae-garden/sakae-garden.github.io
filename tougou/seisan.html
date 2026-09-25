@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#1c1c1e">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<title>生産入力 | 栄ガーデン</title>
+<link rel="stylesheet" href="styles/common.css">
+<!--
+  生産入力（袋出し・浸水・収穫）。段階1-2 の GAS 画面（ui/Page_today.html）を Pages へ移したもの（指示 20260925-093100）。
+  フォームの中身は js/seisan_form.js（今日の画面 kyou.html と共用。指示 20260925-096200）。この画面は日付を選べる。
+  - 保存は「日付×拠点×種別」で1行 upsert（production.upsertMany）。入れる値は**その日の合計**（上書き。足し算ではない）
+  - 空欄の欄は送らない（前の値のまま）。取り消しは 0
+  - 見た目・操作は配達日報に合わせる（styles/common.css・js/common.js）
+-->
+<style>
+/* この画面だけの部品（色・枠・角丸は common.css の値を使う） */
+.shinsui-sub{font-size:11px;color:var(--sub);margin-top:2px}
+.frow-lbl .srv{display:block;font-size:11px;color:var(--sub);font-weight:400;margin-top:1px}
+.frow.chg{background:#fffdf5}
+.frow.chg .frow-lbl{font-weight:700}
+</style>
+</head>
+<body>
+
+<div class="hdr">
+  <div class="hdr-top">
+    <h1>🌱 生産入力</h1>
+    <a class="back-btn" href="./">← 戻る</a>
+  </div>
+  <div class="hdr-date" id="hDate"></div>
+  <!-- 拠点は日報の経路タブと同じ形でヘッダーに置く -->
+  <div class="hdr-tabs" id="siteTabs"></div>
+</div>
+
+<div class="screen" id="app">
+  <div id="msg"></div>
+  <div id="form"></div>
+</div>
+
+<footer class="footer"><a href="./">🏠 ホームに戻る</a></footer>
+
+<script src="js/common.js"></script>
+<script src="js/seisan_form.js"></script>
+<script>
+(function () {
+  'use strict';
+  var C = window.TougouCommon;
+  var session = C.requireSession();
+  if (!session) return;
+  var $ = function (id) { return document.getElementById(id); };
+
+  $('hDate').textContent = C.jpDate(new Date()) + '　' + (session.name || '');
+
+  window.TougouSeisanForm.mount({
+    host: $('form'),
+    siteTabs: $('siteTabs'),
+    msg: function (text, kind) {
+      $('msg').innerHTML = text ? '<div class="notice ' + (kind || 'info') + '">' + C.esc(text) + '</div>' : '';
+    },
+    pickDate: true,
+    draftKey: 'tougou.seisan.draft.v1',
+    bannerHost: $('app')
+  });
+})();
+</script>
+</body>
+</html>

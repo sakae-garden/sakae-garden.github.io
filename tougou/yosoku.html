@@ -1,0 +1,633 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#1c1c1e">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<title>予測 | 栄ガーデン</title>
+<link rel="stylesheet" href="styles/common.css">
+<!--
+  予測（段階1-3。指示 20260925-096000・096100）。閲覧のみ（入力・保存は無い）。
+  - 警告の一覧（優先順）→ 棚・浸水の枠（日別の不足）→ 理論と出荷の差（要因の候補。袋出し150個/日の指示）
+    → 収穫の見込みのグラフ（収穫の記録を重ねる・試算）→ 月次ウォッチ → 1菌床あたりの実績収量（月次）
+    → 係数の見直しの提案 → 収穫−出荷 → 日別の見込み（等級別の kg と袋数）
+  - 見込みと実績は月単位だけで比べる（指示 096500。日次の逆算は撤回。刈り取り回数・温度設定で収穫の時期をずらしているため）
+  - 計算はすべて GAS（Yosoku.gs の yosoku.forecast）。係数は統合マスタから読む。この画面は表示だけ
+  - 見た目は配達日報に合わせる（styles/common.css・js/common.js）
+-->
+<style>
+/* この画面だけの部品（色・枠・角丸は common.css の値を使う） */
+.alert{padding:10px var(--pad-card);border-bottom:1px solid var(--border);font-size:13px;line-height:1.6}
+.alert:last-child{border-bottom:none}
+.alert .pr{display:inline-block;min-width:20px;margin-right:6px;font-size:11px;font-weight:700;color:var(--sub)}
+.alert.strong{background:#fdecea;color:#b71c1c}
+.alert.warn{background:#fff8e1;color:#8a6100}
+.alert.info{color:var(--sub)}
+.day-hdr .ok{color:var(--green)}
+.day-hdr .ng{color:var(--red)}
+.tbl td.neg{color:var(--red)}
+.tbl td.pos{color:var(--green)}
+.bags{font-size:11px;color:var(--sub);padding:6px var(--pad-card) 10px;line-height:1.7}
+.est{font-size:10px;font-weight:700;color:#8a6100;background:#fff8e1;border:1px solid #ffd54f;border-radius:4px;padding:0 4px;margin-left:6px}
+.big{font-size:26px;font-weight:700}
+.muted{font-size:11px;color:var(--sub);line-height:1.7}
+.more{display:block;width:100%;background:none;border:none;border-top:1px solid var(--border);padding:9px;font-family:inherit;font-size:12px;color:var(--sub);cursor:pointer}
+/* 見込みのグラフ（指示 096500）。系列の色は dataviz の既定パレットの1〜3番（白地で検証済み。水色は3:1未満なので凡例と「表で見る」を必ず出す） */
+.viz-root{--series-1:#2a78d6;--series-2:#eb6834;--series-3:#1baf7a;--ink-1:#0b0b0b;--ink-2:#52514e;--muted:#898781;--grid:#e1e0d9;--axis:#c3c2b7;
+  position:relative;padding:4px 6px 0 0}
+.viz-root svg{display:block;width:100%;height:auto;font-family:system-ui,-apple-system,"Segoe UI",sans-serif}
+.viz-root .tick{font-size:10px;fill:var(--muted);font-variant-numeric:tabular-nums}
+.viz-bar{display:flex;align-items:center;justify-content:space-between;padding:8px var(--pad-card) 2px}
+.seg{display:inline-flex;border:1px solid var(--border);border-radius:var(--r-btn);overflow:hidden}
+.seg button{border:none;background:none;padding:5px 12px;font-family:inherit;font-size:12px;color:var(--sub);cursor:pointer}
+.seg button.on{background:var(--ink);color:#fff;font-weight:700}
+.linkish{border:none;background:none;font-family:inherit;font-size:12px;color:var(--sub);text-decoration:underline;cursor:pointer}
+.legend{display:flex;flex-wrap:wrap;gap:4px 14px;padding:4px var(--pad-card) 6px;font-size:11px;color:#52514e}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;vertical-align:-1px}
+.legend i.dot{border-radius:50%;background:#0b0b0b;width:8px;height:8px}
+.legend i.ring{border-radius:50%;border:2px solid #0b0b0b;width:6px;height:6px;background:#fff}
+.legend i.dash{border:1.5px dashed #0b0b0b;background:none;width:8px;height:8px}
+.tip{position:absolute;pointer-events:none;background:#fff;border:1px solid rgba(11,11,11,.12);border-radius:8px;box-shadow:0 4px 14px rgba(0,0,0,.12);
+  padding:7px 9px;font-size:11px;line-height:1.6;color:#0b0b0b;white-space:nowrap;z-index:5;font-variant-numeric:tabular-nums}
+.tip b{font-size:12px}
+.tip .k{color:#52514e}
+.whatif{margin:4px var(--pad-card) 0;padding:8px 10px;border:1px dashed var(--divider);border-radius:var(--r-btn)}
+.wi-ttl{font-size:12px;font-weight:700;margin-bottom:4px}
+.wi-row{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;margin-bottom:6px;font-size:12px}
+.wi-row input{font-family:inherit;font-size:14px;margin:0 3px;padding:4px 6px;border:1px solid var(--border);border-radius:6px;width:74px}
+.wi-row input[type=date]{width:auto}
+.wi-btn{font-family:inherit;font-size:12px;padding:6px 12px;border-radius:var(--r-btn);border:none;background:var(--ink);color:#fff;cursor:pointer}
+.wi-btn.sub{background:none;color:var(--sub);border:1px solid var(--border)}
+.mrow{padding:10px var(--pad-card);border-bottom:1px solid var(--border);font-size:12px;line-height:1.7}
+.mrow:last-child{border-bottom:none}
+.mrow .mh{display:flex;justify-content:space-between;align-items:baseline;font-weight:700;font-size:13px}
+.mrow .st{font-size:11px;font-weight:700;padding:0 6px;border-radius:4px;background:#f0efec;color:var(--sub)}
+.mrow .st.low{background:#fdecea;color:#b71c1c}
+.mrow .st.ok{background:#e8f3ec;color:var(--green)}
+.mrow table{width:100%;border-collapse:collapse;margin-top:2px;font-variant-numeric:tabular-nums}
+.mrow td{padding:1px 0}
+.mrow td.num{text-align:right}
+.cand{margin-top:6px;padding:6px 8px;background:#fff8e1;border-radius:6px;color:#5d4300}
+.cand li{margin-left:16px}
+</style>
+</head>
+<body>
+
+<div class="hdr">
+  <div class="hdr-top">
+    <h1>📈 予測</h1>
+    <a class="back-btn" href="./">← 戻る</a>
+  </div>
+  <div class="hdr-date" id="hDate"></div>
+</div>
+
+<div class="screen" id="app">
+  <div id="msg"></div>
+  <div id="jsNotice"></div>
+
+  <div class="sec-lbl">警告（優先順）</div>
+  <div class="fsec" id="alerts"><div class="empty">読み込み中…</div></div>
+
+  <div class="sec-lbl">棚・浸水の枠（浸水を増やせない・3番まで回せない原因）</div>
+  <div class="fsec" id="capa"><div class="empty">読み込み中…</div></div>
+
+  <div class="sec-lbl">理論と出荷の差（どこへ消えているか。断定しません）</div>
+  <div class="fsec" id="gap"><div class="empty">読み込み中…</div></div>
+
+  <div class="sec-lbl">収穫の見込み（袋出し・浸水から。kg/日）</div>
+  <div class="fsec">
+    <div class="viz-bar">
+      <div class="seg" id="weeks">
+        <button type="button" data-w="2">2週</button><button type="button" data-w="4">4週</button><button type="button" data-w="6">6週</button>
+      </div>
+      <button type="button" class="linkish" id="tblToggle">表で見る</button>
+    </div>
+    <div class="viz-root" id="chart"><div class="empty">読み込み中…</div></div>
+    <div class="legend" id="legend"></div>
+    <div id="chartTbl" style="display:none"></div>
+    <div class="whatif">
+      <div class="wi-ttl">試しに入れてみる（記録はされません）</div>
+      <div class="wi-row">
+        <label>日付<input type="date" id="wiDate"></label>
+        <label>袋出し<input type="number" inputmode="numeric" min="0" id="wiF" placeholder="0">個</label>
+        <label>1番浸水<input type="number" inputmode="numeric" min="0" id="wiS1" placeholder="0">個</label>
+        <label>2番浸水<input type="number" inputmode="numeric" min="0" id="wiS2" placeholder="0">個</label>
+      </div>
+      <div class="wi-row"><button type="button" class="wi-btn" id="wiAdd">見込みに足す</button><button type="button" class="wi-btn sub" id="wiClear">消す</button></div>
+      <div class="muted" id="wiOut"></div>
+    </div>
+    <div class="bags" id="chartNote"></div>
+  </div>
+
+  <div class="sec-lbl">月次ウォッチ（見込みと実績。月単位だけで比べる）</div>
+  <div class="fsec" id="monthly"><div class="empty">読み込み中…</div></div>
+
+  <div class="sec-lbl">1菌床あたりの実績収量（月次）</div>
+  <div class="fsec"><div class="fsec-body" id="yield"><div class="empty">読み込み中…</div></div></div>
+
+  <div id="proposalWrap" style="display:none">
+    <div class="sec-lbl">係数の見直しの提案（自動では変えません）</div>
+    <div class="fsec" id="proposal"></div>
+  </div>
+
+  <div class="sec-lbl">収穫−出荷（kg/日）</div>
+  <div class="fsec" id="jsDiff"><div class="empty">読み込み中…</div></div>
+
+  <div class="sec-lbl">日別の見込み（供給／需要／過不足 kg）</div>
+  <div id="days"><div class="fsec"><div class="empty">読み込み中…</div></div></div>
+
+  <div class="sec-lbl">前提</div>
+  <div class="fsec"><div class="fsec-body muted" id="basis"></div></div>
+
+  <button type="button" class="load-btn" id="reload">🔄 最新の記録で計算し直す</button>
+</div>
+
+<footer class="footer"><a href="./">🏠 ホームに戻る</a></footer>
+
+<script src="js/common.js"></script>
+<script>
+(function () {
+  'use strict';
+  var C = window.TougouCommon;
+  var session = C.requireSession();
+  if (!session) return;
+  var $ = function (id) { return document.getElementById(id); };
+  var esc = C.esc;
+  var r1 = function (x) { return (Math.round(x * 10) / 10).toFixed(1); };
+  var md = function (d) { var p = d.split('-'); return Number(p[1]) + '/' + Number(p[2]) + '（' + '日月火水木金土'.charAt(new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2])).getDay()) + '）'; };
+  var GRADE = { A: 'A品', B: 'B品', C: 'C品' };
+  var SHOW_DAYS = 7;   // 最初に出す日数。「さらに表示」で全部（マスタの 予測_表示日数）
+
+  $('hDate').textContent = C.jpDate(new Date()) + '　' + (session.name || '');
+
+  function msg(text, kind) {
+    $('msg').innerHTML = text ? '<div class="notice ' + (kind || 'info') + '">' + esc(text) + '</div>' : '';
+  }
+
+  function renderAlerts(list) {
+    if (!list.length) { $('alerts').innerHTML = '<div class="empty">警告はありません。</div>'; return; }
+    var LIMIT = 8;
+    var html = function (all) {
+      return (all ? list : list.slice(0, LIMIT)).map(function (a) {
+        return '<div class="alert ' + esc(a.level) + '"><span class="pr">' + esc(a.priority) + '</span>' + esc(a.text) + '</div>';
+      }).join('') + (!all && list.length > LIMIT ? '<button type="button" class="more" id="moreAlerts">ほか ' + (list.length - LIMIT) + '件を表示</button>' : '');
+    };
+    $('alerts').innerHTML = html(false);
+    var b = $('moreAlerts');
+    if (b) b.onclick = function () { $('alerts').innerHTML = html(true); };
+  }
+
+  var pctS = function (x) { return x === null || x === undefined ? '—' : Math.round(x * 100) + '%'; };
+  var mon = function (ym) { return Number(ym.slice(5, 7)) + '月'; };
+
+  function renderYield(y, alertRatio) {
+    if (!y || y.gramsPerBed === null || y.gramsPerBed === undefined) {
+      $('yield').innerHTML = '<div class="muted">月次の比較がまだ無く、推計値もありません。</div>'; return;
+    }
+    var pct = y.ratio !== null && y.ratio !== undefined ? Math.round(y.ratio * 100) : null;
+    var low = alertRatio !== null && y.ratio !== null && y.ratio < alertRatio;
+    $('yield').innerHTML =
+      '<div><span class="big" style="color:' + (low ? 'var(--red)' : 'var(--ink)') + '">' + Math.round(y.gramsPerBed) + 'g</span>' +
+      '<span class="muted">　／ 予測 ' + esc(y.lifetime) + 'g' + (pct !== null ? '（' + pct + '%）' : '') + '</span>' +
+      (y.source === 'estimate' ? '<span class="est">推計</span>' : y.recDays < y.monthDays ? '<span class="est">日数で補正</span>' : '') + '</div>' +
+      '<div class="muted">' + (y.source === 'monthly'
+        ? esc(mon(y.month)) + 'の袋出し ' + Math.round(y.fukurodashi).toLocaleString() + '個の見込み ' + r1(y.expectedKg) + 'kg に対して、' + esc(mon(y.actualMonth)) + 'の収穫（記録上のA品）' + r1(y.actualKg) + 'kg' +
+          (y.recDays < y.monthDays ? '（記録した' + y.recDays + '日の合計を' + y.monthDays + '日に補正）' : '') + '。上の月次ウォッチの直近の判定できた月'
+        : '月次の比較で判定できた月がまだ無いため、出荷と月夜野の請求書から出した推計値（栽培係数マスタ a_lifetime の実績値）を出しています') +
+      (alertRatio !== null ? '。' + Math.round(alertRatio * 100) + '%（' + Math.round(y.lifetime * alertRatio) + 'g）を下回ると「3番まで回せていない可能性」の警告' : '') + '</div>';
+  }
+
+  // 月次ウォッチ（指示 096500）。新しい月を上に
+  var ST = { ok: ['判定', 'ok'], running: ['集計中', ''], future: ['収穫の月はこれから', ''], low_cover: ['記録が少ないため判定しない', ''], partial_input: ['記録開始の月（途中から）', ''] };
+  function renderMonthly(mo) {
+    if (!mo || !mo.rows.length) {
+      $('monthly').innerHTML = '<div class="empty">袋出しの記録がまだありません。</div>' + monthlyNote(mo); return;
+    }
+    var kg = function (x) { return x === null || x === undefined ? '—' : r1(x) + 'kg'; };
+    var body = mo.rows.slice().reverse().map(function (r) {
+      var st = ST[r.status] || [r.status, ''];
+      var low = r.ratioStd !== null && mo.alertRatio !== null && r.ratioStd < mo.alertRatio;
+      var soak = r.soakRecorded ? '1番浸水 ' + Math.round(r.shinsui[1] || 0).toLocaleString() + '個（' + pctS(r.soak1Rate) + '）・2番浸水 ' + Math.round(r.shinsui[2] || 0).toLocaleString() + '個（' + pctS(r.soak2Rate) + '）' : '浸水の記録なし';
+      var act = r.status === 'future' ? '—'
+        : kg(r.a) + '<span class="muted">（記録 ' + r.recDays + '／' + (r.status === 'running' ? r.countDays + '日まで' : r.monthDays + '日') + '）</span>';
+      return '<div class="mrow"><div class="mh"><span>' + esc(mon(r.month)) + 'の袋出し → ' + esc(mon(r.actualMonth)) + 'の収穫</span>' +
+        '<span class="st ' + (low ? 'low' : st[1]) + '">' + esc(st[0]) + '</span></div>' +
+        '<table>' +
+        '<tr><td>袋出し</td><td class="num">' + Math.round(r.fukurodashi).toLocaleString() + '個</td></tr>' +
+        '<tr><td colspan="2" class="muted">' + soak + '</td></tr>' +
+        '<tr><td>見込み（標準・3番まで）</td><td class="num">' + kg(r.expStd) + '</td></tr>' +
+        '<tr><td>見込み（浸水の記録どおり）</td><td class="num">' + kg(r.expSoak) + '</td></tr>' +
+        '<tr><td>収穫の記録（A品・記録上）</td><td class="num">' + act + '</td></tr>' +
+        (r.aEst !== null && r.recDays < r.monthDays ? '<tr><td class="muted">　日数で補正（推定）</td><td class="num muted">' + kg(r.aEst) + '</td></tr>' : '') +
+        '<tr><td>実績÷見込み（標準）</td><td class="num"><b style="color:' + (low ? 'var(--red)' : 'var(--ink)') + '">' + pctS(r.ratioStd) + '</b></td></tr>' +
+        '<tr><td class="muted">実績÷見込み（浸水どおり）</td><td class="num muted">' + pctS(r.ratioSoak) + '</td></tr>' +
+        '<tr><td class="muted">C品：見込み／記録（傷）</td><td class="num muted">' + kg(r.expC) + '／' + (r.status === 'future' ? '—' : kg(r.c)) + '</td></tr>' +
+        '</table>' +
+        (r.candidates.length ? '<details class="cand"' + (mo.latest && mo.latest.month === r.month ? ' open' : '') + '><summary><b>差の原因の候補</b>（どれが原因かは断定しません。記録からわかる事実を添えています）</summary><ul>' +
+          r.candidates.map(function (c) { return '<li>' + esc(c.label) + '<br><span class="muted">' + esc(c.fact) + '</span></li>'; }).join('') + '</ul></details>' : '') +
+        '</div>';
+    }).join('');
+    $('monthly').innerHTML = body + monthlyNote(mo);
+  }
+  function monthlyNote(mo) {
+    if (!mo) return '';
+    return '<div class="bags">見込みは「その月に袋出し・浸水した数」から、実績は' + mo.shift + 'か月後の月の収穫の記録（収穫_1番＋2番以降）。日単位・週単位では比べません' +
+      '（刈り取りの回数や温度設定で収穫の時期をずらしているので、袋出しから収穫までの日数が一定でないため）。<br>' +
+      '収穫を入力していない日は0と数えず「記録した日数」として出し、比は記録した日の合計を月の日数に補正して出します。記録した日が' + Math.round(mo.minCover * 100) + '%に満たない月・収穫の月が終わっていない月は判定しません。<br>' +
+      '実績収量の警告（' + (mo.alertRatio !== null ? Math.round(mo.alertRatio * 100) + '%' : '閾値なし') + '）は「実績÷見込み（標準）」の直近の判定できた月で出します。' +
+      '「浸水どおり」との比が100%に近く「標準」との比だけ低い月は、浸水しなかった菌床の分の差です。</div>';
+  }
+
+  function renderProposal(mo) {
+    var p = mo && mo.proposal;
+    if (!p) { $('proposalWrap').style.display = 'none'; return; }
+    $('proposalWrap').style.display = '';
+    $('proposal').innerHTML =
+      '<div class="alert info">係数を実績にもとづいて見直しますか？（' + p.months.map(mon).join('・') + 'の袋出しと、その' + mo.shift + 'か月後の収穫から）' +
+      (p.perBed !== null ? '<div class="muted">1菌床あたり（記録上のA品）' + Math.round(p.perBed) + 'g／予測 ' + p.lifetime + 'g</div>' : '') + '</div>' +
+      p.items.map(function (it) {
+        if (!it.ready) return '<div class="alert info">' + esc(it.label) + '：' + esc(it.note || 'まだ出せません') + '</div>';
+        return '<div class="alert warn">' + esc(it.label) + '：' + it.coefs.map(function (c) {
+          return esc(c.id) + ' ' + esc(c.current) + ' → <b>' + esc(c.proposed) + '</b>';
+        }).join('・') + (it.caution ? '<div class="muted">' + esc(it.caution) + '</div>' : '') + '</div>';
+      }).join('') +
+      '<div class="bags">' + esc(p.caution) + '<br>見直すときは統合マスタの栽培係数マスタで、今の行に適用終了を入れて新しい行を足してください（履歴を残す）。この画面からは書き換えません。</div>';
+  }
+
+  // ------------------------------------------------------------------ 収穫の見込みのグラフ（指示 096500）
+  var chartData = null, weeks = 4, extra = {}, showTbl = false;
+  var addDays = function (ymd, n) {
+    var p = ymd.split('-').map(Number), t = new Date(Date.UTC(p[0], p[1] - 1, p[2] + n));
+    return t.getUTCFullYear() + '-' + ('0' + (t.getUTCMonth() + 1)).slice(-2) + '-' + ('0' + t.getUTCDate()).slice(-2);
+  };
+  var mdS = function (d) { var p = d.split('-'); return Number(p[1]) + '/' + Number(p[2]); };
+
+  /** 試算：袋出し・浸水を標準スケジュールで流す（GAS の Yosoku_simulate_ の標準サイクルと同じ。記録はしない）。記録上のA品 kg を日別・番手別に。 */
+  function whatIf(date, f, s1, s2, stages) {
+    var st = {}; stages.forEach(function (s) { st[s.bante] = s; });
+    var out = {};   // out[日付]['入力|番手'] = kg
+    var chain = function (src, day, b, n) {
+      var s = st[b];
+      if (!s || !s.std || !(n > 0)) return;
+      var h0 = addDays(day, s.days), key = src + '|' + b;
+      s.split.forEach(function (w, k) {
+        var d = addDays(h0, k);
+        out[d] = out[d] || {}; out[d][key] = (out[d][key] || 0) + n * s.grams / 1000 * w;
+      });
+      chain(src, addDays(h0, s.split.length + (s.kyuyou || 0)), b + 1, n);
+    };
+    chain('袋出し', date, 1, f); chain('1番浸水', date, 2, s1); chain('2番浸水', date, 3, s2);
+    return out;
+  }
+
+  /** 目盛りの間隔（1・2・5×10^k）。目盛りは4本前後 */
+  function niceStep(v) {
+    if (!(v > 0)) return 5;
+    var p = Math.pow(10, Math.floor(Math.log10(v))), m = v / p;
+    return (m <= 1 ? 1 : m <= 2 ? 2 : m <= 5 ? 5 : 10) * p;
+  }
+
+  function renderChart() {
+    var r = chartData;
+    if (!r || !r.chart) { $('chart').innerHTML = '<div class="empty">—</div>'; return; }
+    var co = r.coef, today = r.chart.today, end = addDays(today, weeks * 7 - 1);
+    var days = r.chart.days.filter(function (d) { return d.date <= end; }).map(function (d) {
+      var x = 0; Object.keys(extra[d.date] || {}).forEach(function (b) { x += extra[d.date][b]; });
+      return { d: d, xA: x * (1 - co.bRatio), xB: x * co.bRatio, xC: x * co.cRatio, x: x };
+    });
+    var W = Math.max(300, $('chart').clientWidth || 340), H = 210, L = 34, R = 6, T = 8, B = 22;
+    var pw = W - L - R, ph = H - T - B, n = days.length, bw = pw / n;
+    var top = 0;
+    days.forEach(function (o) {
+      top = Math.max(top, o.d.A + o.d.B + o.d.C + o.x * (1 + co.cRatio));
+      if (o.d.actual) top = Math.max(top, o.d.actual.a + o.d.actual.c);
+    });
+    var step = niceStep(top / 4), nTick = Math.max(1, Math.ceil(top / step)), ymax = step * nTick;
+    var y = function (v) { return T + ph - v / ymax * ph; };
+    var s = '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="日別の収穫見込み（等級別の積み上げ）と収穫の記録">';
+    for (var g = 0; g <= nTick; g++) {
+      var v = step * g, yy = y(v);
+      s += '<line x1="' + L + '" x2="' + (W - R) + '" y1="' + yy + '" y2="' + yy + '" stroke="' + (g ? 'var(--grid)' : 'var(--axis)') + '" stroke-width="1"/>' +
+        '<text class="tick" x="' + (L - 4) + '" y="' + (yy + 3) + '" text-anchor="end">' + (Math.round(v * 10) / 10) + '</text>';
+    }
+    var lastLbl = -1e9;
+    days.forEach(function (o, i) {
+      var d = o.d, x0 = L + i * bw + 0.5, w = Math.max(1, bw - 1.5), op = d.past ? 0.45 : 1;
+      var base = 0;
+      [['A', d.A, 'var(--series-1)'], ['B', d.B, 'var(--series-2)'], ['C', d.C, 'var(--series-3)']].forEach(function (seg, k) {
+        if (!(seg[1] > 0)) return;
+        var y1 = y(base + seg[1]), y0 = y(base);
+        var hgt = Math.max(0, y0 - y1 - (k ? 1 : 0));   // 段の間に1pxの隙間
+        s += '<rect x="' + x0 + '" y="' + y1 + '" width="' + w + '" height="' + hgt + '" fill="' + seg[2] + '" opacity="' + op + '"' + (k === 2 ? ' rx="1.5"' : '') + '/>';
+        base += seg[1];
+      });
+      if (o.x > 0) {   // 試算を足した分（破線の枠）
+        var add = o.xA + o.xB + o.xC;
+        s += '<rect x="' + x0 + '" y="' + y(base + add) + '" width="' + w + '" height="' + Math.max(0, y(base) - y(base + add) - 1) + '" fill="none" stroke="var(--ink-1)" stroke-width="1" stroke-dasharray="3 2"/>';
+      }
+      if (d.actual) {
+        var cx = x0 + w / 2;
+        s += '<circle cx="' + cx + '" cy="' + y(d.actual.a + d.actual.c) + '" r="3.5" fill="#fff" stroke="var(--ink-1)" stroke-width="1.5"/>' +
+             '<circle cx="' + cx + '" cy="' + y(d.actual.a) + '" r="3.5" fill="var(--ink-1)" stroke="#fff" stroke-width="1.5"/>';
+      }
+      // 日付の目盛り：今日から7日ごと（今日を基準にそろえる）。ラベル同士が重ならないよう 30px 空ける
+      if ((i - (days.findIndex(function (q) { return q.d.date === today; }))) % 7 === 0 && x0 - lastLbl >= 30) {
+        s += '<text class="tick" x="' + (x0 + w / 2) + '" y="' + (H - 6) + '" text-anchor="middle">' + mdS(d.date) + '</text>';
+        lastLbl = x0;
+      }
+    });
+    var ti = days.findIndex(function (o) { return o.d.date === today; });
+    if (ti >= 0) {
+      var tx = L + ti * bw;
+      s += '<line x1="' + tx + '" x2="' + tx + '" y1="' + T + '" y2="' + (T + ph) + '" stroke="var(--ink-2)" stroke-width="1" stroke-dasharray="2 3"/>' +
+        '<text class="tick" x="' + (tx + 3) + '" y="' + (T + 9) + '">今日</text>';
+    }
+    // 当たり判定（棒より広く、日ごとの縦の帯）
+    days.forEach(function (o, i) {
+      s += '<rect class="hit" data-i="' + i + '" x="' + (L + i * bw) + '" y="' + T + '" width="' + bw + '" height="' + ph + '" fill="transparent"/>';
+    });
+    s += '</svg><div class="tip" id="tip" style="display:none"></div>';
+    $('chart').innerHTML = s;
+
+    var tip = $('tip');
+    var show = function (i) {
+      var o = days[i], d = o.d;
+      var bb = Object.keys(d.byBante).sort().map(function (b) { return b + '番 ' + r1(d.byBante[b]); }).join('・');
+      tip.innerHTML = '<b>' + esc(md(d.date)) + '</b>' + (d.estimated ? ' <span class="k">推計を含む</span>' : '') + '<br>' +
+        '<span class="k">見込み</span> A品 ' + r1(d.A) + '・B品 ' + r1(d.B) + '・C品 ' + r1(d.C) + ' kg<br>' +
+        (bb ? '<span class="k">番手別（記録上のA品）</span> ' + bb + '<br>' : '') +
+        (o.x > 0 ? '<span class="k">試算で足した分</span> 記録上のA品 ' + r1(o.x) + '・C品 ' + r1(o.xC) + ' kg<br>' : '') +
+        (d.past ? (d.actual ? '<span class="k">収穫の記録</span> A品 ' + r1(d.actual.a) + '（1番 ' + r1(d.actual.a1) + '・2番以降 ' + r1(d.actual.a2) + '）・傷 ' + r1(d.actual.c) + ' kg'
+                            : '<span class="k">収穫の記録</span> 未入力') : '');
+      tip.style.display = '';
+      var px = (L + (i + 0.5) * bw) / W * $('chart').clientWidth;
+      var tw = tip.offsetWidth, cw = $('chart').clientWidth;
+      tip.style.left = Math.max(0, Math.min(cw - tw, px - tw / 2)) + 'px';
+      tip.style.top = '0px';
+    };
+    Array.prototype.forEach.call($('chart').querySelectorAll('.hit'), function (el) {
+      var i = Number(el.getAttribute('data-i'));
+      el.addEventListener('pointerenter', function () { show(i); });
+      el.addEventListener('pointerdown', function () { show(i); });
+    });
+    $('chart').onpointerleave = function () { tip.style.display = 'none'; };
+
+    $('legend').innerHTML =
+      '<span><i style="background:#2a78d6"></i>見込み A品</span><span><i style="background:#eb6834"></i>見込み B品（A品の内数）</span><span><i style="background:#1baf7a"></i>見込み C品（別勘定）</span>' +
+      '<span><i class="dot"></i>収穫の記録 A品（記録上）</span><span><i class="ring"></i>収穫の記録 A品＋傷</span>' +
+      (Object.keys(extra).length ? '<span><i class="dash"></i>試算で足した分</span>' : '');
+    renderChartTable(days);
+  }
+
+  function renderChartTable(days) {
+    if (!showTbl) { $('chartTbl').style.display = 'none'; return; }
+    $('chartTbl').style.display = '';
+    $('chartTbl').innerHTML = '<table class="tbl"><tr><th>日付</th><th>見込みA</th><th>B</th><th>C</th><th>記録A</th><th>記録傷</th></tr>' +
+      days.map(function (o) {
+        var d = o.d, a = d.actual;
+        return '<tr><td>' + esc(md(d.date)) + (o.x > 0 ? '＊' : '') + '</td><td class="num">' + r1(d.A + o.xA) + '</td><td class="num">' + r1(d.B + o.xB) + '</td><td class="num">' + r1(d.C + o.xC) +
+          '</td><td class="num">' + (d.past ? (a ? r1(a.a) : '未入力') : '') + '</td><td class="num">' + (d.past ? (a ? r1(a.c) : '—') : '') + '</td></tr>';
+      }).join('') + '</table>' + (Object.keys(extra).length ? '<div class="bags">＊は試算で足した分を含む</div>' : '');
+  }
+
+  function chartNote(r) {
+    var c = r.coef, st = c.stages.filter(function (x) { return x.std; });
+    $('chartNote').innerHTML = '見込みは袋出し・浸水の記録を標準スケジュールで流したもの：' +
+      st.map(function (x, i) { return (i === 0 ? '袋出し＋' : (st[i - 1].kyuyou ? '休養' + st[i - 1].kyuyou + '日で浸水＋' : 'すぐ浸水＋')) + x.days + '日から' + x.bante + '番 ' + x.grams + 'g/床'; }).join('、') +
+      '（日別の配分 ' + st[0].split.map(function (w) { return Math.round(w * 100); }).join('／') + '%）。B品はA品の内数 ' + Math.round(c.bRatio * 100) + '%、C品はA品×' + c.cRatio + '（別勘定）。' +
+      '袋出しの記録が無い日・明日以降は設定の標準の個数で置いています（推計）。<br>' +
+      '実際は刈り取りの回数や温度設定で収穫の時期をずらしているので、日ごとの見込みと記録はずれます。見込みの確かめは下の月次ウォッチで行います。薄い棒は過去の日（記録と重ねる用）。';
+  }
+
+  function renderDiff(j) {
+    if (!j) { $('jsDiff').innerHTML = '<div class="empty">—</div>'; return; }
+    var cell = function (v) { return v === null || v === undefined ? '—' : r1(v); };
+    var sg = function (v) { return v === null || v === undefined ? '<td class="num">—</td>' : '<td class="num ' + (v < 0 ? 'neg' : 'pos') + '">' + (v >= 0 ? '+' : '') + r1(v) + '</td>'; };
+    var row = function (label, hA, sA, hC, sC, rec) {
+      return '<tr><td>' + label + '</td><td class="num">' + (rec ? cell(hA) : '未入力') + '</td><td class="num">' + cell(sA) + '</td>' + (rec ? sg(hA - sA) : '<td class="num">—</td>') +
+        '<td class="num">' + (rec ? cell(hC) : '—') + '</td><td class="num">' + cell(sC) + '</td>' + (rec ? sg(hC - sC) : '<td class="num">—</td>') + '</tr>';
+    };
+    var avg = function (label, a) { return a.n ? row(label + '（' + a.n + '日）', a.harvestA, a.shippedA, a.harvestC, a.shippedC, true) : row(label, null, null, null, null, false); };
+    var body = j.rows.slice().reverse().map(function (x) { return row(esc(md(x.date)), x.harvestA, x.shippedA, x.harvestC, x.shippedC, x.recorded); }).join('');
+    $('jsDiff').innerHTML = '<table class="tbl"><tr><th></th><th>収穫A</th><th>出荷A</th><th>差</th><th>収穫傷</th><th>出荷C</th><th>差</th></tr>' +
+      avg(j.shortDays + '日平均', j.short) + avg(j.longDays + '日平均', j.long) + body + '</table>' +
+      '<div class="bags">収穫A＝収穫_1番＋収穫_2番以降（記録上のA品。B品を含む）、出荷A＝日報の納品のA品＋B品＋卸の推計、出荷C＝大袋・直売所のC品。' +
+      '差がプラスの日は廃棄・冷蔵庫の在庫に回った分、マイナスの日は前日までの在庫から出した分。収穫の翌日に袋詰め・納品するので日単位ではずれます。平均は収穫の記録がある日だけ。</div>';
+  }
+
+  // ------------------------------------------------------------------ 棚・浸水の枠／理論と出荷の差（袋出し150個/日の指示）
+  var fmt = function (n) { return Math.round(n).toLocaleString(); };
+  function stdNoteHtml(si) {
+    return si && si.stdNote ? '<div class="alert warn">前提：' + esc(si.stdNote) + '</div>' : '';
+  }
+
+  function renderCapa(r) {
+    var cap = r.capacity, si = r.supplyInfo;
+    if (!cap) { $('capa').innerHTML = '<div class="empty">—</div>'; return; }
+    var names = {}; (si.std || []).forEach(function (s) { names[s.site] = s.name; });
+    var ids = Object.keys(cap.sites).filter(function (id) { return cap.sites[id].normal > 0; });
+    var sum = ids.map(function (id) {
+      var x = cap.sites[id];
+      var lines = ['袋出し ' + fmt(x.std) + '個/日（設定の標準）× 棚 ' + x.shelfDaysStd + '日 ＝ <b>' + fmt(x.needShelf) + '床</b>／通常の枠 ' + fmt(x.normal) + '床' +
+        (x.needShelf > x.normal ? ' <span style="color:var(--red)">（' + fmt(x.needShelf - x.normal) + '床 不足）</span>' : '')];
+      if (x.restDays) {
+        var all = x.needShelf + x.needRest, room = Math.max(x.max, x.normal + x.restCap);
+        lines.push('休養 ' + x.restDays + '日 × ' + fmt(x.std) + ' ＝ ' + fmt(x.needRest) + '床／休養室 ' + fmt(x.restCap) + '床。合わせて <b>' + fmt(all) + '床</b>／最大の枠 ' + fmt(room) + '床' +
+          (all > room ? ' <span style="color:var(--red)">（' + fmt(all - room) + '床 不足）</span>' : ''));
+      }
+      if (x.shelfDaysAvail !== null && x.lostStages.length) {
+        lines.push('通常の枠に置けるのは ' + fmt(x.normal) + '÷' + fmt(x.std) + '＝' + r1(x.shelfDaysAvail) + '日 → ' + x.lostStages.map(function (b) { return b + '番'; }).join('・') + 'を刈れない（最大 約' + r1(x.lostKg) + 'kg/日）');
+      }
+      if (x.tankDay > 0 && x.std > 0) {
+        lines.push('浸水 ' + fmt(x.soakNeed) + '個/日（' + x.soakTimes + '回）／枠 ' + fmt(x.tankDay) + '個/日（1日1回転）' +
+          (x.tankOver > 0 ? ' <span style="color:var(--red)">（' + fmt(x.tankOver) + '個/日 不足・' + r1(x.tankLossLow) + '〜' + r1(x.tankLossHigh) + 'kg/日）</span>' : ''));
+      }
+      return '<div class="mrow"><div class="mh"><span>' + esc(names[id] || id) + '</span></div><div>' + lines.join('<br>') + '</div></div>';
+    }).join('');
+    // 日別：通常の枠を超える日だけ（無ければ一言）
+    var rows = [];
+    cap.days.forEach(function (d) {
+      ids.forEach(function (id) {
+        var x = d.sites[id];
+        if (!x || !(x.overNormal > 0 || x.overAll > 0)) return;
+        rows.push('<tr><td>' + esc(md(d.date)) + '</td><td>' + esc(names[id] || id) + '</td><td class="num">' + fmt(x.shelf) + '／' + fmt(x.normal) + '</td>' +
+          '<td class="num neg">' + fmt(x.overNormal) + '</td><td class="num">' + (x.restCap ? fmt(x.rest) + '／' + fmt(x.restCap) : '—') + '</td>' +
+          '<td class="num ' + (x.overAll > 0 ? 'neg' : '') + '">' + (x.overAll > 0 ? fmt(x.overAll) : '0') + '</td></tr>');
+      });
+    });
+    var spare = ids.filter(function (id) { return cap.days.length && cap.days[0].sites[id] && cap.days[0].sites[id].shelf < cap.days[0].sites[id].normal && !(cap.sites[id].std > 0); });
+    $('capa').innerHTML = stdNoteHtml(si) + sum +
+      (rows.length ? '<table class="tbl"><tr><th>日付</th><th>拠点</th><th>棚 要／枠</th><th>不足</th><th>休養 要／枠</th><th>最大でも不足</th></tr>' + rows.join('') + '</table>'
+                   : '<div class="bags">表示期間に通常の枠を超える日はありません。</div>') +
+      '<div class="bags">棚（栽培舎）は袋出しから ' + (ids.length ? cap.sites[ids[0]].shelfDaysStd : '') + '日（休養室のある拠点は休養の日数を除く）、休養室は1番の刈り取り後の休養の日数で数えています。' +
+      '「最大でも不足」は休養室を臨時に栽培へ回しても（休養中の菌床も同じ部屋に要るので、棚＋休養の合計で比べる）置けない床数です。' +
+      (spare.length ? '<br>' + spare.map(function (id) { return esc(names[id] || id) + '（袋出し0・空き ' + fmt(cap.days[0].sites[id].normal - cap.days[0].sites[id].shelf) + '床）'; }).join('・') +
+        'に回せば収まる場合があります。拠点間の移動は記録が無いので、この計算は袋出しの拠点だけで数えています。' : '') + '</div>';
+  }
+
+  function renderGap(g) {
+    if (!g) { $('gap').innerHTML = '<div class="empty">—</div>'; return; }
+    var src = g.bySite.filter(function (x) { return x.perDay > 0; }).map(function (x) {
+      return esc(x.name) + ' ' + r1(x.perDay) + '個/日（' + (x.source === 'record' ? '生産記録' : '設定の標準。推計') + '）';
+    }).join('・') || '袋出し0';
+    var head = '<table class="tbl">' +
+      '<tr><td>理論：袋出し ' + r1(g.fukurodashi) + '個/日 × ' + g.lifetime + 'g</td><td class="num">' + r1(g.theory) + 'kg/日</td></tr>' +
+      '<tr><td>出荷（A品＋B品＋卸。直近' + g.days + '日のうち納品のあった' + g.shippedDays + '日の平均）</td><td class="num">' + (g.shipped === null ? '—' : r1(g.shipped) + 'kg/日') + '</td></tr>' +
+      '<tr><td><b>差</b></td><td class="num ' + (g.gap > 0 ? 'neg' : '') + '"><b>' + (g.gap === null ? '—' : r1(g.gap) + 'kg/日') + '</b></td></tr></table>';
+    var kg = function (c) {
+      if (c.kgLow !== null && c.kgLow !== undefined && c.kgHigh !== null && c.kgHigh !== undefined) return '最大 ' + r1(c.kgLow) + '〜' + r1(c.kgHigh) + 'kg/日';
+      if (c.kgHigh !== null && c.kgHigh !== undefined) return '最大 約' + r1(c.kgHigh) + 'kg/日';
+      return '量は出せない';
+    };
+    var list = '<ul>' + g.candidates.map(function (c) {
+      return '<li>' + esc(c.label) + '　<b>' + kg(c) + '</b><br><span class="muted">' + esc(c.fact) + '</span></li>';
+    }).join('') + '</ul>';
+    $('gap').innerHTML = head + '<div class="cand" style="margin:6px var(--pad-card) 0"><b>差の要因の候補</b>（どれが原因かは断定しません）' + list + '</div>' +
+      '<div class="bags">袋出し：' + src + '。' + esc(g.note) + '。生産記録に袋出しが入り始めたら、記録の1日平均に自動で切り替わります。</div>';
+  }
+
+  function dayCard(d) {
+    var A = d.grades.A;
+    var head = '<div class="fsec-hdr day-hdr">' + esc(md(d.date)) +
+      (d.flags && d.flags.estimated ? '<span class="est">推計を含む</span>' : '') +
+      '<span class="note ' + (A.diff < -1e-9 ? 'ng' : 'ok') + '">A品 ' + (A.diff < -1e-9 ? r1(-A.diff) + 'kg 不足' : '足りる') + '</span></div>';
+    var rows = ['A', 'B', 'C'].map(function (g) {
+      var x = d.grades[g];
+      return '<tr><td>' + GRADE[g] + (g === 'A' ? '' : '<span class="muted">（参考）</span>') + '</td>' +
+        '<td class="num">' + r1(x.supply) + '</td><td class="num">' + r1(x.demand) + '</td>' +
+        '<td class="num ' + (x.diff < -1e-9 ? 'neg' : 'pos') + '">' + (x.diff >= 0 ? '+' : '') + r1(x.diff) + '</td></tr>';
+    }).join('');
+    var bags = ['A', 'B', 'C'].map(function (g) {
+      var list = d.grades[g].bags.filter(function (b) { return b.bags >= 0.5 || b.demandBags >= 0.5; });
+      if (!list.length) return '';
+      return GRADE[g] + '：' + list.map(function (b) {
+        return esc(b.name) + ' ' + Math.round(b.bags) + '袋' + (b.demandBags >= 0.5 ? '（需要' + Math.round(b.demandBags) + '）' : '');
+      }).join('・');
+    }).filter(function (s) { return s; }).join('<br>');
+    var p = d.demandParts || {};
+    var extra = [];
+    if (p.oroshiA) extra.push('卸 ' + r1(p.oroshiA) + 'kg');
+    if (p.reizouko) extra.push('冷蔵庫の積み増し ' + r1(p.reizouko) + 'kg');
+    if (p.tokubai) extra.push('特売 ' + r1(p.tokubai) + 'kg');
+    return '<div class="fsec">' + head +
+      '<table class="tbl"><tr><th>等級</th><th>供給</th><th>需要</th><th>過不足</th></tr>' + rows + '</table>' +
+      '<div class="bags">袋数（供給を需要の構成で割り振り）<br>' + (bags || '—') +
+      (extra.length ? '<br>A品の需要に含む：' + extra.join('・') : '') + '</div></div>';
+  }
+
+  function renderDays(days, all) {
+    var list = all ? days : days.slice(0, SHOW_DAYS);
+    $('days').innerHTML = list.map(dayCard).join('') +
+      (!all && days.length > SHOW_DAYS ? '<button type="button" class="load-btn" id="moreDays">残り ' + (days.length - SHOW_DAYS) + '日を表示（' + days.length + '日先まで）</button>' : '');
+    var b = $('moreDays');
+    if (b) b.onclick = function () { renderDays(days, true); };
+  }
+
+  function renderBasis(r) {
+    var c = r.coef, s = r.supplyInfo, di = r.demandInfo;
+    var st = c.stages.filter(function (x) { return x.std; });
+    var um = Object.keys(di.unmapped || {}).filter(function (k) { return di.unmapped[k] >= 0.05; })
+      .map(function (k) { return esc(k) + ' ' + r1(di.unmapped[k]) + '袋/日'; });
+    $('basis').innerHTML = [
+      '供給：生産記録（袋出し・浸水）から菌床を追いかけて計算。' + st.map(function (x) { return x.bante + '番 ' + x.grams + 'g'; }).join('・') +
+        '（収穫の日別配分 ' + st[0].split.map(function (w) { return Math.round(w * 100); }).join('／') + '%）。' +
+        (s.synthetic && s.synthetic.length ? '袋出しの記録が無い日・明日以降は、設定の標準の個数（推計）で置いています（' + esc(s.synthetic.join('・')) + '）。' : '') +
+        (s.std ? '袋出しの標準：' + s.std.map(function (x) { return esc(x.name) + ' ' + fmt(x.std) + '個/日'; }).join('・') + '。' : '') +
+        (s.stdNote ? '<br>' + esc(s.stdNote) + '<br>' : '') +
+        (s.recordMode ? '浸水は ' + esc(s.shinsuiStart) + ' からの記録どおり。' : '浸水の記録がまだ無いので、標準サイクル（休養' + st[0].kyuyou + '日）で浸水するとみなしています。'),
+      '等級：B品は記録上のA品の ' + Math.round(c.bRatio * 100) + '%（A品の内数。出荷できるA品＝' + Math.round((1 - c.bRatio) * 100) + '%）、C品は記録上のA品の ' + c.cRatio + '倍（別勘定）。C品の ' + Math.round(c.cOobukuro * 100) + '% を大袋へ。',
+      '需要：配達日報の納品数（' + esc(di.from) + '〜' + esc(di.to) + '）の曜日別の平均。都度特価（178・298円）は198・398円として数えます。' +
+        (di.oroshiA ? '卸（ハーズ）' + r1(di.oroshiA) + 'kg/日を足しています。' : '') + '納品は供給が足りた分だけなので、需要の下限です。' +
+        (um.length ? '<br>マスタに無い規格（需要に入れていない）：' + um.join('・') : ''),
+      '計算 ' + esc(r.generatedAt || '') + '（10分ごとに作り直し）'
+    ].join('<br><br>');
+  }
+
+  function load(fresh) {
+    C.showLoading(fresh ? '計算し直しています...' : '読み込み中...');
+    return C.api('yosoku.forecast', fresh ? { fresh: true } : null).then(function (r) {
+      C.hideLoading();
+      msg('');
+      renderAlerts(r.alerts || []);
+      renderCapa(r);
+      renderGap(r.gap);
+      $('jsNotice').innerHTML = r.monthly ? '<div class="notice ' + esc(r.monthly.notice.level) + '">' + esc(r.monthly.notice.text) + '</div>' : '';
+      chartData = r;
+      if (!$('wiDate').value) $('wiDate').value = r.today;
+      renderChart();
+      chartNote(r);
+      renderMonthly(r.monthly);
+      renderYield(r.yield, r.coef.alertRatio);
+      renderProposal(r.monthly);
+      renderDiff(r.diff);
+      renderDays(r.days || [], false);
+      renderBasis(r);
+      if (r.warnings && r.warnings.length) msg('注意：' + r.warnings.join('／'), 'warn');
+    }, function (err) {
+      C.hideLoading();
+      msg('読み込めませんでした：' + err.message, 'ng');
+      $('alerts').innerHTML = '<div class="empty">—</div>';
+    });
+  }
+
+  var setWeeks = function (w) {
+    weeks = w;
+    Array.prototype.forEach.call($('weeks').querySelectorAll('button'), function (b) { b.classList.toggle('on', Number(b.getAttribute('data-w')) === w); });
+    renderChart();
+  };
+  Array.prototype.forEach.call($('weeks').querySelectorAll('button'), function (b) {
+    b.addEventListener('click', function () { setWeeks(Number(b.getAttribute('data-w'))); });
+  });
+  setWeeks(4);
+  $('tblToggle').addEventListener('click', function () {
+    showTbl = !showTbl;
+    $('tblToggle').textContent = showTbl ? '表を閉じる' : '表で見る';
+    renderChart();
+  });
+  $('wiAdd').addEventListener('click', function () {
+    if (!chartData) return;
+    var d = $('wiDate').value, num = function (id) { var v = Number($(id).value); return v > 0 ? v : 0; };
+    var f = num('wiF'), s1 = num('wiS1'), s2 = num('wiS2');
+    if (!d || !(f + s1 + s2)) { $('wiOut').textContent = '日付と、袋出し・浸水の個数のどれかを入れてください。'; return; }
+    extra = whatIf(d, f, s1, s2, chartData.coef.stages);
+    var co = chartData.coef, byB = {}, span = {};
+    Object.keys(extra).sort().forEach(function (day) {
+      Object.keys(extra[day]).forEach(function (b) {
+        byB[b] = (byB[b] || 0) + extra[day][b];
+        span[b] = span[b] || [day, day]; span[b][1] = day;
+      });
+    });
+    var tot = 0; Object.keys(byB).forEach(function (b) { tot += byB[b]; });
+    var last = Object.keys(extra).sort().pop();
+    var ORDER = { '袋出し': 0, '1番浸水': 1, '2番浸水': 2 };
+    var keys = Object.keys(byB).sort(function (a, b) { var p = a.split('|'), q = b.split('|'); return ORDER[p[0]] - ORDER[q[0]] || p[1] - q[1]; });
+    var groups = {};
+    keys.forEach(function (k) {
+      var p = k.split('|');
+      (groups[p[0]] = groups[p[0]] || []).push(p[1] + '番 ' + mdS(span[k][0]) + '〜' + mdS(span[k][1]) + ' に ' + r1(byB[k]) + 'kg');
+    });
+    $('wiOut').innerHTML = 'この入力で（標準スケジュールの場合）：<br>' + Object.keys(groups).map(function (g) {
+      return '・' + esc(g) + '：' + groups[g].join('、');
+    }).join('<br>') + '<br>合計 記録上のA品 ' + r1(tot) + 'kg（うち出荷できるA品 ' + r1(tot * (1 - co.bRatio)) + '・B品 ' + r1(tot * co.bRatio) + 'kg）、ほかにC品 ' + r1(tot * co.cRatio) + 'kg' +
+      (last > addDays(chartData.chart.today, weeks * 7 - 1) ? '。グラフの範囲の外に出る分があります（6週まで広げられます）' : '');
+    renderChart();
+  });
+  $('wiClear').addEventListener('click', function () {
+    extra = {}; $('wiOut').textContent = ''; $('wiF').value = ''; $('wiS1').value = ''; $('wiS2').value = '';
+    renderChart();
+  });
+  window.addEventListener('resize', function () { if (chartData) renderChart(); });
+
+  $('reload').addEventListener('click', function () {
+    C.runOnce('reload', $('reload'), '計算しています…', function () { return load(true); });
+  });
+  load(false);
+})();
+</script>
+</body>
+</html>

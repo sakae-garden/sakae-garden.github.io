@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#1c1c1e">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<title>今日 | 栄ガーデン</title>
+<link rel="stylesheet" href="styles/common.css">
+<!--
+  今日（段階1-4。指示 20260925-096200）。1画面でその日にやることと入れることが済む。上から：
+    警告（今日・明日に関係するもの。残りは「その他の警告（n件）」にたたむ）
+    今日やること（袋出し・浸水・収穫の見込み。予測の計算から。手で上書きできる）
+    今日の入力（生産入力と同じフォーム。js/seisan_form.js。日付は今日で固定）
+    出勤者（栽培シフトを読むだけ。js/shift_read.js。取れなければ欄ごと出さない）
+  - 警告の絞り込み（今日・明日／従業員には現場の作業に関するものだけ）はサーバ（Today.gs）で行う
+  - 手袋でも押せるよう、主要ボタンは高さ48px以上・文字は大きめ（この画面だけ common.css を上書き）
+-->
+<style>
+/* 大きめ・押しやすく（この画面だけ）。色・枠・角丸は common.css の値を使う */
+body.kyou{font-size:15px}
+body.kyou .sec-lbl{font-size:13px}
+body.kyou .fsec-hdr{font-size:15px}
+body.kyou .frow-lbl{font-size:16px}
+body.kyou .rtab{min-height:48px;font-size:15px}
+body.kyou .back-btn{display:inline-flex;align-items:center;min-height:44px;padding:0 14px;font-size:14px}
+body.kyou .step-btn{width:48px;height:48px;font-size:22px}
+body.kyou .frow input[inputmode="numeric"],body.kyou .frow input[inputmode="decimal"]{height:48px;width:84px;font-size:20px}
+body.kyou .submit-btn{min-height:52px;font-size:17px}
+body.kyou .load-btn{min-height:48px;font-size:15px}
+body.kyou .unsaved-bar .submit-btn{min-height:48px}
+body.kyou .tbl{font-size:14px}
+.shinsui-sub{font-size:12px;color:var(--sub);margin-top:2px}
+.frow-lbl .srv{display:block;font-size:12px;color:var(--sub);font-weight:400;margin-top:1px}
+.frow.chg{background:#fffdf5}
+.frow.chg .frow-lbl{font-weight:700}
+
+/* 警告（予測画面と同じ色） */
+.alert{padding:12px var(--pad-card);border-bottom:1px solid var(--border);font-size:14px;line-height:1.6}
+.alert:last-child{border-bottom:none}
+.alert.strong{background:#fdecea;color:#b71c1c}
+.alert.warn{background:#fff8e1;color:#8a6100}
+.alert.info{color:var(--sub)}
+.more{display:block;width:100%;min-height:48px;background:none;border:none;border-top:1px solid var(--border);padding:10px;font-family:inherit;font-size:14px;font-weight:600;color:var(--sub);cursor:pointer}
+
+/* 今日やること */
+.plan-site{padding:8px var(--pad-card);background:#f8f7f2;font-size:13px;font-weight:700;border-bottom:1px solid var(--border)}
+.plan-row{padding:10px var(--pad-card);border-bottom:1px solid var(--border)}
+.plan-row:last-child{border-bottom:none}
+.plan-main{display:flex;align-items:center;gap:10px}
+.plan-lbl{flex:1;min-width:0;font-size:16px}
+.plan-val{font-size:20px;font-weight:700;white-space:nowrap}
+.plan-val .u{font-size:12px;font-weight:400;color:var(--sub);margin-left:2px}
+.plan-sub{font-size:12px;color:var(--sub);margin-top:3px;line-height:1.6}
+.plan-sub .ov{color:var(--orange);font-weight:700}
+.plan-sub .done{color:var(--green);font-weight:700}
+.plan-btn{min-height:48px;min-width:64px;padding:0 12px;border:1px solid var(--border);border-radius:var(--r-btn);background:#fff;font-family:inherit;font-size:14px;font-weight:600;color:var(--ink);cursor:pointer}
+.plan-edit{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:8px}
+.plan-edit input{width:96px;height:48px;border:1px solid var(--ink);border-radius:var(--r-btn);text-align:center;font-size:20px;font-weight:600;font-family:inherit}
+.plan-edit .ok{background:var(--green);color:#fff;border-color:var(--green)}
+.muted{font-size:12px;color:var(--sub);line-height:1.7;padding:8px var(--pad-card)}
+
+/* 出勤者 */
+.members{display:flex;flex-wrap:wrap;gap:8px;padding:12px var(--pad-card)}
+.member{display:inline-flex;align-items:center;min-height:40px;padding:0 16px;border-radius:20px;border:1px solid var(--border);background:#fff;font-size:16px;font-weight:600}
+.member.add{border-color:var(--green);color:var(--green)}
+</style>
+</head>
+<body class="kyou">
+
+<div class="hdr">
+  <div class="hdr-top">
+    <h1>☀️ 今日</h1>
+    <a class="back-btn" href="./">← 戻る</a>
+  </div>
+  <div class="hdr-date" id="hDate"></div>
+  <!-- 入力の拠点（生産入力と同じ。日報の経路タブの形） -->
+  <div class="hdr-tabs" id="siteTabs"></div>
+</div>
+
+<div class="screen" id="app">
+  <div id="msg"></div>
+
+  <div class="sec-lbl">警告（今日・明日）</div>
+  <div class="fsec" id="alerts"><div class="empty">予定を計算しています…（最初は30秒ほどかかります）</div></div>
+
+  <div class="sec-lbl">今日やること</div>
+  <div class="fsec" id="plan"><div class="empty">予定を計算しています…</div></div>
+
+  <div class="sec-lbl">今日の入力</div>
+  <div id="form"></div>
+
+  <div id="shiftSec" hidden>
+    <div class="sec-lbl">出勤者（栽培シフト）</div>
+    <div class="fsec" id="shift"></div>
+  </div>
+
+  <button type="button" class="load-btn" id="reload">🔄 最新の記録で予定を計算し直す</button>
+</div>
+
+<footer class="footer"><a href="./">🏠 ホームに戻る</a></footer>
+
+<script src="js/common.js"></script>
+<script src="js/seisan_form.js"></script>
+<script src="js/shift_read.js"></script>
+<script>
+(function () {
+  'use strict';
+  var C = window.TougouCommon;
+  var session = C.requireSession();
+  if (!session) return;
+  var $ = function (id) { return document.getElementById(id); };
+  var esc = C.esc;
+  var fmt = function (v) { return Number(v).toLocaleString(undefined, { maximumFractionDigits: 1 }); };
+
+  $('hDate').textContent = C.jpDate(new Date()) + '　' + (session.name || '');
+
+  function msg(text, kind) {
+    $('msg').innerHTML = text ? '<div class="notice ' + (kind || 'info') + '">' + esc(text) + '</div>' : '';
+  }
+
+  var st = { sum: null, rows: [], editing: '', today: C.ymd(new Date()) };
+
+  // ---------------------------------------------------------------- 警告
+  function renderAlerts() {
+    var a = (st.sum && st.sum.alerts) || { top: [], other: [] };
+    var line = function (x) { return '<div class="alert ' + esc(x.level) + '">' + esc(x.text) + '</div>'; };
+    var h = a.top.length ? a.top.map(line).join('') : '<div class="empty">今日・明日に関係する警告はありません。</div>';
+    if (a.other.length) {
+      h += '<button type="button" class="more" id="moreAlerts">▼ その他の警告（' + a.other.length + '件）</button>' +
+        '<div id="otherAlerts" hidden>' + a.other.map(line).join('') + '</div>';
+    }
+    $('alerts').innerHTML = h;
+    var b = $('moreAlerts');
+    if (b) b.onclick = function () {
+      var o = $('otherAlerts'); o.hidden = !o.hidden;
+      b.textContent = (o.hidden ? '▼ ' : '▲ ') + 'その他の警告（' + a.other.length + '件）';
+    };
+  }
+
+  // ---------------------------------------------------------------- 今日やること
+  function actualOf(site, kind) {
+    for (var i = 0; i < st.rows.length; i++) {
+      var r = st.rows[i];
+      if (r['拠点'] === site && r.kind === kind) return r;
+    }
+    return null;
+  }
+  function renderPlan() {
+    var s = st.sum;
+    if (!s) return;
+    if (s.planError) { $('plan').innerHTML = '<div class="empty">予定を出せませんでした：' + esc(s.planError) + '</div>'; return; }
+    if (!s.plan.length) { $('plan').innerHTML = '<div class="empty">今日の予定（袋出し・浸水・収穫）はありません。</div>'; return; }
+    var h = '';
+    s.plan.forEach(function (g) {
+      h += '<div class="plan-site">' + esc(g.siteName) + '</div>';
+      g.items.forEach(function (it) {
+        var id = g.site + '|' + it.kind;
+        var act = actualOf(g.site, it.kind);
+        var sub = [];
+        if (it.kind.indexOf('shinsui_') === 0 && it.count) sub.push('計算では ' + fmt(it.count) + '個（' + it.calc + 'タンク）');
+        if (it.detail) sub.push(esc(it.detail));
+        if (it.override !== null) sub.push('<span class="ov">手で変更（計算は ' + fmt(it.calc) + it.unit + '）</span>');
+        if (act) sub.push('<span class="done">入力済み ' + esc(act['入力値']) + ' ' + esc(act['入力単位']) + '</span>');
+        h += '<div class="plan-row" data-id="' + esc(id) + '"><div class="plan-main">' +
+          '<div class="plan-lbl">' + esc(it.label) + '</div>' +
+          '<div class="plan-val">' + fmt(it.value) + '<span class="u">' + esc(it.unit) + '</span></div>' +
+          '<button type="button" class="plan-btn" data-act="edit">変更</button></div>' +
+          (sub.length ? '<div class="plan-sub">' + sub.join('　') + '</div>' : '') +
+          (st.editing === id
+            ? '<div class="plan-edit"><input type="text" inputmode="' + (it.unit === 'kg' ? 'decimal' : 'numeric') + '" value="' + esc(it.value) + '">' +
+              '<button type="button" class="plan-btn ok" data-act="save">保存</button>' +
+              (it.override !== null ? '<button type="button" class="plan-btn" data-act="reset">計算に戻す</button>' : '') +
+              '<button type="button" class="plan-btn" data-act="cancel">やめる</button></div>'
+            : '') +
+          '</div>';
+      });
+    });
+    h += '<div class="muted">' + (s.planEstimated ? '袋出しの記録が無い分は設定の標準の個数で見込んでいます（推計）。' : '') +
+      '収穫の見込みは記録上のA品（B品を含む）。計算 ' + esc(s.generatedAt) + '</div>';
+    $('plan').innerHTML = h;
+    var ed = $('plan').querySelector('.plan-edit input');
+    if (ed) { ed.focus(); ed.select(); }
+  }
+  function findItem(id) {
+    var p = id.split('|');
+    var g = (st.sum.plan || []).filter(function (x) { return x.site === p[0]; })[0];
+    return g ? { site: p[0], item: g.items.filter(function (x) { return x.kind === p[1]; })[0] } : null;
+  }
+  function setPlan(id, value) {
+    var f = findItem(id);
+    if (!f || !f.item) return;
+    var btns = $('plan').querySelectorAll('.plan-edit button');
+    Array.prototype.forEach.call(btns, function (b) { b.disabled = true; });
+    C.api('today.setPlan', { plan: { date: st.sum.today, site: f.site, kind: f.item.kind, value: value } }).then(function (r) {
+      f.item.override = r.value === '' ? null : Number(r.value);
+      f.item.value = f.item.override === null ? f.item.calc : f.item.override;
+      st.editing = '';
+      renderPlan();
+      C.toast(r.value === '' ? '計算の値に戻しました' : '予定を変更しました');
+    }, function (err) {
+      Array.prototype.forEach.call(btns, function (b) { b.disabled = false; });
+      msg('予定を保存できませんでした：' + err.message, 'ng');
+    });
+  }
+  $('plan').addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-act]');
+    if (!b) return;
+    var id = b.closest('.plan-row').dataset.id;
+    var act = b.dataset.act;
+    if (act === 'edit') { st.editing = st.editing === id ? '' : id; renderPlan(); return; }
+    if (act === 'cancel') { st.editing = ''; renderPlan(); return; }
+    if (act === 'reset') { setPlan(id, ''); return; }
+    if (act === 'save') {
+      var v = C.readNum($('plan').querySelector('.plan-edit input').value);
+      if (v === null) { setPlan(id, ''); return; }
+      if (isNaN(v)) { msg('予定は数字で入れてください。', 'ng'); return; }
+      setPlan(id, v);
+    }
+  });
+
+  // ---------------------------------------------------------------- 読み込み
+  function loadSummary(fresh) {
+    return C.api('today.summary', fresh ? { fresh: true } : null).then(function (s) {
+      st.sum = s;
+      renderAlerts();
+      renderPlan();
+      if (s.warnings && s.warnings.length) msg('注意：' + s.warnings.join('／'), 'warn');
+    }, function (err) {
+      $('alerts').innerHTML = '<div class="empty">警告を読み込めませんでした。</div>';
+      $('plan').innerHTML = '<div class="empty">予定を読み込めませんでした：' + esc(err.message) + '</div>';
+    });
+  }
+
+  // 出勤者：取れなければ欄ごと出さない（エラーにしない）
+  function loadShift() {
+    if (!window.TougouShift) return;
+    window.TougouShift.load(10000).then(function (d) {
+      var list = window.TougouShift.membersOn(st.today, d.master, d.exceptions);
+      $('shift').innerHTML = list.length
+        ? '<div class="members">' + list.map(function (m) {
+            return '<span class="member' + (m.added ? ' add' : '') + '">' + esc(m.name) + (m.added ? '（追加）' : '') + '</span>';
+          }).join('') + '</div>'
+        : '<div class="empty">今日の出勤者はいません（栽培シフト）。</div>';
+      $('shiftSec').hidden = false;
+    }, function () { $('shiftSec').hidden = true; });
+  }
+
+  window.TougouSeisanForm.mount({
+    host: $('form'),
+    siteTabs: $('siteTabs'),
+    msg: msg,
+    pickDate: false,
+    draftKey: 'tougou.kyou.draft.v1',
+    bannerHost: $('app'),
+    onRows: function (rows, date) { st.rows = rows; st.today = date; renderPlan(); }
+  });
+  loadSummary(false);
+  loadShift();
+
+  $('reload').addEventListener('click', function () {
+    C.runOnce('reload', $('reload'), '計算しています…（30秒ほど）', function () { return loadSummary(true); });
+  });
+})();
+</script>
+</body>
+</html>
