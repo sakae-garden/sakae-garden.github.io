@@ -17,6 +17,26 @@
 <link rel="preconnect" href="https://script.google.com">
 <!-- 見た目・API・入力フォームは統合アプリ（/tougou/）と同じものを使う（二重管理にしない。指示 20260925-097100 E） -->
 <link rel="stylesheet" href="/tougou/styles/common.css">
+<script>
+/*
+ * 名前の一覧（名字だけ）。統合マスタ 従業員マスタの アプリ利用＝Y の7名（2026-09-26 時点。並びはマスタの順）。
+ * 開いた瞬間に出すための控え。本体はマスタで、裏で auth.employees を読み直して変わっていれば差し替える。
+ */
+var EMBEDDED_EMPLOYEES = [
+  { id: 'EMP000', surname: '杉' },
+  { id: 'EMP006', surname: '八島' },
+  { id: 'EMP007', surname: '青柳' },
+  { id: 'EMP008', surname: '新井' },
+  { id: 'EMP009', surname: '佐藤' },
+  { id: 'EMP014', surname: '小林' },
+  { id: 'EMP015', surname: '新保' }
+];
+// 拠点・1タンクの個数の初期値（初めて開いた端末用。production.options と同じ形。裏で読み直す）
+var INITIAL_OPTIONS = {
+  sites: [{ id: 'yorii', name: '寄居ハウス' }, { id: 'shinrin', name: '森林公園ハウス' }],
+  tankCapacity: 42, defaultSite: ''
+};
+</script>
 <!--
   作業記録（従業員向けの最小構成。指示 20260925-097100）
   - 1ページ目：作業記録（袋出し・浸水・収穫＋その日の入力済み）。2ページ目：シフト（既存のシフト管理アプリを枠の中で開く）
@@ -80,6 +100,22 @@ body.has-unsaved .page{padding-bottom:70px}
       <div id="login" hidden>
         <div class="login-ttl">名前を選んでください</div>
         <div class="names" id="names"></div>
+        <script>
+        // 名前のボタンは外部の JS（common.js 等）を待たずに出す。押したときの処理は下の本体で付ける
+        (function () {
+          try {
+            var p = JSON.parse(localStorage.getItem('sagyou.person') || 'null');
+            var emps = JSON.parse(localStorage.getItem('sagyou.employees') || 'null') || EMBEDDED_EMPLOYEES;
+            if (p && emps.some(function (e) { return e.id === p.id; })) return;   // 覚えている人がいれば入力画面を出す（本体）
+            document.getElementById('names').innerHTML = emps.map(function (e) {
+              var s = String(e.surname).replace(/[&<>"']/g, '');
+              return '<button type="button" class="name-btn" data-id="' + String(e.id).replace(/[^\w-]/g, '') + '">' + s + '</button>';
+            }).join('');
+            document.getElementById('login').hidden = false;
+            window.__sagyouNamesAt = performance.now();   // 実測用（開いてから名前が出るまで）
+          } catch (e) { /* 本体で出す */ }
+        })();
+        </script>
         <div class="install" id="install" hidden>
           <b>ホーム画面に追加すると、アプリのように全画面で開けます。</b><br>
           Android（Chrome）：右上の「︙」→「ホーム画面に追加」→「インストール」<br>
@@ -105,26 +141,6 @@ body.has-unsaved .page{padding-bottom:70px}
   <button type="button" data-p="1">📅 シフト</button>
 </nav>
 
-<script>
-/*
- * 名前の一覧（名字だけ）。統合マスタ 従業員マスタの アプリ利用＝Y の7名（2026-09-26 時点。並びはマスタの順）。
- * 開いた瞬間に出すための控え。本体はマスタで、裏で auth.employees を読み直して変わっていれば差し替える。
- */
-var EMBEDDED_EMPLOYEES = [
-  { id: 'EMP000', surname: '杉' },
-  { id: 'EMP006', surname: '八島' },
-  { id: 'EMP007', surname: '青柳' },
-  { id: 'EMP008', surname: '新井' },
-  { id: 'EMP009', surname: '佐藤' },
-  { id: 'EMP014', surname: '小林' },
-  { id: 'EMP015', surname: '新保' }
-];
-// 拠点・1タンクの個数の初期値（初めて開いた端末用。production.options と同じ形。裏で読み直す）
-var INITIAL_OPTIONS = {
-  sites: [{ id: 'yorii', name: '寄居ハウス' }, { id: 'shinrin', name: '森林公園ハウス' }],
-  tankCapacity: 42, defaultSite: ''
-};
-</script>
 <script src="/tougou/js/common.js"></script>
 <script src="/tougou/js/seisan_form.js"></script>
 <script>
