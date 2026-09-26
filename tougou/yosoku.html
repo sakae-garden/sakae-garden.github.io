@@ -13,7 +13,7 @@
 <link rel="stylesheet" href="styles/common.css">
 <!--
   予測（段階1-3。指示 20260925-096000・096100）。閲覧のみ（入力・保存は無い）。
-  - 警告の一覧（優先順）→ 棚・浸水の枠（日別の不足）→ 理論と出荷の差（要因の候補。袋出し150個/日の指示）
+  - 警告の一覧（優先順）→ 浸水の回転・運搬・棚（工程別・拠点別。指示 工程別の棚判定）→ 理論と出荷の差（要因の候補。袋出し150個/日の指示）
     → 収穫の見込みのグラフ（収穫の記録を重ねる・試算）→ 月次ウォッチ → 1菌床あたりの実績収量（月次）
     → 係数の見直しの提案 → 収穫−出荷 → 日別の見込み（等級別の kg と袋数）
   - 見込みと実績は月単位だけで比べる（指示 096500。日次の逆算は撤回。刈り取り回数・温度設定で収穫の時期をずらしているため）
@@ -93,7 +93,7 @@
   <div class="sec-lbl">警告（優先順）</div>
   <div class="fsec" id="alerts"><div class="empty">読み込み中…</div></div>
 
-  <div class="sec-lbl">棚・浸水の枠（浸水を増やせない・3番まで回せない原因）</div>
+  <div class="sec-lbl">浸水の回転・運搬・棚（工程別・拠点別）</div>
   <div class="fsec" id="capa"><div class="empty">読み込み中…</div></div>
 
   <div class="sec-lbl">理論と出荷の差（どこへ消えているか。断定しません）</div>
@@ -428,46 +428,100 @@
 
   function renderCapa(r) {
     var cap = r.capacity, si = r.supplyInfo;
-    if (!cap) { $('capa').innerHTML = '<div class="empty">—</div>'; return; }
+    if (!cap || !cap.places) { $('capa').innerHTML = '<div class="empty">—</div>'; return; }
     var names = {}; (si.std || []).forEach(function (s) { names[s.site] = s.name; });
-    var ids = Object.keys(cap.sites).filter(function (id) { return cap.sites[id].normal > 0; });
-    var sum = ids.map(function (id) {
-      var x = cap.sites[id];
-      var lines = ['袋出し ' + fmt(x.std) + '個/日（設定の標準）× 棚 ' + x.shelfDaysStd + '日 ＝ <b>' + fmt(x.needShelf) + '床</b>／通常の枠 ' + fmt(x.normal) + '床' +
-        (x.needShelf > x.normal ? ' <span style="color:var(--red)">（' + fmt(x.needShelf - x.normal) + '床 不足）</span>' : '')];
-      if (x.restDays) {
-        var all = x.needShelf + x.needRest, room = Math.max(x.max, x.normal + x.restCap);
-        lines.push('休養 ' + x.restDays + '日 × ' + fmt(x.std) + ' ＝ ' + fmt(x.needRest) + '床／休養室 ' + fmt(x.restCap) + '床。合わせて <b>' + fmt(all) + '床</b>／最大の枠 ' + fmt(room) + '床' +
-          (all > room ? ' <span style="color:var(--red)">（' + fmt(all - room) + '床 不足）</span>' : ''));
-      }
-      if (x.shelfDaysAvail !== null && x.lostStages.length) {
-        lines.push('通常の枠に置けるのは ' + fmt(x.normal) + '÷' + fmt(x.std) + '＝' + r1(x.shelfDaysAvail) + '日 → ' + x.lostStages.map(function (b) { return b + '番'; }).join('・') + 'を刈れない（最大 約' + r1(x.lostKg) + 'kg/日）');
-      }
-      if (x.tankDay > 0 && x.std > 0) {
-        lines.push('浸水 ' + fmt(x.soakNeed) + '個/日（' + x.soakTimes + '回）／枠 ' + fmt(x.tankDay) + '個/日（1日1回転）' +
-          (x.tankOver > 0 ? ' <span style="color:var(--red)">（' + fmt(x.tankOver) + '個/日 不足・' + r1(x.tankLossLow) + '〜' + r1(x.tankLossHigh) + 'kg/日）</span>' : ''));
-      }
-      return '<div class="mrow"><div class="mh"><span>' + esc(names[id] || id) + '</span></div><div>' + lines.join('<br>') + '</div></div>';
+    var nm = function (id) { return esc(names[id] || id); };
+    var red = function (s) { return ' <span style="color:var(--red)">' + s + '</span>'; };
+    // 1. 浸水の回転（拠点ごと。袋出しの標準で毎日回したとき）。タンクは拠点間で移せる（配置は設定 タンク配置_<拠点>）
+    var r2 = function (x) { return x === null || x === undefined ? '—' : (Math.round(x * 100) / 100).toFixed(2); };
+    var tp = cap.tankPlan || { plans: [] };
+    var p1 = tp.plans.filter(function (p) { return p.id === tp.mode; })[0] || tp.plans[0];   // 設定 浸水_運用 で選んだ案
+    var nmT = function (id) { return id ? nm(id) : '未配置'; };
+    var tk = Object.keys(cap.tanks || {}).map(function (id) {
+      var t = cap.tanks[id];
+      if (!(t.soakNeed > 0) && !(t.tankCount > 0)) return '';
+      var soaks = t.soaks.map(function (k) { return (k.bante - 1) + '番浸水 ' + fmt(k.n); }).join('・');
+      var line = t.soakNeed > 0
+        ? '浸水 <b>' + fmt(t.soakNeed) + '個/日</b>（' + soaks + '）＝' + r2(t.tankTurns) + 'タンク回／置いているタンク ' + t.tankCount + '基 → ' +
+          (t.tankDay > 0 ? '<b>1日 ' + r2(t.turnsNeed) + '回転が要る</b>' : red('タンクを置いていないので、ここでは浸水できません')) +
+          (t.over > 0 ? red('（1日 ' + t.turns + '回転では ' + fmt(t.over) + '個/日 不足。' + (p1 ? p1.need[id] : '?') + '基が要る）') : '（1日 ' + t.turns + '回転で収まる）')
+        : 'この工程では浸水しません（置いているタンク ' + t.tankCount + '基は使われていません）';
+      return '<tr><td>' + nm(id) + '</td><td>' + line + '</td></tr>';
     }).join('');
-    // 日別：通常の枠を超える日だけ（無ければ一言）
+    var advice = p1 ? p1.moves.map(function (m) { return red('タンクを ' + m.n + '基、' + nmT(m.from) + '→' + nm(m.to) + 'へ移す必要があります'); })
+      .concat(p1.idle.map(function (i) { return nmT(i.site) + 'のタンク ' + i.n + '基が使われていません'; })) : [];
+    // 案1・案2の比較（決めない。杉さんが選ぶ）
+    var cmp = '';
+    if (tp.plans.length) {
+      var sids = Object.keys(tp.placement || {});
+      var cell = function (f) { return tp.plans.map(function (p) { return '<td class="num">' + f(p) + '</td>'; }).join(''); };
+      var row = function (label, f) { return '<tr><td>' + label + '</td>' + cell(f) + '</tr>'; };
+      cmp = '<table class="tbl"><tr><th></th>' + tp.plans.map(function (p) {
+          return '<th>' + (p.id === '1' ? '案1 浸水はすべて次の番手の拠点' : '案2 休養明けの浸水を移す前に済ませる') +
+            (p.id === tp.mode ? '（運用中）' : '') + '</th>'; }).join('') + '</tr>' +
+        sids.map(function (s) {
+          return row(nm(s) + '：浸水', function (p) { return fmt(p.soak[s]) + '個/日'; }) +
+                 row(nm(s) + '：必要基数', function (p) { return p.need[s] === null ? '—' : p.need[s] + '基'; }) +
+                 row(nm(s) + '：今の配置での回転', function (p) { return p.soak[s] > 0 ? (p.turnsNow[s] === null ? red('タンク0基') : r2(p.turnsNow[s]) + '回転') : '—'; });
+        }).join('') +
+        row('必要基数の合計', function (p) { return p.needTotal + '基／' + tp.total + '基' + (p.fits ? '' : red('（足りない）')); }) +
+        row('タンクを移す提案', function (p) { return p.moves.length ? p.moves.map(function (m) { return nmT(m.from) + '→' + nm(m.to) + ' ' + m.n + '基'; }).join('<br>') : 'なし'; }) +
+        row('運搬（1日）', function (p) { return (p.carry.dry ? '乾いた菌床 ' + fmt(p.carry.dry) + '個' : '') + (p.carry.wet ? (p.carry.dry ? '<br>' : '') + '浸水後の菌床 ' + fmt(p.carry.wet) + '個' : '') || '0個'; }) +
+        '</table><div class="bags">案2は浸水後の水を含んだ菌床を運ぶので、重さと、浸水から発生の棚に入れるまでの時間が未確認です。どちらにするかは未決定です。</div>';
+    }
+    var tankHead = '<div>タンク 合計 ' + tp.total + '基（1基 ' + fmt(tp.cap) + '個）。配置 ' +
+      Object.keys(tp.placement || {}).map(function (s) { return nm(s) + ' ' + tp.placement[s] + '基'; }).join('・') +
+      '（設定 タンク配置_&lt;拠点&gt;。拠点間で移せます）。1日の回転数 ' + tp.turns + '回' +
+      (tp.turnsAssumed ? '（設定 浸水_1日回転数 が空欄のため既定値）' : '（設定 浸水_1日回転数）') +
+      (tp.turnsMax > tp.turns ? '・上限 ' + tp.turnsMax + '回（設定 浸水_1日回転数_上限）' : '') +
+      '。浸水の運用：案' + (tp.mode || '1') + '（設定 浸水_運用）</div>';
+    // 袋出しの上限（今の配置）と、移設が済むまでの上限
+    var limTxt = function (L, turns) { return L ? turns + '回転なら <b>' + fmt(L.n) + '個/日</b>（' + nm(L.site) + ' ' + L.tanks + '基）' : '—'; };
+    var lim = tp.limit || {}, pre = tp.pre;
+    var fk = cap.fukurodashi || 0;
+    tankHead += '<div>浸水が回る袋出しの上限：' + limTxt(lim.now, tp.turns) +
+      (lim.max && tp.turnsMax > tp.turns ? '・' + limTxt(lim.max, tp.turnsMax) : '') +
+      '。いまの袋出しの標準 ' + fmt(fk) + '個/日' + (lim.now && fk > lim.now.n ? red('（' + tp.turns + '回転の上限を超えています）') : '') + '</div>';
+    if (pre) {
+      tankHead += '<div>' + red('タンクの移設前') + '（設定 タンク配置_移設前_&lt;拠点&gt;：' +
+        Object.keys(pre.placement).map(function (s) { return nm(s) + ' ' + pre.placement[s] + '基'; }).join('・') + '）：' +
+        Object.keys(pre.turnsNeed).filter(function (s) { return pre.turnsNeed[s] !== 0; }).map(function (s) {
+          return nm(s) + ' ' + (pre.turnsNeed[s] === null ? red('タンク0基') : '1日 ' + r2(pre.turnsNeed[s]) + '回転が要る'); }).join('・') +
+        '。移設が済むまでの上限は ' + limTxt(pre.limitNow, tp.turns) + (tp.turnsMax > tp.turns ? '・' + limTxt(pre.limitMax, tp.turnsMax) : '') +
+        '。移設が済んだら設定を空欄にしてください。</div>';
+    }
+    // 2. 運搬（拠点間の移動。記録はしない）
+    var today = r.days && r.days[0] ? r.days[0].plan.move || {} : {};
+    var mvToday = Object.keys(today).filter(function (k) { return today[k] > 0; }).map(function (k) {
+      var p = k.split('>'); return nm(p[0]) + '→' + nm(p[1]) + ' <b>' + fmt(today[k]) + '個</b>';
+    }).join('・');
+    var mvStd = (cap.moves || []).map(function (m) { return nm(m.from) + '→' + nm(m.to) + ' ' + fmt(m.n) + '個/日'; }).join('・');
+    // 3. 棚（拠点×置き場。必要床数＝その置き場の工程の日数×1日の投入個数）
+    var pl = cap.places.map(function (p) {
+      var what = p.stages.map(function (s) { return esc(s.name) + ' ' + s.days + '日'; }).join('・') || '—';
+      var judge = !(p.cap > 0) ? red('枠がマスタにありません') : p.over > 0 ? red(fmt(p.over) + '床 不足') : '余裕 ' + fmt(p.cap - p.need) + '床';
+      return '<tr><td>' + esc(p.label) + '</td><td>' + what + '</td><td class="num">' + fmt(p.need) + '</td><td class="num">' + (p.cap > 0 ? fmt(p.cap) : '—') + '</td><td>' + judge + '</td></tr>';
+    }).join('');
+    // 日別：枠を超える日だけ（無ければ一言）
     var rows = [];
     cap.days.forEach(function (d) {
-      ids.forEach(function (id) {
-        var x = d.sites[id];
-        if (!x || !(x.overNormal > 0 || x.overAll > 0)) return;
-        rows.push('<tr><td>' + esc(md(d.date)) + '</td><td>' + esc(names[id] || id) + '</td><td class="num">' + fmt(x.shelf) + '／' + fmt(x.normal) + '</td>' +
-          '<td class="num neg">' + fmt(x.overNormal) + '</td><td class="num">' + (x.restCap ? fmt(x.rest) + '／' + fmt(x.restCap) : '—') + '</td>' +
-          '<td class="num ' + (x.overAll > 0 ? 'neg' : '') + '">' + (x.overAll > 0 ? fmt(x.overAll) : '0') + '</td></tr>');
+      cap.places.forEach(function (p) {
+        var x = d.places[p.key];
+        if (!x || !(x.over > 0)) return;
+        rows.push('<tr><td>' + esc(md(d.date)) + '</td><td>' + esc(p.label) + '</td><td class="num">' + fmt(x.need) + '／' + (x.cap > 0 ? fmt(x.cap) : '—') + '</td><td class="num neg">' + fmt(x.over) + '</td></tr>');
       });
     });
-    var spare = ids.filter(function (id) { return cap.days.length && cap.days[0].sites[id] && cap.days[0].sites[id].shelf < cap.days[0].sites[id].normal && !(cap.sites[id].std > 0); });
-    $('capa').innerHTML = stdNoteHtml(si) + sum +
-      (rows.length ? '<table class="tbl"><tr><th>日付</th><th>拠点</th><th>棚 要／枠</th><th>不足</th><th>休養 要／枠</th><th>最大でも不足</th></tr>' + rows.join('') + '</table>'
-                   : '<div class="bags">表示期間に通常の枠を超える日はありません。</div>') +
-      '<div class="bags">棚（栽培舎）は袋出しから ' + (ids.length ? cap.sites[ids[0]].shelfDaysStd : '') + '日（休養室のある拠点は休養の日数を除く）、休養室は1番の刈り取り後の休養の日数で数えています。' +
-      '「最大でも不足」は休養室を臨時に栽培へ回しても（休養中の菌床も同じ部屋に要るので、棚＋休養の合計で比べる）置けない床数です。' +
-      (spare.length ? '<br>' + spare.map(function (id) { return esc(names[id] || id) + '（袋出し0・空き ' + fmt(cap.days[0].sites[id].normal - cap.days[0].sites[id].shelf) + '床）'; }).join('・') +
-        'に回せば収まる場合があります。拠点間の移動は記録が無いので、この計算は袋出しの拠点だけで数えています。' : '') + '</div>';
+    $('capa').innerHTML = stdNoteHtml(si) +
+      '<div class="mrow"><div class="mh"><span>浸水の回転</span></div>' + (tp.plans.length ? tankHead : '') + '<table class="tbl">' + tk + '</table>' +
+        (advice.length ? '<div>' + advice.join('<br>') + '</div>' : '') + '</div>' +
+      (cmp ? '<div class="mrow"><div class="mh"><span>浸水の運用の比較（案1・案2）</span></div>' + cmp + '</div>' : '') +
+      '<div class="mrow"><div class="mh"><span>運搬（拠点間の移動）</span></div><div>本日の移動予定：' + (mvToday || '0個') +
+        (mvStd ? '<br>袋出しの標準どおりなら毎日 ' + mvStd : '') + '<br><span class="bags">移動は記録しません。工程マスタで拠点が変わる日に、予定として出しています。</span></div></div>' +
+      '<div class="mrow"><div class="mh"><span>棚（工程別・拠点別）</span></div><table class="tbl"><tr><th>拠点・置き場</th><th>抱える工程</th><th>必要床数</th><th>枠</th><th>判定</th></tr>' + pl + '</table></div>' +
+      (rows.length ? '<table class="tbl"><tr><th>日付</th><th>拠点・置き場</th><th>要／枠</th><th>不足</th></tr>' + rows.join('') + '</table>'
+                   : '<div class="bags">表示期間に枠を超える日はありません。</div>') +
+      '<div class="bags">必要床数＝その置き場が抱える工程の日数×1日あたりの投入個数（袋出しの標準）。工程の拠点・日数は統合マスタの工程マスタで変えられます。' +
+      '棚の枠は拠点タンクマスタの通常収容数、休養部屋は用途「培養」の室の収容床数です。</div>';
   }
 
   function renderGap(g) {

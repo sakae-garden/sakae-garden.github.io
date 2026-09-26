@@ -39,8 +39,8 @@ var INITIAL_OPTIONS = {
 </script>
 <!--
   作業記録（従業員向けの最小構成。指示 20260925-097100）
-  - 1ページ目：作業記録（袋出し・浸水・収穫＋その日の入力済み）。2ページ目：シフト（既存のシフト管理アプリを枠の中で開く）
-  - パスコードなし。名前（名字）を選ぶだけ。選んだ人は端末に覚える（sagyou.person）。入力者は生産記録の「入力者」列に残る
+  - 1ページ目：作業記録（袋出し・浸水・収穫＋その日の入力済み）。2ページ目：栽培シフト（既存のシフト管理アプリを枠の中で開く。袋詰めシフトへの切り替えは出さない）
+  - パスコードなし。名前（名字）を選ぶだけ。選んだ人は端末に覚える（sagyou.person）。入力者は生産記録の「入力者」列（最後の人）と「生産記録_履歴」タブ（毎回）に残る
   - 名前の一覧はこのページに埋め込み（EMBEDDED_EMPLOYEES）＋端末の控え（sagyou.employees）で即表示し、マスタは裏で読み直す
   - 保存は押した瞬間に完了扱い（seisan_form.js の optimistic）。届かなければその時点で入力欄に戻して知らせる
   - 統合アプリ（/tougou/）の代表セッションとは別のキー（sagyou.session）を使う
@@ -71,9 +71,6 @@ body.has-unsaved .page{padding-bottom:70px}
 .frow.chg .frow-lbl{font-weight:700}
 /* シフト */
 #p2{display:flex;flex-direction:column}
-.shift-seg{display:flex;gap:6px;padding:10px 12px;flex:none}
-.shift-seg .sbtn{flex:1}
-.shift-seg .sbtn.on{background:var(--ink);color:#fff;border-color:var(--ink)}
 .shift-frame{flex:1;width:100%;border:0;background:#fff}
 .shift-open{display:block;text-align:center;font-size:12px;color:var(--sub);padding:6px 0 8px;flex:none}
 /* 下のタブ（フッターの位置） */
@@ -127,12 +124,8 @@ body.has-unsaved .page{padding-bottom:70px}
     </div>
   </section>
   <section class="page" id="p2" aria-label="シフト">
-    <div class="shift-seg" id="shiftSeg">
-      <button type="button" class="sbtn" data-k="fukuro">袋詰めシフト</button>
-      <button type="button" class="sbtn" data-k="saibai">栽培シフト</button>
-    </div>
-    <iframe class="shift-frame" id="shiftFrame" title="シフト"></iframe>
-    <a class="shift-open" id="shiftOpen" href="/eigarden-shift-app/" target="_blank" rel="noopener">見づらいときは別の画面で開く ↗</a>
+    <iframe class="shift-frame" id="shiftFrame" title="栽培シフト"></iframe>
+    <a class="shift-open" id="shiftOpen" href="/eigarden-shift-app/saibai.html" target="_blank" rel="noopener">見づらいときは別の画面で開く ↗</a>
   </section>
 </div>
 
@@ -150,8 +143,7 @@ body.has-unsaved .page{padding-bottom:70px}
   var $ = function (id) { return document.getElementById(id); };
   var LS_PERSON = 'sagyou.person';       // { id, surname }
   var LS_EMPS = 'sagyou.employees';      // [{ id, surname }]
-  var LS_SHIFT = 'sagyou.shiftKind';     // 'fukuro' | 'saibai'
-  var SHIFT_URL = { fukuro: '/eigarden-shift-app/', saibai: '/eigarden-shift-app/saibai.html' };
+  var SHIFT_URL = '/eigarden-shift-app/saibai.html';   // 栽培シフト
 
   function lsGet(k) { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) { return null; } }
   function lsPut(k, v) { try { if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* 無視 */ } }
@@ -294,20 +286,13 @@ body.has-unsaved .page{padding-bottom:70px}
   window.addEventListener('resize', function () { goPage(curPage, false); });
 
   // シフト：既存のシフト管理アプリをそのまま枠の中で開く（作り直さない）。開いたときに初めて読む（作業記録の表示を遅らせない）
-  var shiftKind = lsGet(LS_SHIFT) || 'fukuro';
-  function loadShift(force) {
+  // 栽培シフトだけを出す（2026-09-26 杉さん指示。中の作業員向けなので袋詰めへの切り替えは出さない。袋詰めは既存アプリのURLから）
+  lsPut('sagyou.shiftKind', null);   // 前の版で端末に覚えた切り替え（袋詰め）を消す
+  function loadShift() {
     var f = $('shiftFrame');
-    if (!force && f.getAttribute('src')) return;
-    f.setAttribute('src', SHIFT_URL[shiftKind]);
-    $('shiftOpen').href = SHIFT_URL[shiftKind];
-    Array.prototype.forEach.call($('shiftSeg').children, function (b) { b.classList.toggle('on', b.dataset.k === shiftKind); });
+    if (f.getAttribute('src')) return;
+    f.setAttribute('src', SHIFT_URL);
   }
-  Array.prototype.forEach.call($('shiftSeg').children, function (b) {
-    b.onclick = function () {
-      if (b.dataset.k === shiftKind) return;
-      shiftKind = b.dataset.k; lsPut(LS_SHIFT, shiftKind); loadShift(true);
-    };
-  });
 
   // ---- 開始：覚えている人がいればすぐ入力画面、いなければ名前（どちらも通信を待たない）
   if (person) showForm(); else showNames('');
