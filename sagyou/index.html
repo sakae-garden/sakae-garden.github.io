@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="作業記録">
+<meta name="theme-color" content="#1c1c1e">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<title>作業記録 | 栄ガーデン</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://script.google.com">
+<!-- 見た目・API・入力フォームは統合アプリ（/tougou/）と同じものを使う（二重管理にしない。指示 20260925-097100 E） -->
+<link rel="stylesheet" href="/tougou/styles/common.css">
+<!--
+  作業記録（従業員向けの最小構成。指示 20260925-097100）
+  - 1ページ目：作業記録（袋出し・浸水・収穫＋その日の入力済み）。2ページ目：シフト（既存のシフト管理アプリを枠の中で開く）
+  - パスコードなし。名前（名字）を選ぶだけ。選んだ人は端末に覚える（sagyou.person）。入力者は生産記録の「入力者」列に残る
+  - 名前の一覧はこのページに埋め込み（EMBEDDED_EMPLOYEES）＋端末の控え（sagyou.employees）で即表示し、マスタは裏で読み直す
+  - 保存は押した瞬間に完了扱い（seisan_form.js の optimistic）。届かなければその時点で入力欄に戻して知らせる
+  - 統合アプリ（/tougou/）の代表セッションとは別のキー（sagyou.session）を使う
+-->
+<style>
+html,body{height:100%}
+body.sagyou{padding-bottom:0;display:flex;flex-direction:column;height:100vh;height:100dvh;overflow:hidden}
+.sagyou .hdr{position:relative;flex:none}
+.who-btn{background:rgba(255,255,255,.15);border:none;color:#fff;border-radius:var(--r-btn);padding:6px 12px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit}
+.track{flex:1;min-height:0;display:flex;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;scrollbar-width:none;
+  margin-bottom:calc(var(--footer-h) + env(safe-area-inset-bottom))}
+.track::-webkit-scrollbar{display:none}
+.page{flex:0 0 100%;width:100%;overflow-y:auto;overflow-x:hidden;scroll-snap-align:start;scroll-snap-stop:always;-webkit-overflow-scrolling:touch}
+body.has-unsaved .page{padding-bottom:70px}
+/* 名前の選択 */
+.login-ttl{font-size:15px;font-weight:700;margin:6px 2px 12px}
+.names{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.name-btn{padding:20px 8px;font-size:22px;font-weight:700;letter-spacing:.08em;background:#fff;border:1px solid var(--border);border-radius:var(--r);
+  box-shadow:var(--shadow);font-family:inherit;color:var(--ink);cursor:pointer}
+.name-btn:active{background:#edf7f1;border-color:var(--green)}
+.install{margin-top:18px;font-size:12px;color:var(--sub);line-height:1.7;background:#fff;border:1px dashed var(--border);border-radius:var(--r);padding:10px 12px}
+.install b{color:var(--ink)}
+.install button{margin-top:6px}
+/* 生産入力の部品（seisan.html と同じ） */
+.shinsui-sub{font-size:11px;color:var(--sub);margin-top:2px}
+.frow-lbl .srv{display:block;font-size:11px;color:var(--sub);font-weight:400;margin-top:1px}
+.frow.chg{background:#fffdf5}
+.frow.chg .frow-lbl{font-weight:700}
+/* シフト */
+#p2{display:flex;flex-direction:column}
+.shift-seg{display:flex;gap:6px;padding:10px 12px;flex:none}
+.shift-seg .sbtn{flex:1}
+.shift-seg .sbtn.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+.shift-frame{flex:1;width:100%;border:0;background:#fff}
+.shift-open{display:block;text-align:center;font-size:12px;color:var(--sub);padding:6px 0 8px;flex:none}
+/* 下のタブ（フッターの位置） */
+.tabbar button{flex:1;height:100%;background:none;border:0;color:rgba(255,255,255,.5);font-family:inherit;font-size:15px;font-weight:700;cursor:pointer;letter-spacing:.04em}
+.tabbar button.on{color:#fff;box-shadow:inset 0 3px 0 var(--green)}
+</style>
+</head>
+<body class="sagyou">
+
+<div class="hdr">
+  <div class="hdr-top">
+    <h1>📝 作業記録</h1>
+    <button type="button" class="who-btn" id="whoBtn" hidden></button>
+  </div>
+  <div class="hdr-date" id="hDate"></div>
+  <!-- 拠点（作業記録のページだけ） -->
+  <div class="hdr-tabs" id="siteTabs" hidden></div>
+</div>
+
+<div class="track" id="track">
+  <section class="page" id="p1" aria-label="作業記録">
+    <div class="screen" id="app">
+      <div id="msg"></div>
+      <div id="login" hidden>
+        <div class="login-ttl">名前を選んでください</div>
+        <div class="names" id="names"></div>
+        <div class="install" id="install" hidden>
+          <b>ホーム画面に追加すると、アプリのように全画面で開けます。</b><br>
+          Android（Chrome）：右上の「︙」→「ホーム画面に追加」→「インストール」<br>
+          iPhone（Safari）：下の共有ボタン →「ホーム画面に追加」→「追加」
+          <div><button type="button" class="sbtn" id="installBtn" hidden>ホーム画面に追加</button></div>
+        </div>
+      </div>
+      <div id="form"></div>
+    </div>
+  </section>
+  <section class="page" id="p2" aria-label="シフト">
+    <div class="shift-seg" id="shiftSeg">
+      <button type="button" class="sbtn" data-k="fukuro">袋詰めシフト</button>
+      <button type="button" class="sbtn" data-k="saibai">栽培シフト</button>
+    </div>
+    <iframe class="shift-frame" id="shiftFrame" title="シフト"></iframe>
+    <a class="shift-open" id="shiftOpen" href="/eigarden-shift-app/" target="_blank" rel="noopener">見づらいときは別の画面で開く ↗</a>
+  </section>
+</div>
+
+<nav class="footer tabbar" id="tabbar">
+  <button type="button" data-p="0" class="on">📝 作業記録</button>
+  <button type="button" data-p="1">📅 シフト</button>
+</nav>
+
+<script>
+/*
+ * 名前の一覧（名字だけ）。統合マスタ 従業員マスタの アプリ利用＝Y の7名（2026-09-26 時点。並びはマスタの順）。
+ * 開いた瞬間に出すための控え。本体はマスタで、裏で auth.employees を読み直して変わっていれば差し替える。
+ */
+var EMBEDDED_EMPLOYEES = [
+  { id: 'EMP000', surname: '杉' },
+  { id: 'EMP006', surname: '八島' },
+  { id: 'EMP007', surname: '青柳' },
+  { id: 'EMP008', surname: '新井' },
+  { id: 'EMP009', surname: '佐藤' },
+  { id: 'EMP014', surname: '小林' },
+  { id: 'EMP015', surname: '新保' }
+];
+// 拠点・1タンクの個数の初期値（初めて開いた端末用。production.options と同じ形。裏で読み直す）
+var INITIAL_OPTIONS = {
+  sites: [{ id: 'yorii', name: '寄居ハウス' }, { id: 'shinrin', name: '森林公園ハウス' }],
+  tankCapacity: 42, defaultSite: ''
+};
+</script>
+<script src="/tougou/js/common.js"></script>
+<script src="/tougou/js/seisan_form.js"></script>
+<script>
+(function () {
+  'use strict';
+  var C = window.TougouCommon;
+  var $ = function (id) { return document.getElementById(id); };
+  var LS_PERSON = 'sagyou.person';       // { id, surname }
+  var LS_EMPS = 'sagyou.employees';      // [{ id, surname }]
+  var LS_SHIFT = 'sagyou.shiftKind';     // 'fukuro' | 'saibai'
+  var SHIFT_URL = { fukuro: '/eigarden-shift-app/', saibai: '/eigarden-shift-app/saibai.html' };
+
+  function lsGet(k) { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) { return null; } }
+  function lsPut(k, v) { try { if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* 無視 */ } }
+  function msg(text, kind) {
+    $('msg').innerHTML = text ? '<div class="notice ' + (kind || 'info') + '">' + C.esc(text) + '</div>' : '';
+  }
+
+  var employees = lsGet(LS_EMPS) || EMBEDDED_EMPLOYEES;
+  var person = lsGet(LS_PERSON);
+  if (person && !employees.some(function (e) { return e.id === person.id; })) person = null;
+  var form = null;
+
+  C.configure({ sessionKey: 'sagyou.session', reauth: reauth });
+
+  // ---- ログイン（名前だけ。トークンが無い・切れたときに裏で取り直す）
+  var loginP = null;
+  function reauth() {
+    if (loginP) return loginP;
+    var p = person;
+    if (!p) return Promise.reject(new Error('名前を選んでください。'));
+    loginP = C.callApi({ action: 'auth.login', empId: p.id, app: 'sagyou' }).then(function (res) {
+      loginP = null;
+      if (!res || !res.ok) throw new Error((res && res.error) || 'ログインできませんでした。');
+      C.saveSession({ token: res.token, empId: p.id, name: res.surname || p.surname, role: res.role });
+    }, function (err) {
+      loginP = null;
+      var e = new Error('通信できませんでした（' + (err && err.message || err) + '）');
+      e.network = true;
+      throw e;
+    });
+    return loginP;
+  }
+
+  function surnameOf(empId) {
+    var e = employees.filter(function (x) { return x.id === empId; })[0];
+    return e ? e.surname : '';
+  }
+
+  // ---- 画面
+  $('hDate').textContent = C.jpDate(new Date());
+
+  function showNames(text) {
+    $('login').hidden = false;
+    $('form').hidden = true;
+    $('siteTabs').hidden = true;
+    $('whoBtn').hidden = true;
+    msg(text || '', 'warn');
+    renderNames();
+    renderInstall();
+  }
+  function renderNames() {
+    $('names').innerHTML = employees.map(function (e) {
+      return '<button type="button" class="name-btn" data-id="' + C.esc(e.id) + '">' + C.esc(e.surname) + '</button>';
+    }).join('');
+    Array.prototype.forEach.call($('names').children, function (b) {
+      b.onclick = function () {
+        var e = employees.filter(function (x) { return x.id === b.dataset.id; })[0];
+        person = { id: e.id, surname: e.surname };
+        lsPut(LS_PERSON, person);
+        C.clearSession();
+        reauth().catch(function () { /* 保存・読み込みの時にもう一度取りに行く */ });
+        showForm();
+      };
+    });
+    if (!window.__sagyouNamesAt) window.__sagyouNamesAt = performance.now();   // 実測用（開いてから名前が出るまで）
+  }
+
+  function showForm() {
+    $('login').hidden = true;
+    $('form').hidden = false;
+    $('siteTabs').hidden = curPage !== 0;
+    $('whoBtn').hidden = false;
+    $('whoBtn').textContent = '👤 ' + person.surname;
+    $('hDate').textContent = C.jpDate(new Date()) + '　' + person.surname + 'さん';
+    msg('');
+    if (!form) {
+      form = window.TougouSeisanForm.mount({
+        host: $('form'),
+        siteTabs: $('siteTabs'),
+        msg: msg,
+        pickDate: false,
+        draftKey: 'sagyou.draft.v1',
+        bannerHost: $('app'),
+        linkSelector: '.no-such-link',
+        cacheKey: 'sagyou.cache',
+        initialOptions: INITIAL_OPTIONS,
+        optimistic: true,
+        me: { empId: person.id, name: person.surname },
+        nameOf: function (r) { return surnameOf(r['入力者']) || r.empSurname || r.empName || ''; }
+      });
+    }
+    if (!window.__sagyouFormAt) window.__sagyouFormAt = performance.now();
+  }
+
+  $('whoBtn').onclick = function () {
+    if (form && form.isDirty()) { C.toast('保存していない入力があります。保存してから切り替えてください'); return; }
+    if (lsGet('sagyou.cache.outbox')) { C.toast('送信中です。少し待ってから切り替えてください'); return; }
+    if (!confirm(person.surname + 'さんから別の人に切り替えますか？')) return;
+    lsPut(LS_PERSON, null);
+    C.clearSession();
+    location.reload();
+  };
+
+  // ---- ホーム画面への追加の案内（全画面で開いているときは出さない）
+  var installEvt = null;
+  function isStandalone() {
+    return (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true;
+  }
+  function renderInstall() {
+    $('install').hidden = isStandalone();
+    $('installBtn').hidden = !installEvt;
+  }
+  window.addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); installEvt = e; renderInstall(); });
+  $('installBtn').onclick = function () { if (installEvt) { installEvt.prompt(); installEvt = null; renderInstall(); } };
+
+  // ---- 2ページ（横スワイプ＋下のタブ）
+  var curPage = 0;
+  var track = $('track');
+  function goPage(i, smooth) {
+    track.scrollTo({ left: i * track.clientWidth, behavior: smooth ? 'smooth' : 'auto' });
+    markPage(i);
+  }
+  function markPage(i) {
+    curPage = i;
+    Array.prototype.forEach.call($('tabbar').children, function (b) { b.classList.toggle('on', Number(b.dataset.p) === i); });
+    $('siteTabs').hidden = i !== 0 || !person || $('form').hidden;
+    if (i === 1) loadShift();
+  }
+  Array.prototype.forEach.call($('tabbar').children, function (b) {
+    b.onclick = function () { goPage(Number(b.dataset.p), true); };
+  });
+  var scrollTimer = null;
+  track.addEventListener('scroll', function () {
+    clearTimeout(scrollTimer);
+    scrollTimer = setTimeout(function () {
+      var i = Math.round(track.scrollLeft / Math.max(1, track.clientWidth));
+      if (i !== curPage) markPage(Math.max(0, Math.min(1, i)));
+    }, 60);
+  });
+  window.addEventListener('resize', function () { goPage(curPage, false); });
+
+  // シフト：既存のシフト管理アプリをそのまま枠の中で開く（作り直さない）。開いたときに初めて読む（作業記録の表示を遅らせない）
+  var shiftKind = lsGet(LS_SHIFT) || 'fukuro';
+  function loadShift(force) {
+    var f = $('shiftFrame');
+    if (!force && f.getAttribute('src')) return;
+    f.setAttribute('src', SHIFT_URL[shiftKind]);
+    $('shiftOpen').href = SHIFT_URL[shiftKind];
+    Array.prototype.forEach.call($('shiftSeg').children, function (b) { b.classList.toggle('on', b.dataset.k === shiftKind); });
+  }
+  Array.prototype.forEach.call($('shiftSeg').children, function (b) {
+    b.onclick = function () {
+      if (b.dataset.k === shiftKind) return;
+      shiftKind = b.dataset.k; lsPut(LS_SHIFT, shiftKind); loadShift(true);
+    };
+  });
+
+  // ---- 開始：覚えている人がいればすぐ入力画面、いなければ名前（どちらも通信を待たない）
+  if (person) showForm(); else showNames('');
+
+  // マスタの名前一覧を裏で読み直し、変わっていれば差し替える
+  C.callApi({ action: 'auth.employees' }).then(function (res) {
+    if (!res || !res.ok || !res.employees) return;
+    var fresh = res.employees.map(function (e) {
+      // surname が無い（古い GAS）ときは、知っている人は控えの名字、知らない人は氏名の空白の前
+      var known = employees.concat(EMBEDDED_EMPLOYEES).filter(function (x) { return x.id === e.id; })[0];
+      return { id: e.id, surname: e.surname || (known && known.surname) || String(e.name || '').trim().split(/[\s　]+/)[0] };
+    });
+    if (JSON.stringify(fresh) === JSON.stringify(employees)) return;
+    employees = fresh;
+    lsPut(LS_EMPS, fresh);
+    if (!$('login').hidden) renderNames();
+    if (person && !fresh.some(function (e) { return e.id === person.id; }) && !(form && form.isDirty())) {
+      lsPut(LS_PERSON, null); C.clearSession(); person = null;
+      location.reload();
+    }
+  }).catch(function () { /* 圏外など。控えのまま */ });
+})();
+</script>
+</body>
+</html>

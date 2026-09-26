@@ -24,6 +24,15 @@
   var LS_SESSION = 'tougou.session';   // { token, role, name }
   var LAUNCHER_URL = './';              // ランチャー（同じフォルダの index.html）
 
+  /*
+   * 画面ごとの切り替え（作業記録アプリ /sagyou/ が使う。指示 20260925-097100）
+   *   sessionKey … セッションを置く localStorage キー。作業記録は 'sagyou.session'（統合アプリの代表セッションと混ぜない）
+   *   reauth()   … トークンが無い／切れたときに呼ぶ。Promise。resolve したら1回だけ呼び直す。
+   *                無ければ従来どおりランチャー（ログイン画面）へ戻す
+   */
+  var cfg = { sessionKey: LS_SESSION, reauth: null };
+  function configure(o) { for (var k in o) cfg[k] = o[k]; }
+
   // ---------------------------------------------------------------- API・セッション
 
   /** 統合API を呼ぶ。応答の JSON をそのまま返す（{ ok, ... }）。通信失敗は reject。 */
@@ -37,10 +46,10 @@
   }
 
   function loadSession() {
-    try { return JSON.parse(root.localStorage.getItem(LS_SESSION) || 'null'); } catch (e) { return null; }
+    try { return JSON.parse(root.localStorage.getItem(cfg.sessionKey) || 'null'); } catch (e) { return null; }
   }
-  function saveSession(s) { root.localStorage.setItem(LS_SESSION, JSON.stringify(s)); }
-  function clearSession() { root.localStorage.removeItem(LS_SESSION); }
+  function saveSession(s) { root.localStorage.setItem(cfg.sessionKey, JSON.stringify(s)); }
+  function clearSession() { root.localStorage.removeItem(cfg.sessionKey); }
 
   /** ログインしていなければランチャーへ。していればセッションを返す。 */
   function requireSession() {
@@ -50,18 +59,24 @@
   }
 
   /**
-   * トークンを付けて呼ぶ。セッション切れ（code=AUTH）ならランチャーのログインへ戻す。
+   * トークンを付けて呼ぶ。セッション切れ（code=AUTH）ならランチャーのログインへ戻す
+   * （configure で reauth を渡した画面は、ログインし直して1回だけ呼び直す）。
    * 応答が ok:false のときは Error（message=サーバの文言）で reject する。通信失敗は err.network=true。
    */
-  function api(action, params) {
+  function api(action, params, retried) {
     var s = loadSession() || {};
+    if (!s.token && cfg.reauth && !retried) {
+      return cfg.reauth().then(function () { return api(action, params, true); });
+    }
     var req = { action: action, token: s.token };
     if (params) for (var k in params) req[k] = params[k];
+    var reauthed = false;
     return callApi(req).then(function (res) {
       if (res && res.ok) return res;
       if (res && res.code === 'AUTH') {
+        if (cfg.reauth && !retried) { reauthed = true; return; }
         clearSession();
-        root.location.replace(LAUNCHER_URL);
+        if (!cfg.reauth) root.location.replace(LAUNCHER_URL);
       }
       var e = new Error((res && res.error) || 'サーバがエラーを返しました。');
       e.code = res && res.code;
@@ -70,6 +85,10 @@
       var e = new Error('通信できませんでした（' + (err && err.message || err) + '）');
       e.network = true;
       throw e;
+    }).then(function (res) {
+      if (!reauthed) return res;
+      clearSession();
+      return cfg.reauth().then(function () { return api(action, params, true); });
     });
   }
 
@@ -311,7 +330,7 @@
 
   var api_ = {
     API_URL: API_URL, LAUNCHER_URL: LAUNCHER_URL, LS_SESSION: LS_SESSION,
-    callApi: callApi, api: api, loadSession: loadSession, saveSession: saveSession, clearSession: clearSession,
+    configure: configure, callApi: callApi, api: api, loadSession: loadSession, saveSession: saveSession, clearSession: clearSession,
     requireSession: requireSession, readNum: readNum, esc: esc, ymd: ymd, jpDate: jpDate,
     showLoading: showLoading, hideLoading: hideLoading, toast: toast,
     runOnce: runOnce, isRunning: isRunning, guardUnsaved: guardUnsaved

@@ -1,7 +1,7 @@
 /*
  * 生産入力のフォーム（袋出し・浸水・収穫＋その日の入力済み一覧）。
  * seisan.html（生産入力。日付を選べる）と kyou.html（今日。日付は今日で固定）で共用する（指示 20260925-096200）。
- * 中身は段階1-2 の生産入力（seisan.html）の処理をそのまま移したもの。
+ * 作業記録アプリ（/sagyou/。指示 20260925-097100）も同じものを使う。そのときだけ効く設定は下の「作業記録用」。
  *
  * - 保存は「日付×拠点×種別」で1行 upsert（production.upsertMany）。入れる値は**その日の合計**（上書き。足し算ではない）
  * - 空欄の欄は送らない（前の値のまま）。取り消しは 0
@@ -15,6 +15,14 @@
  *   draftKey  … 下書きの localStorage キー
  *   bannerHost… 下書きバナーを差し込む要素
  *   onRows(rows, date) … その日の入力済みを読み直したとき（今日の画面が「やること」の入力済みを出すのに使う）
+ *   linkSelector … 離脱を捕まえるアプリ内リンク（guardUnsaved に渡す）
+ *  作業記録用（無ければ従来どおり）
+ *   cacheKey  … 初期値（拠点・1タンクの個数）とその日の一覧を端末に置くキーの頭。あれば開いた瞬間に前回の内容で描き、裏で読み直す
+ *   initialOptions … 端末に何も無いとき（初回）に使う初期値（production.options と同じ形）
+ *   optimistic… true なら保存は押した瞬間に完了扱い（送信は裏で順番に）。失敗したらその時点で入力欄に戻して知らせる。
+ *               送信待ちは端末（cacheKey + '.outbox'）に残し、次に開いたとき届いていなければ入力欄に戻す（自動では送り直さない）
+ *   me        … { empId, name }（送信待ちの行を一覧に出すときの入力者）
+ *   nameOf(row) … 一覧の入力者の表示（既定は row.empName）
  * 戻り値 { ready: Promise, reload() }
  */
 (function (root) {
@@ -22,6 +30,11 @@
 
   var KINDS = ['fukurodashi', 'shinsui_1', 'shinsui_2', 'shinsui_3', 'shukaku_1', 'shukaku_2plus', 'shukaku_c'];
   var INT_KINDS = { fukurodashi: 1, shinsui_1: 1, shinsui_2: 1, shinsui_3: 1 };
+  // 生産記録シートの表記（Production.gs の Prod_kinds_ と同じ）。送信待ちの行を一覧に出すときに使う
+  var KIND_INFO = {
+    fukurodashi: ['袋出し', '個'], shinsui_1: ['1番浸水', 'タンク'], shinsui_2: ['2番浸水', 'タンク'], shinsui_3: ['3番浸水', 'タンク'],
+    shukaku_1: ['収穫_1番', 'kg'], shukaku_2plus: ['収穫_2番以降', 'kg'], shukaku_c: ['収穫_傷', 'kg']
+  };
   var LS_SITE = 'tougou.today.site';          // GAS 版と同じキー（端末で前回選んだ拠点）
 
   function numInput(k, mode) {
@@ -70,15 +83,62 @@
     var el = { date: q('[data-el="date"]'), today: q('[data-el="today"]'), tankNote: q('[data-el="tankNote"]'),
                save: q('[data-el="save"]'), list: q('[data-el="list"]'), listDate: q('[data-el="listDate"]') };
     var msg = o.msg || function () {};
-    var st = { opts: null, date: '', site: '', rows: [], seq: 0, tank: 42 };
+    // base＝サーバから読んだ行、rows＝base に送信待ちを重ねたもの（画面はこちらを見る）
+    var st = { opts: null, date: '', site: '', base: [], rows: [], seq: 0, tank: 42, touched: {}, loaded: false };
     var inputs = {};
     KINDS.forEach(function (k) { inputs[k] = q('input[data-k="' + k + '"]'); });
 
+    // ---- 端末の控え（作業記録用。cacheKey が無ければ何もしない）
+    function cacheGet(name) {
+      if (!o.cacheKey) return null;
+      try { return JSON.parse(root.localStorage.getItem(o.cacheKey + '.' + name) || 'null'); } catch (e) { return null; }
+    }
+    function cachePut(name, v) {
+      if (!o.cacheKey) return;
+      try {
+        if (v == null) root.localStorage.removeItem(o.cacheKey + '.' + name);
+        else root.localStorage.setItem(o.cacheKey + '.' + name, JSON.stringify(v));
+      } catch (e) { /* 容量超などは無視（控えが無いだけ） */ }
+    }
+    var outbox = (o.optimistic && cacheGet('outbox')) || [];   // [{ records:[{date,site,kind,value}], at }]
+    function saveOutbox() { cachePut('outbox', outbox.length ? outbox : null); }
+
+    function nowFull() {
+      var d = new Date(), p2 = function (n) { return String(n).padStart(2, '0'); };
+      return C.ymd(d) + ' ' + p2(d.getHours()) + ':' + p2(d.getMinutes()) + ':' + p2(d.getSeconds());
+    }
+    function siteName(id) {
+      var s = ((st.opts && st.opts.sites) || []).filter(function (x) { return x.id === id; })[0];
+      return s ? (s.name || s.id) : id;
+    }
+    /** 送信待ちを一覧の行の形にする（シートの1行と同じ列名） */
+    function pendingRow(rec) {
+      var info = KIND_INFO[rec.kind], me = o.me || {};
+      return {
+        '拠点': rec.site, '種別': info[0], '入力値': String(rec.value), '入力単位': info[1],
+        '個数': info[1] === 'タンク' ? rec.value * st.tank : info[1] === '個' ? rec.value : '',
+        '入力者': me.empId || '', '更新日時': nowFull(), siteName: siteName(rec.site),
+        empName: me.name || '', empSurname: me.name || '', kind: rec.kind, _pending: true
+      };
+    }
+    function overlay() {
+      var rows = st.base.slice();
+      outbox.forEach(function (job) {
+        job.records.forEach(function (rec) {
+          if (rec.date !== st.date) return;
+          var i = -1;
+          rows.forEach(function (r, j) { if (r['拠点'] === rec.site && r.kind === rec.kind) i = j; });
+          if (i >= 0) rows[i] = pendingRow(rec); else rows.push(pendingRow(rec));
+        });
+      });
+      st.rows = rows;
+    }
+
     // ---- 保存済みの値（その日・その拠点）
-    function serverValue(kind) {
-      for (var i = 0; i < st.rows.length; i++) {
-        var r = st.rows[i];
-        if (r['拠点'] === st.site && r.kind === kind) {
+    function valueIn(rows, site, kind) {
+      for (var i = 0; i < rows.length; i++) {
+        var r = rows[i];
+        if (r['拠点'] === site && r.kind === kind) {
           // シートの表示値（getDisplayValues）なので「1,200」のような書式が付くことがある
           var n = C.readNum(r['入力値']);
           return (n === null || isNaN(n)) ? String(r['入力値']) : String(n);
@@ -86,6 +146,7 @@
       }
       return '';
     }
+    function serverValue(kind) { return valueIn(st.rows, st.site, kind); }
     /** 送る対象：空欄でなく、保存済みの値と違う欄。{ kind: 数値 } か、読めない欄があれば文字列 */
     function pending() {
       var out = {}, bad = '';
@@ -140,18 +201,24 @@
         if (c) c.textContent = countText(k);
       });
     }
-    function fillInputs() {
-      KINDS.forEach(function (k) { inputs[k].value = serverValue(k); });
+    /** 入力欄を保存済みの値にする。soft なら、この画面を開いてから手で触った欄はそのまま */
+    function fillInputs(soft) {
+      KINDS.forEach(function (k) { if (!(soft && st.touched[k])) inputs[k].value = serverValue(k); });
+      if (!soft) st.touched = {};
       renderRowMarks();
     }
 
     function renderList() {
-      el.listDate.textContent = st.date;
+      el.listDate.textContent = st.date + (st.loaded ? '' : '（更新中…）');
       var rows = st.rows.slice().sort(function (a, b) {
         if (a['拠点'] !== b['拠点']) return a['拠点'] < b['拠点'] ? -1 : 1;
         return KINDS.indexOf(a.kind) - KINDS.indexOf(b.kind);
       });
-      if (!rows.length) { el.list.innerHTML = '<div class="empty">この日の入力はまだありません。</div>'; return; }
+      if (!rows.length) {
+        el.list.innerHTML = '<div class="empty">' + (st.loaded ? 'この日の入力はまだありません。' : '読み込み中…') + '</div>';
+        return;
+      }
+      var who = o.nameOf || function (r) { return r.empName || ''; };
       var h = '<table class="tbl"><tr><th>種別</th><th>入力</th><th>個数</th><th>入力者</th></tr>', last = null;
       rows.forEach(function (r) {
         if (r['拠点'] !== last) { last = r['拠点']; h += '<tr class="grp"><td colspan="4">' + C.esc(r.siteName) + '</td></tr>'; }
@@ -159,39 +226,52 @@
           '<td>' + C.esc(String(r['種別']).replace('収穫_', '収穫 ')) + '</td>' +
           '<td class="num">' + C.esc(r['入力値'] + ' ' + r['入力単位']) + '</td>' +
           '<td class="num">' + (r['個数'] ? Number(r['個数']).toLocaleString() + '個' : '') + '</td>' +
-          '<td>' + C.esc((r.empName || '') + ' ' + String(r['更新日時']).slice(11, 16)) + '</td></tr>';
+          '<td>' + C.esc(who(r) + ' ' + (r._pending ? '送信中' : String(r['更新日時']).slice(11, 16))) + '</td></tr>';
       });
       el.list.innerHTML = h + '</table>';
     }
 
     // ---- 読み込み
-    function load(keepInputs) {
+    /** mode：false＝入力欄を保存済みの値にする／true＝入力欄はそのまま／'soft'＝触っていない欄だけ保存済みの値にする */
+    function load(mode) {
       var my = ++st.seq;   // 日付を続けて変えたとき、古い応答で上書きしない
-      el.list.innerHTML = '<div class="empty">読み込み中…</div>';
-      return C.api('production.list', { date: st.date }).then(function (res) {
+      var date = st.date;
+      var fresh = mode === false || !st.rows.length;   // 日付を変えた・保存した直後は前の一覧を消す（従来どおり）
+      if (fresh) el.list.innerHTML = '<div class="empty">読み込み中…</div>';
+      return C.api('production.list', { date: date }).then(function (res) {
         if (my !== st.seq) return false;
-        st.rows = res.rows || [];
+        st.base = res.rows || [];
+        st.loaded = true;
+        overlay();
+        cachePut('rows', { date: date, rows: st.base });
         renderList();
-        if (keepInputs) renderRowMarks(); else fillInputs();
+        if (mode === true) renderRowMarks(); else fillInputs(mode === 'soft');
         guard.changed();
         if (o.onRows) o.onRows(st.rows, st.date);
         return true;
       }, function (err) {
         if (my !== st.seq) return false;
-        el.list.innerHTML = '<div class="empty">読み込めませんでした。</div>';
+        if (fresh) el.list.innerHTML = '<div class="empty">読み込めませんでした。</div>';
         msg(err.message, 'ng');
         return false;
       });
     }
 
     // ---- 保存（二重送信防止：runOnce＋日報と同じ「送信中...」の覆い）
-    function save() {
+    function collect() {
       var p = pending();
-      if (!st.site) { msg('拠点を選んでください。', 'ng'); return Promise.resolve(false); }
-      if (typeof p === 'string') { msg(p, 'ng'); return Promise.resolve(false); }
+      if (!st.site) { msg('拠点を選んでください。', 'ng'); return null; }
+      if (typeof p === 'string') { msg(p, 'ng'); return null; }
       var kinds = Object.keys(p);
-      if (!kinds.length) { C.toast('変えた欄がありません'); return Promise.resolve(true); }
-      var records = kinds.map(function (k) { return { date: st.date, site: st.site, kind: k, value: p[k] }; });
+      if (!kinds.length) { C.toast('変えた欄がありません'); return []; }
+      return kinds.map(function (k) { return { date: st.date, site: st.site, kind: k, value: p[k] }; });
+    }
+
+    function save() {
+      if (o.optimistic) return saveOptimistic();
+      var records = collect();
+      if (!records) return Promise.resolve(false);
+      if (!records.length) return Promise.resolve(true);
       var result = null;
       var started = C.runOnce('save', el.save, '保存しています…', function () {
         guard.setState('saving');
@@ -220,6 +300,90 @@
       });
     }
 
+    // ---- 保存（作業記録用：押した瞬間に完了扱い。送信は裏で1件ずつ順番に）
+    var sending = false;
+    function saveOptimistic() {
+      var records = collect();
+      if (!records) return Promise.resolve(false);
+      if (!records.length) return Promise.resolve(true);
+      outbox.push({ records: records, at: nowFull() });
+      saveOutbox();
+      overlay();
+      fillInputs(false);
+      renderList();
+      msg('');
+      guard.setState('saving');
+      guard.changed();
+      C.toast('保存しました');
+      pump();
+      return Promise.resolve(true);
+    }
+    /** 送った値がサーバの一覧に入っているか（base で見る） */
+    function arrived(rec) {
+      if (rec.date !== st.date) return false;
+      var sv = valueIn(st.base, rec.site, rec.kind);
+      return sv !== '' && Number(sv) === rec.value;
+    }
+    function pump() {
+      if (sending) return;
+      if (!outbox.length) { guard.setState(''); return; }
+      sending = true;
+      var job = outbox[0];
+      C.api('production.upsertMany', { records: job.records }).then(function () {
+        outbox.shift(); saveOutbox(); sending = false;
+        if (outbox.length) { pump(); return; }
+        guard.setState('');
+        load('soft');
+      }, function (err) {
+        if (!err.network) { sending = false; giveBack('failed', '保存できませんでした：' + err.message); return; }
+        // 届いたか分からない → 一覧を読み直して確かめる（upsert なので再送しても二重にはならない）
+        load(true).then(function (loaded) {
+          sending = false;
+          if (loaded && job.records.every(arrived)) {
+            outbox.shift(); saveOutbox();
+            overlay(); renderList();
+            pump();
+          } else {
+            giveBack('unknown', '保存を確認できませんでした。電波の良い所で「再送する」を押してください（同じ内容を送っても二重にはなりません）。');
+          }
+        });
+      });
+    }
+    /**
+     * 届かなかった送信待ちを全部入力欄に戻す（未保存として扱う → 未保存バー・下書き・離脱の警告が効く）。
+     * 拠点が今と違えばその拠点に切り替える。ほかの拠点・日付の分は文言で知らせる。
+     */
+    function giveBack(state, text) {
+      var recs = [];
+      outbox.forEach(function (job) { recs = recs.concat(job.records); });
+      outbox = []; saveOutbox();
+      overlay();
+      var mine = recs.filter(function (r) { return r.date === st.date; });
+      var site = mine.length ? mine[0].site : st.site;
+      var typed = site === st.site ? st.touched : {};   // 送信待ちの間に同じ欄へ打ち直した値の方を残す
+      if (site !== st.site) {
+        st.site = site;
+        try { root.localStorage.setItem(LS_SITE, st.site); } catch (e) { /* 無視 */ }
+        renderSites();
+        fillInputs(false);
+      } else {
+        fillInputs(true);   // 送信待ちの間に打ち始めた欄は消さない
+      }
+      mine.forEach(function (r) {
+        if (r.site !== site || typed[r.kind]) return;
+        inputs[r.kind].value = String(r.value);
+        st.touched[r.kind] = true;
+      });
+      var others = recs.filter(function (r) { return r.date !== st.date || r.site !== site; }).map(function (r) {
+        return r.date + ' ' + siteName(r.site) + ' ' + KIND_INFO[r.kind][0] + ' ' + r.value;
+      });
+      renderRowMarks(); renderList();
+      guard.changed();
+      guard.setState(state);
+      msg(text + (others.length ? '\nほかに届いていない分：' + others.join('、') + '（拠点を切り替えて入れ直してください）' : ''), state === 'failed' ? 'ng' : 'warn');
+      if (root.navigator && root.navigator.vibrate) try { root.navigator.vibrate([80, 60, 80]); } catch (e) { /* 無視 */ }
+    }
+
     var guard = C.guardUnsaved({
       key: o.draftKey,
       isDirty: isDirty,
@@ -228,7 +392,10 @@
         return { date: st.date, site: st.site, values: v };
       },
       restore: function (d) {
-        var apply = function () { KINDS.forEach(function (k) { if (d.values[k] != null) inputs[k].value = d.values[k]; }); renderRowMarks(); guard.changed(); };
+        var apply = function () {
+          KINDS.forEach(function (k) { if (d.values[k] != null) { inputs[k].value = d.values[k]; st.touched[k] = true; } });
+          renderRowMarks(); guard.changed();
+        };
         if (d.date && d.date !== st.date && !o.pickDate) {
           // 今日の画面は日付を変えられない。前日の下書きを今日の欄に入れると取り違えるので戻さない
           msg('下書きは ' + d.date + ' の分です。「生産入力」の画面で日付を ' + d.date + ' にして入れ直してください。', 'warn');
@@ -239,18 +406,20 @@
         else { fillInputs(); apply(); }
       },
       save: save,
-      bannerHost: o.bannerHost
+      bannerHost: o.bannerHost,
+      linkSelector: o.linkSelector
     });
 
     // ---- 操作
     KINDS.forEach(function (k) {
-      inputs[k].addEventListener('input', function () { renderRowMarks(); guard.changed(); });
+      inputs[k].addEventListener('input', function () { st.touched[k] = true; renderRowMarks(); guard.changed(); });
     });
     Array.prototype.forEach.call(host.querySelectorAll('.step-btn'), function (b) {
       b.addEventListener('click', function () {
         var inp = inputs[b.dataset.k];
         var n = C.readNum(inp.value); if (n === null || isNaN(n)) n = 0;
         inp.value = Math.max(0, n + Number(b.dataset.d));
+        st.touched[b.dataset.k] = true;
         renderRowMarks(); guard.changed();
       });
     });
@@ -268,21 +437,55 @@
     el.save.addEventListener('click', save);
 
     // ---- 開始：初期値（今日・拠点一覧・所属拠点・1タンクの個数）→ その日の一覧
-    var ready = C.api('production.options').then(function (opt) {
+    function applyOptions(opt) {
       st.opts = opt;
       st.tank = Number(opt.tankCapacity) || 42;
       el.tankNote.textContent = '1タンク＝' + st.tank + '個';
-      st.date = opt.today;
-      if (el.date) el.date.value = st.date;
       var last = '';
       try { last = root.localStorage.getItem(LS_SITE) || ''; } catch (e) { /* 無視 */ }
       var known = function (id) { return (opt.sites || []).some(function (s) { return s.id === id; }); };
-      st.site = opt.defaultSite || (known(last) ? last : '');
+      if (!known(st.site)) st.site = opt.defaultSite || (known(last) ? last : '');
       renderSites();
-      return load(false);
-    }).then(function () { guard.showBanner(); }, function (err) {
-      msg('読み込めませんでした：' + err.message, 'ng');
-    });
+    }
+
+    var ready;
+    var early = o.cacheKey ? (cacheGet('opts') || o.initialOptions || null) : null;
+    if (!early) {
+      ready = C.api('production.options').then(function (opt) {
+        applyOptions(opt);
+        st.date = opt.today;
+        if (el.date) el.date.value = st.date;
+        return load(false);
+      }).then(function () { guard.showBanner(); }, function (err) {
+        msg('読み込めませんでした：' + err.message, 'ng');
+      });
+    } else {
+      // 作業記録：前回の控えで即座に描き、初期値と一覧は裏で同時に取りに行く
+      st.date = C.ymd(new Date());
+      applyOptions(early);
+      var rc = cacheGet('rows');
+      if (rc && rc.date === st.date) st.base = rc.rows || [];
+      overlay(); renderList(); fillInputs(true);
+      var unconfirmed = outbox.length > 0;   // 前回、届いたのを見届ける前に閉じた送信
+      var listP = load('soft');
+      var optP = C.api('production.options').then(function (opt) {
+        cachePut('opts', { sites: opt.sites, tankCapacity: opt.tankCapacity, defaultSite: opt.defaultSite });
+        applyOptions(opt);
+        renderRowMarks();
+        if (opt.today && opt.today !== st.date) { st.date = opt.today; return load('soft'); }
+      }, function () { /* 控えのまま続ける（一覧の読み込みの方で知らせる） */ });
+      ready = Promise.all([listP, optP]).then(function (r) {
+        if (unconfirmed) {
+          // 自動では送り直さない（サーバに書くのは人が保存を押したときだけ）。届いていれば消し、届いていなければ入力欄に戻す
+          if (!r[0]) return;   // 一覧が読めない（圏外）→ 送信待ちのまま次の機会に確かめる
+          outbox = outbox.filter(function (job) { return !job.records.every(arrived); });
+          saveOutbox();
+          if (outbox.length) giveBack('unknown', '前回の保存が届いたか確認できていません。内容を確かめて「再送する」を押してください。');
+          else { overlay(); renderList(); fillInputs(true); }
+        }
+        guard.showBanner();
+      });
+    }
 
     return { ready: ready, reload: function () { return load(true); }, isDirty: isDirty };
   }
