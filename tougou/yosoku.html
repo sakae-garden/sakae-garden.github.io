@@ -490,6 +490,13 @@
         '。移設が済むまでの上限は ' + limTxt(pre.limitNow, tp.turns) + (tp.turnsMax > tp.turns ? '・' + limTxt(pre.limitMax, tp.turnsMax) : '') +
         '。移設が済んだら設定を空欄にしてください。</div>';
     }
+    // 将来の方針（設定 タンク配置_将来_*。開始日が空欄の間は計算に使わない参考）
+    var fu = tp.future;
+    if (fu && !fu.applied) {
+      tankHead += '<div>（参考）将来方針：' + Object.keys(fu.placement).filter(function (s) { return fu.placement[s] > 0; })
+          .map(function (s) { return nm(s) + ' ' + fu.placement[s] + '基'; }).join('・') + '・1日 ' + fu.turns + '回転' +
+        '（開始日 ' + esc(fu.start || '未定') + '。設定 タンク配置_将来_&lt;拠点&gt;）。上限は ' + limTxt(fu.limit, fu.turns) + '</div>';
+    }
     // 2. 運搬（拠点間の移動。記録はしない）
     var today = r.days && r.days[0] ? r.days[0].plan.move || {} : {};
     var mvToday = Object.keys(today).filter(function (k) { return today[k] > 0; }).map(function (k) {
