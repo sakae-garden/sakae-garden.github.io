@@ -69,6 +69,24 @@ body.has-unsaved .page{padding-bottom:70px}
 .frow-lbl .srv{display:block;font-size:11px;color:var(--sub);font-weight:400;margin-top:1px}
 .frow.chg{background:#fffdf5}
 .frow.chg .frow-lbl{font-weight:700}
+/* 今日／昨日（指示 092000。昨日のあいだは色を変えて常に出す） */
+.day-toggle{display:flex;gap:8px;margin:2px 0 10px}
+.day-toggle button{flex:1;padding:10px 0;font-size:16px;font-weight:700;border:1px solid var(--border);border-radius:var(--r-btn);background:#fff;color:var(--sub);font-family:inherit;cursor:pointer}
+.day-toggle button.on{background:var(--green);border-color:var(--green);color:#fff}
+.day-toggle button[data-day="yday"].on{background:#b45309;border-color:#b45309}
+.yday-bar{position:sticky;top:0;z-index:5;background:#b45309;color:#fff;font-weight:700;font-size:15px;text-align:center;padding:10px;border-radius:var(--r);margin-bottom:10px}
+body.form-yday .hdr{background:#7c2d12}
+body.form-yday .page#p1{background:#fff4e5}
+/* 足していく入力（袋出し・浸水）の合計・内訳・取り消し */
+.add-tag{display:inline-block;margin-left:6px;font-size:11px;font-weight:700;color:var(--green);border:1px solid var(--green);border-radius:4px;padding:0 4px}
+.add-box{padding:0 var(--pad-card,14px) 10px;font-size:13px}
+.add-box:empty{display:none}
+.add-sum b{font-size:15px}
+.add-mine{margin-top:4px;display:flex;flex-direction:column;gap:4px}
+.add-item{color:var(--sub)}
+.add-cancel{margin-left:8px;padding:3px 10px;font-size:12px;border:1px solid var(--border);border-radius:var(--r-btn);background:#fff;font-family:inherit;cursor:pointer}
+.add-note{font-size:12px;color:var(--sub);padding:6px var(--pad-card,14px) 0}
+.plan-line{background:#eef6ff;border:1px solid #bcd7f5;border-radius:var(--r);padding:8px 12px;margin-bottom:8px;font-size:15px;font-weight:700}
 /* シフト */
 #p2{display:flex;flex-direction:column}
 .shift-frame{flex:1;width:100%;border:0;background:#fff}
@@ -231,6 +249,9 @@ body.has-unsaved .page{padding-bottom:70px}
         cacheKey: 'sagyou.cache',
         initialOptions: INITIAL_OPTIONS,
         optimistic: true,
+        additive: true,          // 袋出し・浸水は足していく（複数人・複数回の入力で消えない。指示 092000）
+        dayToggle: true,         // 今日／昨日（収穫を翌朝にまとめて入れる）
+        confirmOverwrite: true,  // 収穫は上書き。すでに値があれば確かめる
         me: { empId: person.id, name: person.surname },
         nameOf: function (r) { return surnameOf(r['入力者']) || r.empSurname || r.empName || ''; }
       });

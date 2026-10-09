@@ -24,6 +24,10 @@
 .frow-lbl .srv{display:block;font-size:11px;color:var(--sub);font-weight:400;margin-top:1px}
 .frow.chg{background:#fffdf5}
 .frow.chg .frow-lbl{font-weight:700}
+/* 袋出しの指示（代表が入れる。指示と実績の差を出すだけ。指示 092000） */
+.plan-line{background:#eef6ff;border:1px solid #bcd7f5;border-radius:var(--r);padding:8px 12px;margin-bottom:8px;font-size:14px;font-weight:700}
+.plan-edit{margin-top:6px;font-weight:400;display:flex;align-items:center;gap:6px}
+.plan-edit input{width:90px}
 </style>
 </head>
 <body>
@@ -55,7 +59,7 @@
   if (!session) return;
   var $ = function (id) { return document.getElementById(id); };
 
-  $('hDate').textContent = C.jpDate(new Date()) + '　' + (session.name || '');
+  $('hDate').textContent = C.jpDate(C.now()) + '　' + (session.name || '');
 
   window.TougouSeisanForm.mount({
     host: $('form'),
@@ -64,6 +68,7 @@
       $('msg').innerHTML = text ? '<div class="notice ' + (kind || 'info') + '">' + C.esc(text) + '</div>' : '';
     },
     pickDate: true,
+    planEdit: session.role === '代表',   // 袋出しの指示を入れる欄と、指示と実績の差（代表のみ。サーバも代表だけ受ける）
     draftKey: 'tougou.seisan.draft.v1',
     bannerHost: $('app')
   });

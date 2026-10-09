@@ -115,8 +115,8 @@
       <div class="wi-row">
         <label>日付<input type="date" id="wiDate"></label>
         <label>袋出し<input type="number" inputmode="numeric" min="0" id="wiF" placeholder="0">個</label>
-        <label>1番浸水<input type="number" inputmode="numeric" min="0" id="wiS1" placeholder="0">個</label>
-        <label>2番浸水<input type="number" inputmode="numeric" min="0" id="wiS2" placeholder="0">個</label>
+        <label>浸水（2番用）<input type="number" inputmode="numeric" min="0" id="wiS1" placeholder="0">個</label>
+        <label>浸水（3番用）<input type="number" inputmode="numeric" min="0" id="wiS2" placeholder="0">個</label>
       </div>
       <div class="wi-row"><button type="button" class="wi-btn" id="wiAdd">見込みに足す</button><button type="button" class="wi-btn sub" id="wiClear">消す</button></div>
       <div class="muted" id="wiOut"></div>
@@ -161,9 +161,11 @@
   var r1 = function (x) { return (Math.round(x * 10) / 10).toFixed(1); };
   var md = function (d) { var p = d.split('-'); return Number(p[1]) + '/' + Number(p[2]) + '（' + '日月火水木金土'.charAt(new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2])).getDay()) + '）'; };
   var GRADE = { A: 'A品', B: 'B品', C: 'C品' };
+  // 浸水の表示名（N番浸水＝N番の後の浸水＝N+1番を出すための浸水。保存のキーは変えない。2026-10-09）
+  var soakName = function (n) { n = Number(n); return '浸水（' + (n + 1) + '番用' + (n >= 3 ? '・例外' : '') + '）'; };
   var SHOW_DAYS = 7;   // 最初に出す日数。「さらに表示」で全部（マスタの 予測_表示日数）
 
-  $('hDate').textContent = C.jpDate(new Date()) + '　' + (session.name || '');
+  $('hDate').textContent = C.jpDate(C.now()) + '　' + (session.name || '');
 
   function msg(text, kind) {
     $('msg').innerHTML = text ? '<div class="notice ' + (kind || 'info') + '">' + esc(text) + '</div>' : '';
@@ -203,7 +205,8 @@
   }
 
   // 月次ウォッチ（指示 096500）。新しい月を上に
-  var ST = { ok: ['判定', 'ok'], running: ['集計中', ''], future: ['収穫の月はこれから', ''], low_cover: ['記録が少ないため判定しない', ''], partial_input: ['記録開始の月（途中から）', ''] };
+  var ST = { ok: ['判定', 'ok'], running: ['集計中', ''], future: ['収穫の月はこれから', ''], low_cover: ['記録が少ないため判定しない', ''], partial_input: ['記録開始の月（途中から）', ''],
+             low_input: ['袋出しの未入力が多いため判定しない', ''] };
   function renderMonthly(mo) {
     if (!mo || !mo.rows.length) {
       $('monthly').innerHTML = '<div class="empty">袋出しの記録がまだありません。</div>' + monthlyNote(mo); return;
@@ -212,13 +215,16 @@
     var body = mo.rows.slice().reverse().map(function (r) {
       var st = ST[r.status] || [r.status, ''];
       var low = r.ratioStd !== null && mo.alertRatio !== null && r.ratioStd < mo.alertRatio;
-      var soak = r.soakRecorded ? '1番浸水 ' + Math.round(r.shinsui[1] || 0).toLocaleString() + '個（' + pctS(r.soak1Rate) + '）・2番浸水 ' + Math.round(r.shinsui[2] || 0).toLocaleString() + '個（' + pctS(r.soak2Rate) + '）' : '浸水の記録なし';
+      var soak = r.soakRecorded ? soakName(1) + ' ' + Math.round(r.shinsui[1] || 0).toLocaleString() + '個（' + pctS(r.soak1Rate) + '）・' + soakName(2) + ' ' + Math.round(r.shinsui[2] || 0).toLocaleString() + '個（' + pctS(r.soak2Rate) + '）' : '浸水の記録なし';
+      // 袋出しは記録のある日だけから日数で補正した推定（記録の合計と記録した日の割合を添える）
+      var fRec = r.fukurodashiRec !== undefined && Math.round(r.fukurodashiRec) !== Math.round(r.fukurodashi)
+        ? '<span class="muted">（記録 ' + Math.round(r.fukurodashiRec).toLocaleString() + '個・記録した日 ' + pctS(r.fCover) + 'から補正）</span>' : '';
       var act = r.status === 'future' ? '—'
         : kg(r.a) + '<span class="muted">（記録 ' + r.recDays + '／' + (r.status === 'running' ? r.countDays + '日まで' : r.monthDays + '日') + '）</span>';
       return '<div class="mrow"><div class="mh"><span>' + esc(mon(r.month)) + 'の袋出し → ' + esc(mon(r.actualMonth)) + 'の収穫</span>' +
         '<span class="st ' + (low ? 'low' : st[1]) + '">' + esc(st[0]) + '</span></div>' +
         '<table>' +
-        '<tr><td>袋出し</td><td class="num">' + Math.round(r.fukurodashi).toLocaleString() + '個</td></tr>' +
+        '<tr><td>袋出し</td><td class="num">' + Math.round(r.fukurodashi).toLocaleString() + '個' + fRec + '</td></tr>' +
         '<tr><td colspan="2" class="muted">' + soak + '</td></tr>' +
         '<tr><td>見込み（標準・3番まで）</td><td class="num">' + kg(r.expStd) + '</td></tr>' +
         '<tr><td>見込み（浸水の記録どおり）</td><td class="num">' + kg(r.expSoak) + '</td></tr>' +
@@ -238,7 +244,8 @@
     if (!mo) return '';
     return '<div class="bags">見込みは「その月に袋出し・浸水した数」から、実績は' + mo.shift + 'か月後の月の収穫の記録（収穫_1番＋2番以降）。日単位・週単位では比べません' +
       '（刈り取りの回数や温度設定で収穫の時期をずらしているので、袋出しから収穫までの日数が一定でないため）。<br>' +
-      '収穫を入力していない日は0と数えず「記録した日数」として出し、比は記録した日の合計を月の日数に補正して出します。記録した日が' + Math.round(mo.minCover * 100) + '%に満たない月・収穫の月が終わっていない月は判定しません。<br>' +
+      '収穫を入力していない日は0と数えず「記録した日数」として出し、比は記録した日の合計を月の日数に補正して出します。袋出し・浸水も同じく記録のある日だけから補正します（予測が標準で補った日は混ぜません）。' +
+      '記録した日が' + Math.round(mo.minCover * 100) + '%に満たない月・収穫の月が終わっていない月は判定しません。<br>' +
       '実績収量の警告（' + (mo.alertRatio !== null ? Math.round(mo.alertRatio * 100) + '%' : '閾値なし') + '）は「実績÷見込み（標準）」の直近の判定できた月で出します。' +
       '「浸水どおり」との比が100%に近く「標準」との比だけ低い月は、浸水しなかった菌床の分の差です。</div>';
   }
@@ -281,7 +288,7 @@
       });
       chain(src, addDays(h0, s.split.length + (s.kyuyou || 0)), b + 1, n);
     };
-    chain('袋出し', date, 1, f); chain('1番浸水', date, 2, s1); chain('2番浸水', date, 3, s2);
+    chain('袋出し', date, 1, f); chain(soakName(1), date, 2, s1); chain(soakName(2), date, 3, s2);
     return out;
   }
 
@@ -425,6 +432,30 @@
   function stdNoteHtml(si) {
     return si && si.stdNote ? '<div class="alert warn">前提：' + esc(si.stdNote) + '</div>' : '';
   }
+  // 工程の拠点（設定 工程_森林公園_開始日。2026-10-09）
+  function kouteiText(si) {
+    var k = si && si.koutei;
+    if (!k) return '';
+    var nmS = k.siteName || '森林公園';
+    if (k.applied) return '工程：' + nmS + 'の工程（2番・3番）は ' + k.start + ' から工程マスタどおり（設定 工程_森林公園_開始日）。';
+    if (!k.moved || !k.moved.length) return '';
+    return '工程：' + (k.start ? nmS + 'の工程は ' + k.start + ' から。それまでは' : '設定 工程_森林公園_開始日 が空欄のため、') +
+      '工程マスタで' + nmS + 'の工程（' + k.moved.join('・') + '。2番・3番と、その浸水）も寄居で計算しています。' +
+      nmS + 'で栽培を始めたら、その日付を設定に入れてください。';
+  }
+  function kouteiHtml(si) { var t = kouteiText(si); return t ? '<div class="alert info">' + esc(t) + '</div>' : ''; }
+  // 未入力の日（拠点×種別。記録が始まった後の過去の日で、標準で補った日）
+  var MISS_NAME = { fukurodashi: '袋出し', shinsui_1: '浸水（2番用）', shinsui_2: '浸水（3番用）', shinsui_3: '浸水（4番用・例外）', shukaku: '収穫' };
+  function missingText(si) {
+    var names = {}; ((si && si.std) || []).forEach(function (s) { names[s.site] = s.name; });
+    var list = (si && si.missing) || [];
+    if (!list.length) return '';
+    return '未入力の日：' + list.map(function (x) {
+      var last = x.last ? Number(x.last.slice(5, 7)) + '/' + Number(x.last.slice(8, 10)) : 'なし';
+      return (names[x.site] || x.site).replace('ハウス', '') + ' ' + (MISS_NAME[x.kind] || x.kind) + ' ' + x.days + '日（最終入力 ' + last + '）';
+    }).join('・') + '。袋出し・浸水の未入力の日は標準（設定の袋出しの標準・標準サイクル）で補っています（0個にはしません）。' +
+      '月次ウォッチ・理論と出荷の差は記録のある日だけで計算し、補った日は混ぜません。';
+  }
 
   function renderCapa(r) {
     var cap = r.capacity, si = r.supplyInfo;
@@ -440,7 +471,7 @@
     var tk = Object.keys(cap.tanks || {}).map(function (id) {
       var t = cap.tanks[id];
       if (!(t.soakNeed > 0) && !(t.tankCount > 0)) return '';
-      var soaks = t.soaks.map(function (k) { return (k.bante - 1) + '番浸水 ' + fmt(k.n); }).join('・');
+      var soaks = t.soaks.map(function (k) { return soakName(k.bante - 1) + fmt(k.n); }).join('・');
       var line = t.soakNeed > 0
         ? '浸水 <b>' + fmt(t.soakNeed) + '個/日</b>（' + soaks + '）＝' + r2(t.tankTurns) + 'タンク回／置いているタンク ' + t.tankCount + '基 → ' +
           (t.tankDay > 0 ? '<b>1日 ' + r2(t.turnsNeed) + '回転が要る</b>' : red('タンクを置いていないので、ここでは浸水できません')) +
@@ -448,6 +479,19 @@
         : 'この工程では浸水しません（置いているタンク ' + t.tankCount + '基は使われていません）';
       return '<tr><td>' + nm(id) + '</td><td>' + line + '</td></tr>';
     }).join('');
+    // 今日の行：予定（入力前の計算）と実績（入力値）。上の行は定常の計算なので、今日の数字と分けて出す（2026-10-09）
+    var d0 = r.days && r.days[0] ? r.days[0] : {};
+    var pb = (d0.planBefore || d0.plan || {}).shinsui || {}, ac = d0.actualSoak || {};
+    var sumS = function (o) { return Object.keys(o || {}).reduce(function (a, b) { return a + (o[b] || 0); }, 0); };
+    var partsS = function (o) { return Object.keys(o || {}).filter(function (b) { return o[b] > 0; }).sort().map(function (b) { return soakName(b) + fmt(o[b]); }).join('・'); };
+    var todayRows = Object.keys(cap.tanks || {}).map(function (id) {
+      var t = cap.tanks[id], np = sumS(pb[id]), na = sumS(ac[id]);
+      if (!(np > 0) && !ac[id] && !(t.tankCount > 0)) return '';
+      return '<tr><td>' + nm(id) + '<br><span class="muted">今日</span></td><td>予定（入力前） <b>' + fmt(np) + '個</b>' + (np > 0 ? '（' + partsS(pb[id]) + '）' : '') +
+        '・実績（入力値） ' + (ac[id] ? '<b>' + fmt(na) + '個</b>' + (na > 0 ? '（' + partsS(ac[id]) + '）' : '') : '未入力') +
+        (t.tankDay > 0 && np > 0 ? ' → 予定は 1日 ' + r2(np / t.tankDay) + '回転' : '') + '</td></tr>';
+    }).join('');
+    tk += todayRows;
     var advice = p1 ? p1.moves.map(function (m) { return red('タンクを ' + m.n + '基、' + nmT(m.from) + '→' + nm(m.to) + 'へ移す必要があります'); })
       .concat(p1.idle.map(function (i) { return nmT(i.site) + 'のタンク ' + i.n + '基が使われていません'; })) : [];
     // 案1・案2の比較（決めない。杉さんが選ぶ）
@@ -519,7 +563,9 @@
       });
     });
     $('capa').innerHTML = stdNoteHtml(si) +
+      kouteiHtml(si) +
       '<div class="mrow"><div class="mh"><span>浸水の回転</span></div>' + (tp.plans.length ? tankHead : '') + '<table class="tbl">' + tk + '</table>' +
+        '<div class="bags">拠点ごとの1行目は定常の計算（袋出しの標準で毎日回したとき）。「今日」の行は今日の予定（入力前の計算）と実績（入力値）で、警告（優先5）と同じ数字です。</div>' +
         (advice.length ? '<div>' + advice.join('<br>') + '</div>' : '') + '</div>' +
       (cmp ? '<div class="mrow"><div class="mh"><span>浸水の運用の比較（案1・案2）</span></div>' + cmp + '</div>' : '') +
       '<div class="mrow"><div class="mh"><span>運搬（拠点間の移動）</span></div><div>本日の移動予定：' + (mvToday || '0個') +
@@ -600,7 +646,9 @@
         (s.synthetic && s.synthetic.length ? '袋出しの記録が無い日・明日以降は、設定の標準の個数（推計）で置いています（' + esc(s.synthetic.join('・')) + '）。' : '') +
         (s.std ? '袋出しの標準：' + s.std.map(function (x) { return esc(x.name) + ' ' + fmt(x.std) + '個/日'; }).join('・') + '。' : '') +
         (s.stdNote ? '<br>' + esc(s.stdNote) + '<br>' : '') +
-        (s.recordMode ? '浸水は ' + esc(s.shinsuiStart) + ' からの記録どおり。' : '浸水の記録がまだ無いので、標準サイクル（休養' + st[0].kyuyou + '日）で浸水するとみなしています。'),
+        (s.recordMode ? '浸水は記録のある日（拠点×種別×日）は記録どおり、記録の無い日は標準サイクル（休養' + st[0].kyuyou + '日）。' : '浸水の記録がまだ無いので、標準サイクル（休養' + st[0].kyuyou + '日）で浸水するとみなしています。') +
+        (missingText(s) ? '<br><b>' + esc(missingText(s)) + '</b>' : '') +
+        (kouteiText(s) ? '<br>' + esc(kouteiText(s)) : ''),
       '等級：B品は記録上のA品の ' + Math.round(c.bRatio * 100) + '%（A品の内数。出荷できるA品＝' + Math.round((1 - c.bRatio) * 100) + '%）、C品は記録上のA品の ' + c.cRatio + '倍（別勘定）。C品の ' + Math.round(c.cOobukuro * 100) + '% を大袋へ。',
       '需要：配達日報の納品数（' + esc(di.from) + '〜' + esc(di.to) + '）の曜日別の平均。都度特価（178・298円）は198・398円として数えます。' +
         (di.oroshiA ? '卸（ハーズ）' + r1(di.oroshiA) + 'kg/日を足しています。' : '') + '納品は供給が足りた分だけなので、需要の下限です。' +
@@ -617,7 +665,8 @@
       renderAlerts(r.alerts || []);
       renderCapa(r);
       renderGap(r.gap);
-      $('jsNotice').innerHTML = r.monthly ? '<div class="notice ' + esc(r.monthly.notice.level) + '">' + esc(r.monthly.notice.text) + '</div>' : '';
+      $('jsNotice').innerHTML = (r.monthly ? '<div class="notice ' + esc(r.monthly.notice.level) + '">' + esc(r.monthly.notice.text) + '</div>' : '') +
+        (missingText(r.supplyInfo) ? '<div class="notice warn">' + esc(missingText(r.supplyInfo)) + '</div>' : '');
       chartData = r;
       if (!$('wiDate').value) $('wiDate').value = r.today;
       renderChart();
@@ -665,7 +714,7 @@
     });
     var tot = 0; Object.keys(byB).forEach(function (b) { tot += byB[b]; });
     var last = Object.keys(extra).sort().pop();
-    var ORDER = { '袋出し': 0, '1番浸水': 1, '2番浸水': 2 };
+    var ORDER = { '袋出し': 0 }; ORDER[soakName(1)] = 1; ORDER[soakName(2)] = 2;
     var keys = Object.keys(byB).sort(function (a, b) { var p = a.split('|'), q = b.split('|'); return ORDER[p[0]] - ORDER[q[0]] || p[1] - q[1]; });
     var groups = {};
     keys.forEach(function (k) {

@@ -33,6 +33,65 @@
   var cfg = { sessionKey: LS_SESSION, reauth: null };
   function configure(o) { for (var k in o) cfg[k] = o[k]; }
 
+  /*
+   * デモ表示（指示 20261009-092500）。URL に ?demo=1 があるときだけ。
+   *   - すべての要求に demo:true を付ける（GAS はデモ用シートを読み、書き込みは断る。Demo.gs）
+   *   - 書き込みの要求は送らずに断る（サーバでも断るので二重の守り）
+   *   - 画面の最上部に赤い帯を常に出し、保存・上書きのボタンを押せなくする。下書きは端末に残さない
+   *   - アプリ内のリンクにも ?demo=1 を付けて、デモのまま画面を移れるようにする
+   */
+  var DEMO = !!(root.location && /[?&]demo=1(?:&|$)/.test(root.location.search || ''));
+  var DEMO_WRITE = { 'production.upsert': 1, 'production.upsertMany': 1, 'production.add': 1, 'production.cancel': 1,
+                     'production.planSet': 1, 'today.setPlan': 1 };
+  var DEMO_BLOCK = '.submit-btn[data-el="save"], [data-el="planSave"], .plan-btn[data-act="edit"], .plan-btn[data-act="save"], ' +
+                   '.plan-btn[data-act="reset"], .add-cancel, .unsaved-bar button';
+  var DEMO_TODAY = '2026-10-09';   // GAS の Demo.gs と同じ。デモでは「今日」をこの日に固定する
+  /** 画面に出す「今」。デモでは DEMO_TODAY（時刻は今のまま）。 */
+  function now() {
+    var d = new Date();
+    if (!DEMO) return d;
+    var p = DEMO_TODAY.split('-');
+    return new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]), d.getHours(), d.getMinutes(), d.getSeconds());
+  }
+  function demoUrl(href) {
+    if (!href || /^(?:[a-z]+:|\/\/|#)/i.test(href) || /[?&]demo=1(?:&|#|$)/.test(href)) return href;
+    var i = href.indexOf('#'), hash = i >= 0 ? href.slice(i) : '', base = i >= 0 ? href.slice(0, i) : href;
+    return base + (base.indexOf('?') >= 0 ? '&' : '?') + 'demo=1' + hash;
+  }
+  function setupDemo() {
+    var doc = root.document;
+    if (!DEMO || !doc || doc.getElementById('demo_banner')) return;
+    var css = doc.createElement('style');
+    css.textContent = '.demo-banner{position:sticky;top:0;z-index:9999;background:#c62828;color:#fff;font-weight:700;text-align:center;' +
+      'padding:8px 10px;font-size:14px;line-height:1.4;box-shadow:0 2px 6px rgba(0,0,0,.25)}' +
+      '.demo-banner a{color:#fff;text-decoration:underline;font-weight:400;margin-left:8px;font-size:12px}' +
+      'body.demo-mode .demo-off{opacity:.35;pointer-events:none}';
+    doc.head.appendChild(css);
+    var b = doc.createElement('div');
+    b.id = 'demo_banner'; b.className = 'demo-banner';
+    b.innerHTML = 'デモ表示（仮の数字）— 本番のデータではありません<a href="' + LAUNCHER_URL + '" data-demo-exit="1">本番に戻る</a>';
+    doc.body.insertBefore(b, doc.body.firstChild);
+    doc.body.classList.add('demo-mode');
+    var block = function () {
+      Array.prototype.forEach.call(doc.querySelectorAll(DEMO_BLOCK), function (el) {
+        if (el.disabled && el.classList.contains('demo-off')) return;
+        el.disabled = true; el.classList.add('demo-off'); el.title = 'デモ表示では保存できません';
+      });
+    };
+    block();
+    if (root.MutationObserver) new root.MutationObserver(block).observe(doc.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['disabled'] });
+    doc.addEventListener('click', function (e) {
+      var a = e.target && e.target.closest ? e.target.closest('a[href]') : null;
+      if (!a || a.getAttribute('data-demo-exit')) return;
+      var h = a.getAttribute('href'), nh = demoUrl(h);
+      if (nh !== h) a.setAttribute('href', nh);
+    }, true);
+  }
+  if (DEMO && root.document) {
+    if (root.document.readyState === 'loading') root.document.addEventListener('DOMContentLoaded', setupDemo);
+    else setupDemo();
+  }
+
   // ---------------------------------------------------------------- API・セッション
 
   /** 統合API を呼ぶ。応答の JSON をそのまま返す（{ ok, ... }）。通信失敗は reject。 */
@@ -54,7 +113,7 @@
   /** ログインしていなければランチャーへ。していればセッションを返す。 */
   function requireSession() {
     var s = loadSession();
-    if (!s || !s.token) { root.location.replace(LAUNCHER_URL); return null; }
+    if (!s || !s.token) { root.location.replace(DEMO ? demoUrl(LAUNCHER_URL) : LAUNCHER_URL); return null; }
     return s;
   }
 
@@ -70,6 +129,14 @@
     }
     var req = { action: action, token: s.token };
     if (params) for (var k in params) req[k] = params[k];
+    if (DEMO) {
+      if (DEMO_WRITE[action]) {
+        var de = new Error('デモ表示では保存できません（仮の数字です）。');
+        de.code = 'DEMO_READONLY';
+        return Promise.reject(de);
+      }
+      req.demo = true;
+    }
     var reauthed = false;
     return callApi(req).then(function (res) {
       if (res && res.ok) return res;
@@ -185,6 +252,11 @@
    */
   function guardUnsaved(opts) {
     var doc = root.document;
+    // デモ表示：下書きを端末に残さない（本番の画面で復元されないように）・保存バーも出さない
+    if (DEMO) {
+      return { changed: function () {}, setState: function () {}, clearDraft: function () {}, showBanner: function () {},
+               confirmDiscard: function () { return true; } };
+    }
     var maxAge = opts.maxAgeDays == null ? 1 : opts.maxAgeDays;
     var state = '';
     var leavingNow = false;
@@ -329,7 +401,7 @@
   }
 
   var api_ = {
-    API_URL: API_URL, LAUNCHER_URL: LAUNCHER_URL, LS_SESSION: LS_SESSION,
+    API_URL: API_URL, LAUNCHER_URL: LAUNCHER_URL, LS_SESSION: LS_SESSION, DEMO: DEMO, demoUrl: demoUrl, now: now,
     configure: configure, callApi: callApi, api: api, loadSession: loadSession, saveSession: saveSession, clearSession: clearSession,
     requireSession: requireSession, readNum: readNum, esc: esc, ymd: ymd, jpDate: jpDate,
     showLoading: showLoading, hideLoading: hideLoading, toast: toast,

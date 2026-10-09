@@ -137,3 +137,7 @@ body{max-width:none;padding-bottom:0}
 .copyright{text-align:center;padding:4px 20px calc(20px + env(safe-area-inset-bottom));font-size:11px;color:rgba(0,0,0,.25);font-family:'Inter',sans-serif;letter-spacing:.5px}
 /* トーストは common.css。ランチャーには固定フッターが無いので下端に寄せる */
 .toast{bottom:calc(28px + env(safe-area-inset-bottom))}
+/* デモ表示（仮の数字）への入口（指示 20261009-092500）。デモ表示中は出さない */
+.demo-entry{text-align:center;padding:2px 20px 6px;font-size:12px}
+.demo-entry a{color:#c62828}
+body.demo-mode .demo-entry{display:none}
