@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#1c1c1e">
+<title>【TEST】本日の指示 入力</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:'Noto Sans JP','Inter',sans-serif;background:#e8e0d0;color:#1c1c1e;font-size:15px;line-height:1.5}
+.test{position:sticky;top:0;z-index:50;background:#d93025;color:#fff;text-align:center;font:bold 12px/1.4 system-ui,sans-serif;padding:3px 8px}
+.hd{background:#1c1c1e;color:#2ecc71;font-weight:900;font-size:20px;letter-spacing:2px;text-align:center;padding:14px 12px}
+.wrap{max-width:460px;margin:0 auto;padding:12px 12px 120px;display:grid;gap:14px}
+.card{background:#fff;border:1px solid #d6cfc0;border-radius:12px;padding:12px;display:grid;gap:8px}
+.card h2{margin:0;font-size:14px;letter-spacing:.1em;color:#6f6a60;display:flex;align-items:center;justify-content:space-between;gap:8px}
+select{font:inherit;font-size:14px;border:1px solid #cfc7b6;border-radius:8px;padding:6px;background:#fff;flex:0 0 8.2em}
+textarea,input[type=text]{width:100%;min-width:0;font:inherit;font-size:16px;border:1px solid #cfc7b6;border-radius:8px;padding:8px 10px;background:#fbfaf7;color:inherit}
+textarea{min-height:140px;resize:vertical}
+.btn{font:inherit;font-weight:700;border:0;border-radius:10px;padding:12px 16px;cursor:pointer;color:#fff;background:linear-gradient(160deg,#22a35a,#16783f)}
+.btn.sub{background:#fff;color:#1c1c1e;border:1px solid #cfc7b6}
+.btn.small{padding:6px 10px;font-size:13px}
+.btn.del{background:#fff;color:#c8321e;border:1px solid #e3b1a8;padding:6px 10px;font-size:13px}
+.note{font-size:12px;color:#6f6a60;margin:0}
+.item{border:1px solid #e4ddcf;border-radius:10px;padding:8px;display:grid;gap:6px;background:#fdfcf9}
+.line{display:flex;gap:6px;align-items:center}
+.line > input[type=text]{flex:1}
+.line .w-s{flex:0 0 6.5em}
+.line label{display:flex;align-items:center;gap:3px;font-size:13px;white-space:nowrap;color:#6b4700}
+.step{border-left:3px solid #e4ddcf;padding-left:6px;display:grid;gap:4px}
+.diffon input[type=text]{background:#fff2d6;border-color:#e0a325}
+.actions{position:fixed;left:0;right:0;bottom:0;background:#1c1c1e;padding:10px 12px calc(10px + env(safe-area-inset-bottom,0px));display:flex;gap:8px;justify-content:center;z-index:40}
+.actions .btn{flex:1;max-width:220px}
+.msg{font-size:13px;text-align:center;color:#2e7d4f;min-height:1.2em;margin:0}
+</style>
+</head>
+<body>
+<div class="test">試作（テスト用）・保存も公開もしません</div>
+<div class="hd">本日の指示 入力</div>
+<p style="text-align:center;margin:8px 0 0"><a href="index.html">← 従業員の画面へ戻る</a></p>
+<div class="wrap">
+  <div class="card">
+    <h2>話す（音声入力）</h2>
+    <textarea id="raw" placeholder="キーボードのマイクで話してください。例：おはよう。右の部屋は冷暖24にしてサーキュレーターつけて、加湿器は30分くらいつけたまま…"></textarea>
+    <button class="btn" id="totonoe" type="button">整える</button>
+    <p class="note">試作①では、話した内容に関係なく 10/9 の例を返します（AI は使いません）。</p>
+  </div>
+  <div id="editor"></div>
+  <p class="msg" id="msg"></p>
+</div>
+<div class="actions" id="actions" hidden>
+  <button class="btn sub" id="preview" type="button">見え方を確認</button>
+  <button class="btn" id="publish" type="button">公開</button>
+</div>
+<div id="shiji" hidden></div>
+
+<script src="shiji-notice.js"></script>
+<script>
+(function () {
+  'use strict';
+  var data = null;
+  var ed = document.getElementById('editor');
+  var msg = document.getElementById('msg');
+  var notice = ShijiNotice.mount(document.getElementById('shiji'), { data: { date: '', kyoten: '', changes: {} } });
+  var seq = 100;
+  function nid(p) { return p + (++seq); }
+
+  function h(tag, attrs, kids) {
+    var e = document.createElement(tag);
+    Object.keys(attrs || {}).forEach(function (k) {
+      if (k === 'on') Object.keys(attrs.on).forEach(function (ev) { e.addEventListener(ev, attrs.on[ev]); });
+      else if (k in e) e[k] = attrs[k]; else e.setAttribute(k, attrs[k]);
+    });
+    (kids || []).forEach(function (c) { if (c) e.appendChild(typeof c === 'string' ? document.createTextNode(c) : c); });
+    return e;
+  }
+  // obj[key] を直接書き換える入力欄
+  function txt(obj, key, ph, cls) {
+    return h('input', { type: 'text', value: obj[key] == null ? '' : obj[key], placeholder: ph || '', className: cls || '',
+      on: { input: function (e) { obj[key] = e.target.value; } } });
+  }
+  function diffBox(obj, wrap) {
+    var cb = h('input', { type: 'checkbox', checked: !!obj.diff, on: { change: function (e) {
+      obj.diff = e.target.checked; wrap.classList.toggle('diffon', obj.diff); } } });
+    wrap.classList.toggle('diffon', !!obj.diff);
+    return h('label', { title: '普段と違う（黄色）' }, [cb, '黄']);
+  }
+  function delBtn(arr, i) {
+    return h('button', { type: 'button', className: 'del', textContent: '削除', on: { click: function () { arr.splice(i, 1); render(); } } });
+  }
+  function addBtn(label, fn) {
+    return h('button', { type: 'button', className: 'btn sub small', textContent: '＋' + label, on: { click: function () { fn(); render(); } } });
+  }
+  function card(title, kids, add) {
+    return h('div', { className: 'card' }, [h('h2', {}, [title, add || null])].concat(kids));
+  }
+
+  // 手順（いつ・内容・補足・黄）
+  function stepsEditor(steps, withWhen) {
+    var box = h('div', { style: 'display:grid;gap:6px' });
+    steps.forEach(function (st, i) {
+      var w = h('div', { className: 'step' });
+      w.appendChild(h('div', { className: 'line' }, [withWhen ? txt(st, 'when', 'いつ', 'w-s') : null, txt(st, 'text', '内容')]));
+      w.appendChild(h('div', { className: 'line' }, [txt(st, 'note', '補足（黄色にしない部分）'), diffBox(st, w), delBtn(steps, i)]));
+      box.appendChild(w);
+    });
+    box.appendChild(addBtn('手順', function () { steps.push({ when: '', text: '' }); }));
+    return box;
+  }
+  function roomsCard(title, sec, prefix, withWhen, extra) {
+    var rows = sec.rows;
+    return card(title, (extra || []).concat(rows.map(function (r, i) {
+      return h('div', { className: 'item' }, [
+        h('div', { className: 'line' }, [txt(r, 'room', '部屋'), delBtn(rows, i)]),
+        stepsEditor(r.steps, withWhen)]);
+    })), addBtn('部屋', function () { rows.push({ id: nid(prefix), room: '', steps: [{ when: '', text: '' }] }); }));
+  }
+
+  function render() {
+    ed.innerHTML = '';
+    if (!data) return;
+    var d = data;
+    ed.appendChild(card('基本', [
+      h('div', { className: 'line' }, [txt(d, 'date', '日付 2026-10-09'), txt(d, 'kyoten', '拠点', 'w-s')]),
+      h('div', { className: 'line' }, [h('span', { className: 'note', textContent: '時期' }), txt(d, 'season', '春秋／夏冬', 'w-s')])]));
+
+    // 空調（エアコン・加湿器・サーキュレーター・扉・換気扇）：部屋 → いつ → 同時にやること
+    var kk = d.kankyou;
+    var KINDS = ['エアコン', '加湿器', 'サーキュレーター', '扉', '換気扇'];
+    ed.appendChild(card('空調（エアコン・加湿器・サーキュレーター・扉・換気扇）', [
+      h('div', { className: 'line' }, [h('span', { className: 'note', textContent: '見出し' }), txt(kk, 'title', '春秋：換気は扉全開＋換気扇')]),
+      h('p', { className: 'note', textContent: 'エアコンは「冷暖24」「冷房15」「暖房20」と書くと色が付きます（冷=青・暖=赤）。' })
+    ].concat(kk.rows.map(function (r, i) {
+      var steps = h('div', { style: 'display:grid;gap:6px' });
+      r.steps.forEach(function (st, j) {
+        var w = h('div', { className: 'step' });
+        var top = h('div', { className: 'line' }, [txt(st, 'when', 'いつ（着いたら・2巡目の前…）')]);
+        top.appendChild(diffBox(st, w)); top.appendChild(delBtn(r.steps, j));
+        w.appendChild(top);
+        st.items.forEach(function (x, m) {
+          var sel = h('select', { on: { change: function (e) { x.kind = e.target.value; } } },
+            KINDS.map(function (k) { return h('option', { value: k, textContent: k, selected: x.kind === k }); }));
+          var line = h('div', { className: 'line' }, [sel, txt(x, 'text', '設定（冷暖24・OFF・全開15分…）')]);
+          line.appendChild(diffBox(x, line)); line.appendChild(delBtn(st.items, m));
+          w.appendChild(line);
+        });
+        w.appendChild(addBtn('同時にやること', function () { st.items.push({ kind: 'エアコン', text: '' }); }));
+        steps.appendChild(w);
+      });
+      steps.appendChild(addBtn('タイミング', function () { r.steps.push({ when: '', items: [{ kind: 'エアコン', text: '' }] }); }));
+      return h('div', { className: 'item' }, [h('div', { className: 'line' }, [txt(r, 'room', '部屋'), delBtn(kk.rows, i)]), steps]);
+    })), addBtn('部屋', function () { kk.rows.push({ id: nid('e'), room: '', steps: [{ when: '', items: [{ kind: 'エアコン', text: '' }] }] }); })));
+
+    var k = d.karitori;
+    var kw = h('div', { className: 'line' }, [txt(k, 'text', '全部屋2巡刈り取り')]);
+    kw.appendChild(diffBox(k, kw));
+    ed.appendChild(card('刈り取り', [kw].concat(k.rows.map(function (r, i) {
+      return h('div', { className: 'item' }, [h('div', { className: 'line' }, [txt(r, 'room', '部屋'), delBtn(k.rows, i)]), stepsEditor(r.steps, false)]);
+    })), addBtn('部屋', function () { k.rows.push({ id: nid('k'), room: '', steps: [{ text: '' }] }); })));
+
+    ed.appendChild(card('袋出し・ラミネート・芽かき', d.nums.map(function (n, i) {
+      var w = h('div', { className: 'line' }, [txt(n, 'item', '項目', 'w-s'), txt(n, 'value', '値')]);
+      w.appendChild(diffBox(n, w)); w.appendChild(delBtn(d.nums, i));
+      return w;
+    }), addBtn('行', function () { d.nums.push({ id: nid('h'), item: '', value: '' }); })));
+
+    ed.appendChild(card('共有事項', d.kyouyuu.map(function (s, i) {
+      var w = h('div', { className: 'item' }, [
+        h('div', { className: 'line' }, [txt(s, 'text', '内容'), delBtn(d.kyouyuu, i)]),
+        h('div', { className: 'line' }, [txt(s, 'prev', '変更前（打ち消し線）'), txt(s, 'value', '変更後'), txt(s, 'after', '後ろ', 'w-s')])]);
+      return w;
+    }), addBtn('行', function () { d.kyouyuu.push({ id: nid('s'), text: '' }); })));
+
+    ed.appendChild(card('人ごと', d.hito.map(function (p, i) {
+      var tasks = h('div', { style: 'display:grid;gap:6px' });
+      p.tasks.forEach(function (t, j) {
+        var w = h('div', { className: 'step' }, [
+          h('div', { className: 'line' }, [txt(t, 'when', 'いつ', 'w-s'), txt(t, 'text', '作業')]),
+          h('div', { className: 'line' }, [txt(t, 'ref', '参照（小さく）')])]);
+        w.lastChild.appendChild(diffBox(t, w)); w.lastChild.appendChild(delBtn(p.tasks, j));
+        tasks.appendChild(w);
+      });
+      tasks.appendChild(addBtn('作業', function () { p.tasks.push({ when: '', text: '' }); }));
+      return h('div', { className: 'item' }, [
+        h('div', { className: 'line' }, [txt(p, 'name', '名字', 'w-s'), h('span', { textContent: 'さん' }), delBtn(d.hito, i)]),
+        h('div', { className: 'line' }, [txt(p, 'start', '開始 7:00〜', 'w-s'), txt(p, 'area', '場所'), txt(p, 'note', '補足')]),
+        tasks]);
+    }), addBtn('人', function () { d.hito.push({ id: nid('p'), name: '', tasks: [{ when: '', text: '' }] }); })));
+
+    ed.appendChild(card('普段のやり方（1行に1項目）', [
+      txt(d.fudan, 'title', '見出し'),
+      h('textarea', { value: d.fudan.items.join('\n'), on: { input: function (e) {
+        d.fudan.items = e.target.value.split('\n').map(function (x) { return x.trim(); }).filter(Boolean); } } })]));
+    document.getElementById('actions').hidden = false;
+  }
+
+  document.getElementById('totonoe').addEventListener('click', function () {
+    msg.textContent = '整えています…';
+    fetch('shiji-sample.json', { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (j) {
+      // 新規の下書きとして扱う（版・NEW・確認は公開時にサーバーが付ける）
+      j.ver = 0; j.changes = {}; j.acks = [];
+      data = j; render();
+      msg.textContent = '下書きを作りました。数字・文言を直して「公開」してください。';
+    }).catch(function () { msg.textContent = '例を読み込めませんでした'; });
+  });
+  document.getElementById('preview').addEventListener('click', function () {
+    var now = new Date().toISOString();
+    var d = JSON.parse(JSON.stringify(data));
+    d.publishedAt = d.updatedAt = now;
+    notice.setData(d); notice.open();
+  });
+  document.getElementById('publish').addEventListener('click', function () {
+    msg.textContent = '試作①のため公開しません（試作②でシートに保存します）。';
+    window.__shijiDraft = JSON.parse(JSON.stringify(data));
+  });
+})();
+</script>
+</body>
+</html>
