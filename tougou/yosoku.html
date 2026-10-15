@@ -453,8 +453,41 @@
     return '未入力の日：' + list.map(function (x) {
       var last = x.last ? Number(x.last.slice(5, 7)) + '/' + Number(x.last.slice(8, 10)) : 'なし';
       return (names[x.site] || x.site).replace('ハウス', '') + ' ' + (MISS_NAME[x.kind] || x.kind) + ' ' + x.days + '日（最終入力 ' + last + '）';
-    }).join('・') + '。袋出し・浸水の未入力の日は標準（設定の袋出しの標準・標準サイクル）で補っています（0個にはしません）。' +
+    }).join('・') + '。袋出しの未入力の日は指示（無ければ設定の標準）、浸水の未入力の日は標準サイクルで補っています（0個にはしません）。' +
       '月次ウォッチ・理論と出荷の差は記録のある日だけで計算し、補った日は混ぜません。';
+  }
+
+  // 記録の開始日と記録への置き換わり（設定 生産記録_開始日。指示 20261009-163000）
+  function recordFromHtml(si) {
+    if (!si) return '';
+    var mdOf = function (d) { return Number(d.slice(5, 7)) + '/' + Number(d.slice(8, 10)); };
+    var head = si.recordFrom
+      ? '<b>記録は ' + mdOf(si.recordFrom) + ' から。それより前は標準で推計</b>（袋出しの指示、無ければ設定の標準の個数。すでに棚にある菌床の見込みもここから出します）。'
+      : '記録の開始日（設定 生産記録_開始日）が空欄のため、すべての記録を使っています。';
+    var rp = (si.replace || []).filter(function (x) { return x.pct !== null || x.rec + x.est > 0; });
+    if (!rp.length) return head;
+    var pct = rp.map(function (x) { return x.bante + '番 ' + (x.pct === null ? '—' : Math.floor(x.pct * 100) + '%'); }).join('・');
+    var eta = rp.map(function (x) { return x.bante + '番 ' + (x.date ? mdOf(x.date) : '開始から' + x.lag + '日'); }).join('・');
+    return head + '<br><b>記録への置き換わり：' + pct + '</b>（表示している見込みのうち、記録から出た分の割合。' +
+      'これからの袋出しの予定から出る分は除く。毎日記録すれば、すべて記録になる目安：' + eta + '）';
+  }
+
+  // 袋出しの値の出どころ（期間ごと。今日まで 実績→指示→標準、明日以降 指示→標準。2026-10-09）
+  var SRC_NAME = { record: '実績', plan: '指示', std: '標準' };
+  function fukuroSourceHtml(si) {
+    var src = si && si.fukuroSource;
+    if (!src) return '';
+    var names = {}; ((si && si.std) || []).forEach(function (s) { names[s.site] = s.name; });
+    var mdOf = function (d) { return Number(d.slice(5, 7)) + '/' + Number(d.slice(8, 10)); };
+    var lines = Object.keys(src).sort().map(function (site) {
+      var runs = src[site].filter(function (x) { return x.max > 0 || x.src !== 'std'; });   // 標準0個の拠点・期間は出さない
+      if (!runs.length) return '';
+      return esc((names[site] || site).replace('ハウス', '')) + '：' + runs.map(function (x) {
+        var n = x.min === x.max ? fmt(x.min) + '個' : fmt(x.min) + '〜' + fmt(x.max) + '個';
+        return '<span class="src-' + x.src + '">' + mdOf(x.from) + (x.days > 1 ? '〜' + mdOf(x.to) : '') + ' ' + SRC_NAME[x.src] + ' ' + n + '/日</span>';
+      }).join('・');
+    }).filter(Boolean);
+    return lines.length ? '袋出しの値（期間ごと。今日まで 実績→指示→標準、明日以降 指示→標準）：<br>' + lines.join('<br>') : '';
   }
 
   function renderCapa(r) {
@@ -643,8 +676,10 @@
     $('basis').innerHTML = [
       '供給：生産記録（袋出し・浸水）から菌床を追いかけて計算。' + st.map(function (x) { return x.bante + '番 ' + x.grams + 'g'; }).join('・') +
         '（収穫の日別配分 ' + st[0].split.map(function (w) { return Math.round(w * 100); }).join('／') + '%）。' +
-        (s.synthetic && s.synthetic.length ? '袋出しの記録が無い日・明日以降は、設定の標準の個数（推計）で置いています（' + esc(s.synthetic.join('・')) + '）。' : '') +
+        (recordFromHtml(s) ? '<br>' + recordFromHtml(s) + '<br>' : '') +
+        (s.synthetic && s.synthetic.length ? '袋出しの記録が無い日・明日以降は、袋出しの指示、指示も無ければ設定の標準の個数（推計）で置いています（' + esc(s.synthetic.join('・')) + '）。' : '') +
         (s.std ? '袋出しの標準：' + s.std.map(function (x) { return esc(x.name) + ' ' + fmt(x.std) + '個/日'; }).join('・') + '。' : '') +
+        (fukuroSourceHtml(s) ? '<br>' + fukuroSourceHtml(s) + '<br>' : '') +
         (s.stdNote ? '<br>' + esc(s.stdNote) + '<br>' : '') +
         (s.recordMode ? '浸水は記録のある日（拠点×種別×日）は記録どおり、記録の無い日は標準サイクル（休養' + st[0].kyuyou + '日）。' : '浸水の記録がまだ無いので、標準サイクル（休養' + st[0].kyuyou + '日）で浸水するとみなしています。') +
         (missingText(s) ? '<br><b>' + esc(missingText(s)) + '</b>' : '') +

@@ -28,6 +28,29 @@
 .plan-line{background:#eef6ff;border:1px solid #bcd7f5;border-radius:var(--r);padding:8px 12px;margin-bottom:8px;font-size:14px;font-weight:700}
 .plan-edit{margin-top:6px;font-weight:400;display:flex;align-items:center;gap:6px}
 .plan-edit input{width:90px}
+/* 日ごとの入力／袋出しの指示（月）の切り替え（代表のみ。指示 153500） */
+.mode-sw{display:flex;gap:6px;margin-bottom:10px}
+.mode-sw button{flex:1;min-height:44px;border:1px solid var(--border);border-radius:var(--r);background:#fff;font-size:14px;font-weight:700;color:var(--sub)}
+.mode-sw button.on{background:#1c1c1e;color:#fff;border-color:#1c1c1e}
+.pm-tools{padding:10px 12px}
+.pm-row{display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:8px;font-size:14px}
+.pm-row input{width:70px}
+.pm-target{display:inline-flex;gap:4px}
+.pm-target .rtab{min-height:36px;padding:0 12px;border:1px solid var(--border);border-radius:var(--r);background:#fff;color:#1c1c1e}
+.pm-target .rtab.active{background:#1c1c1e;color:#fff}
+.pm-note{font-size:12px;color:var(--sub)}
+.pm-tbl td,.pm-tbl th{text-align:center}
+.pm-tbl .pm-day{text-align:left;white-space:nowrap;font-weight:700}
+.pm-wd{font-size:11px;margin-left:3px;color:var(--sub);font-weight:400}
+.pm-tbl tr.sat .pm-wd{color:#2563eb}
+.pm-tbl tr.sun .pm-wd{color:#dc2626}
+.pm-tbl tr.past td{background:#f6f6f6}
+.pm-tbl tr.today td{background:#eef6ff}
+.pm-cell input{width:72px;text-align:right}
+.pm-cell.chg input{background:#fff7d6;border-color:#e0b100;font-weight:700}
+.pm-act,.pm-std{font-size:11px;color:var(--sub);font-weight:400}
+.pm-hist{margin:12px 0 20px;font-size:13px}
+.pm-hist summary{cursor:pointer;color:var(--sub);padding:6px 0}
 </style>
 </head>
 <body>
@@ -43,14 +66,17 @@
 </div>
 
 <div class="screen" id="app">
+  <div class="mode-sw" id="modeSw" hidden><button type="button" data-mode="day" class="on">日ごとの入力</button><button type="button" data-mode="month">袋出しの指示（月）</button></div>
   <div id="msg"></div>
   <div id="form"></div>
+  <div id="planMonth" hidden></div>
 </div>
 
 <footer class="footer"><a href="./">🏠 ホームに戻る</a></footer>
 
 <script src="js/common.js"></script>
 <script src="js/seisan_form.js"></script>
+<script src="js/plan_month.js"></script>
 <script>
 (function () {
   'use strict';
@@ -58,20 +84,45 @@
   var session = C.requireSession();
   if (!session) return;
   var $ = function (id) { return document.getElementById(id); };
+  var msg = function (text, kind) {
+    $('msg').innerHTML = text ? '<div class="notice ' + (kind || 'info') + '">' + C.esc(text).replace(/\n/g, '<br>') + '</div>' : '';
+  };
 
   $('hDate').textContent = C.jpDate(C.now()) + '　' + (session.name || '');
+  var rep = session.role === '代表';
 
-  window.TougouSeisanForm.mount({
+  var form = window.TougouSeisanForm.mount({
     host: $('form'),
     siteTabs: $('siteTabs'),
-    msg: function (text, kind) {
-      $('msg').innerHTML = text ? '<div class="notice ' + (kind || 'info') + '">' + C.esc(text) + '</div>' : '';
-    },
+    msg: msg,
     pickDate: true,
-    planEdit: session.role === '代表',   // 袋出しの指示を入れる欄と、指示と実績の差（代表のみ。サーバも代表だけ受ける）
+    planEdit: rep,   // 袋出しの指示を入れる欄と、指示と実績の差（代表のみ。サーバも代表だけ受ける）
     draftKey: 'tougou.seisan.draft.v1',
     bannerHost: $('app')
   });
+
+  // 袋出しの指示を月単位で入れる（代表のみ。指示 153500）。?mode=month で開いたときは月の表から
+  if (!rep) return;
+  var month = null;
+  $('modeSw').hidden = false;
+  function setMode(m) {
+    var isMonth = m === 'month';
+    Array.prototype.forEach.call($('modeSw').children, function (b) { b.classList.toggle('on', b.dataset.mode === m); });
+    $('form').hidden = isMonth;
+    $('siteTabs').hidden = isMonth;
+    $('planMonth').hidden = !isMonth;
+    msg('');
+    if (isMonth && !month) month = window.TougouPlanMonth.mount({ host: $('planMonth'), msg: msg });
+    if (!isMonth && month && form.reload) form.reload();   // 月の表で直した指示を日ごとの欄にも出す
+  }
+  Array.prototype.forEach.call($('modeSw').children, function (b) {
+    b.onclick = function () {
+      if (b.classList.contains('on')) return;
+      setMode(b.dataset.mode);   // 月の表の保存していない変更は残る（戻れば続きから。閉じるときは離脱の警告）
+      if (b.dataset.mode === 'day' && month && month.isDirty()) msg('月の表に保存していない変更があります（「袋出しの指示（月）」に戻ると続きから保存できます）。', 'warn');
+    };
+  });
+  if (/[?&]mode=month(?:&|$)/.test(location.search)) setMode('month');
 })();
 </script>
 </body>

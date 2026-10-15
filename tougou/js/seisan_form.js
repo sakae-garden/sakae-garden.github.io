@@ -145,6 +145,55 @@
     }
     var outbox = (o.optimistic && cacheGet('outbox')) || [];   // [{ records:[{date,site,kind,value}], at }]
     function saveOutbox() { cachePut('outbox', outbox.length ? outbox : null); }
+    // 届いたか分からなかった足していく入力の ID（再送で同じ ID を使う＝サーバで1回だけ数える。指示 20261009-153500）。
+    // retry['日付|拠点|種別'] = { recs:[{ id, value }], total }。端末にも置く（入力欄に戻したまま閉じても ID を失わない）
+    var retry = cacheGet('retry') || {};
+    (function () {   // 3日より前の分は捨てる（その日の欄に戻すことはもう無い）
+      var old = C.ymd(new Date(Date.now() - 3 * 86400e3)), n = 0;
+      Object.keys(retry).forEach(function (k) { if (k.split('|')[0] < old) { delete retry[k]; n++; } });
+      if (n) cachePut('retry', Object.keys(retry).length ? retry : null);
+    })();
+    function saveRetry() { cachePut('retry', Object.keys(retry).length ? retry : null); }
+    function keepRetry(recs) {
+      recs.forEach(function (r) {
+        if (!r.id) return;
+        var k = r.date + '|' + r.site + '|' + r.kind, cur = retry[k] || (retry[k] = { recs: [], total: 0 });
+        if (cur.recs.some(function (x) { return x.id === r.id; })) return;
+        cur.recs.push({ id: r.id, value: r.value });
+        cur.total += Number(r.value) || 0;
+      });
+      saveRetry();
+    }
+    /**
+     * 遅れて届いていたと分かった ID は retry から外す（あとで同じ欄に入れた新しい入力を、前の ID で送らない）。
+     * 欄が戻したときの値のままなら、届いた分を欄から引く（そのまま再送して二重に足さない）
+     */
+    function dropArrivedRetry(date) {
+      var hit = false, cleared = [];
+      Object.keys(retry).forEach(function (k) {
+        var p = k.split('|');
+        if (p[0] !== date) return;
+        var rt = retry[k];
+        var got = rt.recs.filter(function (x) { return !x.arrived && st.entries.some(function (e) { return e.id === x.id; }); });
+        if (!got.length) return;
+        hit = true;
+        got.forEach(function (x) { x.arrived = true; });
+        var inp = inputs[p[2]];
+        if (p[1] === st.site && inp && C.readNum(inp.value) === rt.total) {
+          // 欄が戻したときの値のまま：届いた分を欄から引き、残り（まだ届いていない分）だけを再送の対象にする
+          rt.recs = rt.recs.filter(function (x) { return !x.arrived; });
+          rt.total = rt.recs.reduce(function (s, x) { return s + (Number(x.value) || 0); }, 0);
+          inp.value = rt.total > 0 ? String(rt.total) : '';
+          if (!rt.recs.length) delete retry[k];
+          cleared.push(KIND_NAME[p[2]]);
+        }
+        // 欄が違う（空・下書きをまだ戻していない・打ち直した）ときは「届いた」の印だけ付けて残す。
+        // 後でその値のまま保存されたら、足す前に確かめる（addRecsOf）
+      });
+      if (!hit) return;
+      saveRetry();
+      if (cleared.length) msg('前回の送信が届いていました（' + cleared.join('・') + '）。届いた分は欄から外しました。', 'info');
+    }
 
     function nowFull() {
       var d = new Date(), p2 = function (n) { return String(n).padStart(2, '0'); };
@@ -379,6 +428,7 @@
         st.entries = res.entries || [];
         st.plans = res.plans || [];
         st.loaded = true;
+        dropArrivedRetry(date);
         overlay();
         cachePut('rows', { date: date, rows: st.base, entries: st.entries, plans: st.plans });
         renderList();
@@ -416,17 +466,51 @@
       return kinds.map(function (k) { return { date: st.date, site: st.site, kind: k, value: p[k] }; });
     }
     function newId() { return 'c-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8); }
+    /**
+     * 足していく入力に ID を付ける。届いたか分からなかった入力（retry）がその日・拠点・種別にあれば、
+     * - 欄の値が届かなかった分の合計と同じ（そのまま「再送する」）→ 前と同じ ID・同じ値で送る（届いていればサーバは数えない）
+     * - 値を変えた → 前の最初の ID で新しい値を送る（前の分が届いていればサーバは数えず、画面で知らせる）
+     * どちらでも新しい ID は付けない（再送で二重に足さない）。retry は使ったら消す
+     */
+    function addRecsOf(r) {
+      var k = r.date + '|' + r.site + '|' + r.kind, rt = retry[k];
+      if (!rt || !rt.recs.length) return [Object.assign({ id: newId() }, r)];
+      delete retry[k]; saveRetry();
+      var left = rt.recs.filter(function (x) { return !x.arrived; });
+      if (!left.length) {
+        // 前の送信は全部届いていたと分かっている：同じ欄にもう一度入れたのが「さらに足す」なのか、再送のつもりなのかを確かめる
+        var sum = rt.recs.reduce(function (s, x) { return s + (Number(x.value) || 0); }, 0);
+        var again = root.confirm('さきほどの ' + KIND_NAME[r.kind] + ' ＋' + sum + UNIT[r.kind] + ' はすでに届いています。' +
+          '\nさらに ＋' + r.value + UNIT[r.kind] + ' を足しますか（キャンセルなら足しません）');
+        return again ? [Object.assign({ id: newId() }, r)] : [];
+      }
+      if (Number(r.value) === rt.total) return rt.recs.map(function (x) { return Object.assign({}, r, { id: x.id, value: x.value, retry: true }); });
+      return [Object.assign({}, r, { id: left[0].id, retry: true, changed: true })];
+    }
     /** 送る単位に分ける：上書き（upsertMany）と足していく入力（add。1件ずつ ID を付ける） */
     function jobsOf(records) {
       var up = records.filter(function (r) { return !isAdd(r.kind); });
-      var add = records.filter(function (r) { return isAdd(r.kind); }).map(function (r) { return Object.assign({ id: newId() }, r); });
+      var add = [];
+      records.filter(function (r) { return isAdd(r.kind); }).forEach(function (r) { add = add.concat(addRecsOf(r)); });
       var jobs = [], at = nowFull();
       if (up.length) jobs.push({ type: 'upsert', records: up, at: at });
       if (add.length) jobs.push({ type: 'add', records: add, at: at });
       return jobs;
     }
     function callJob(job) {
-      if (job.type === 'add') return C.api('production.add', { records: job.records });
+      if (job.type === 'add') {
+        var send = job.records.map(function (r) { return { id: r.id, date: r.date, site: r.site, kind: r.kind, value: r.value }; });
+        return C.api('production.add', { records: send }).then(function (res) {
+          // 再送で、前の送信がすでに届いていた（サーバが同じ ID を数えなかった）
+          var dups = ((res && res.results) || []).filter(function (x) { return x.dup; });
+          if (dups.length) {
+            var changed = job.records.some(function (r) { return r.changed; });
+            C.toast('前回の送信が届いていました（二重には足していません）');
+            if (changed) msg('前回の送信がすでに届いていたので、変えた値は足していません。合計を確かめて、違えば入れ直すか取り消してください。', 'warn');
+          }
+          return res;
+        });
+      }
       if (job.type === 'cancel') return C.api('production.cancel', { id: job.records[0].id });
       return C.api('production.upsertMany', { records: job.records });
     }
@@ -437,6 +521,7 @@
       if (!records) return Promise.resolve(false);
       if (!records.length) return Promise.resolve(true);
       var jobs = jobsOf(records);
+      if (!jobs.length) { fillInputs(false); guard.changed(); msg('足しませんでした（さきほどの入力は届いています）。', 'info'); return Promise.resolve(true); }
       records = jobs.filter(function (j) { return j.type === 'upsert'; }).map(function (j) { return j.records; })[0] || [];
       var result = null;
       var started = C.runOnce('save', el.save, '保存しています…', function () {
@@ -456,7 +541,10 @@
           return load(true).then(function (loaded) {
             var ok = loaded && jobs.every(jobArrived);
             if (ok) { guard.setState(''); msg(''); C.toast('保存を確認しました'); fillInputs(); guard.changed(); result = true; }
-            else { guard.setState('unknown'); msg('保存を確認できませんでした。電波の良い所で「再送する」を押してください（同じ内容を送っても二重にはなりません）。', 'warn'); result = false; }
+            else {
+              // 足していく入力は「再送する」で同じ ID を使う（最初の送信が届いていれば二重に足さない）
+              jobs.forEach(function (j) { if (j.type === 'add') keepRetry(j.records); });
+              guard.setState('unknown'); msg('保存を確認できませんでした。電波の良い所で「再送する」を押してください（同じ内容を送っても二重にはなりません）。', 'warn'); result = false; }
           });
         });
       });
@@ -472,7 +560,9 @@
       var records = collect();
       if (!records) return Promise.resolve(false);
       if (!records.length) return Promise.resolve(true);
-      outbox = outbox.concat(jobsOf(records));
+      var jobs = jobsOf(records);
+      if (!jobs.length) { fillInputs(false); guard.changed(); msg('足しませんでした（さきほどの入力は届いています）。', 'info'); return Promise.resolve(true); }
+      outbox = outbox.concat(jobs);
       saveOutbox();
       overlay();
       fillInputs(false);
@@ -553,6 +643,7 @@
         else recs = recs.concat(job.records.map(function (r) { return Object.assign({ _add: job.type === 'add' }, r); }));
       });
       outbox = []; saveOutbox();
+      keepRetry(recs.filter(function (r) { return r._add; }));   // 「再送する」では同じ ID で送る
       overlay();
       var mine = recs.filter(function (r) { return r.date === st.date; });
       var site = mine.length ? mine[0].site : st.site;
@@ -568,7 +659,7 @@
       var addSum = {};
       mine.forEach(function (r) {
         if (r.site !== site || typed[r.kind]) return;
-        // 足していく入力は、届かなかった分を合わせて欄に戻す（送り直すと新しい入力として足す）
+        // 足していく入力は、届かなかった分を合わせて欄に戻す（送り直すときは前と同じ ID で送る＝届いていれば二重に足さない）
         if (r._add) addSum[r.kind] = (addSum[r.kind] || 0) + r.value;
         inputs[r.kind].value = String(r._add ? addSum[r.kind] : r.value);
         st.touched[r.kind] = true;

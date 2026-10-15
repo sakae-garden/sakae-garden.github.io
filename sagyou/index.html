@@ -162,6 +162,9 @@ body.form-yday .page#p1{background:#fff4e5}
   var LS_PERSON = 'sagyou.person';       // { id, surname }
   var LS_EMPS = 'sagyou.employees';      // [{ id, surname }]
   var SHIFT_URL = '/eigarden-shift-app/saibai.html';   // 栽培シフト
+  // デモ（?demo=1）の試し入力は端末の控え（送信待ち・再送の ID・一覧）を本番と分ける。
+  // 同じキーだと、デモで送れなかった入力が本番の画面で「再送する」に出て、本番に送られうるため（指示 20261009-163000）
+  var CACHE_KEY = C.DEMO ? 'sagyou.demo.cache' : 'sagyou.cache';
 
   function lsGet(k) { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) { return null; } }
   function lsPut(k, v) { try { if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* 無視 */ } }
@@ -246,7 +249,7 @@ body.form-yday .page#p1{background:#fff4e5}
         draftKey: 'sagyou.draft.v1',
         bannerHost: $('app'),
         linkSelector: '.no-such-link',
-        cacheKey: 'sagyou.cache',
+        cacheKey: CACHE_KEY,
         initialOptions: INITIAL_OPTIONS,
         optimistic: true,
         additive: true,          // 袋出し・浸水は足していく（複数人・複数回の入力で消えない。指示 092000）
@@ -261,7 +264,7 @@ body.form-yday .page#p1{background:#fff4e5}
 
   $('whoBtn').onclick = function () {
     if (form && form.isDirty()) { C.toast('保存していない入力があります。保存してから切り替えてください'); return; }
-    if (lsGet('sagyou.cache.outbox')) { C.toast('送信中です。少し待ってから切り替えてください'); return; }
+    if (lsGet(CACHE_KEY + '.outbox')) { C.toast('送信中です。少し待ってから切り替えてください'); return; }
     if (!confirm(person.surname + 'さんから別の人に切り替えますか？')) return;
     lsPut(LS_PERSON, null);
     C.clearSession();

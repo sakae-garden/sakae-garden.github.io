@@ -35,16 +35,16 @@
 
   /*
    * デモ表示（指示 20261009-092500）。URL に ?demo=1 があるときだけ。
-   *   - すべての要求に demo:true を付ける（GAS はデモ用シートを読み、書き込みは断る。Demo.gs）
-   *   - 書き込みの要求は送らずに断る（サーバでも断るので二重の守り）
-   *   - 画面の最上部に赤い帯を常に出し、保存・上書きのボタンを押せなくする。下書きは端末に残さない
+   *   - すべての要求に demo:true を付ける（GAS はデモ用シートを読み書きし、本番の生産シートは開かない。Demo.gs）
+   *   - 袋出し・浸水・収穫・袋出しの指示は、デモ用シートに試し入力できる（指示 20261009-163000）。
+   *     今日の予定の上書き（today.setPlan）だけは送らずに断り、ボタンも押せなくする（サーバでも断るので二重の守り）
+   *   - 画面の最上部に赤い帯を常に出す。統合アプリの画面では帯に「デモの数字を最初の状態に戻す」を出す（作業記録には出さない）
+   *   - 下書きは端末に残さない
    *   - アプリ内のリンクにも ?demo=1 を付けて、デモのまま画面を移れるようにする
    */
   var DEMO = !!(root.location && /[?&]demo=1(?:&|$)/.test(root.location.search || ''));
-  var DEMO_WRITE = { 'production.upsert': 1, 'production.upsertMany': 1, 'production.add': 1, 'production.cancel': 1,
-                     'production.planSet': 1, 'today.setPlan': 1 };
-  var DEMO_BLOCK = '.submit-btn[data-el="save"], [data-el="planSave"], .plan-btn[data-act="edit"], .plan-btn[data-act="save"], ' +
-                   '.plan-btn[data-act="reset"], .add-cancel, .unsaved-bar button';
+  var DEMO_WRITE = { 'today.setPlan': 1 };
+  var DEMO_BLOCK = '.plan-btn[data-act="edit"], .plan-btn[data-act="save"], .plan-btn[data-act="reset"]';
   var DEMO_TODAY = '2026-10-09';   // GAS の Demo.gs と同じ。デモでは「今日」をこの日に固定する
   /** 画面に出す「今」。デモでは DEMO_TODAY（時刻は今のまま）。 */
   function now() {
@@ -65,17 +65,39 @@
     css.textContent = '.demo-banner{position:sticky;top:0;z-index:9999;background:#c62828;color:#fff;font-weight:700;text-align:center;' +
       'padding:8px 10px;font-size:14px;line-height:1.4;box-shadow:0 2px 6px rgba(0,0,0,.25)}' +
       '.demo-banner a{color:#fff;text-decoration:underline;font-weight:400;margin-left:8px;font-size:12px}' +
+      '.demo-banner .demo-reset{margin-left:8px;padding:2px 8px;border:1px solid #fff;border-radius:6px;background:transparent;color:#fff;' +
+      'font:inherit;font-size:12px;font-weight:400;cursor:pointer}' +
       'body.demo-mode .demo-off{opacity:.35;pointer-events:none}';
     doc.head.appendChild(css);
     var b = doc.createElement('div');
     b.id = 'demo_banner'; b.className = 'demo-banner';
-    b.innerHTML = 'デモ表示（仮の数字）— 本番のデータではありません<a href="' + LAUNCHER_URL + '" data-demo-exit="1">本番に戻る</a>';
+    // 作業記録（/sagyou/）は従業員向けなので、最初の状態に戻すボタンは統合アプリの画面にだけ出す
+    var withReset = !/\/sagyou\//.test((root.location && root.location.pathname) || '');
+    b.innerHTML = 'デモ（仮の数字）— ここで入れた数字は本番に入りません' +
+      (withReset ? '<button type="button" class="demo-reset" data-el="demoReset">デモの数字を最初の状態に戻す</button>' : '') +
+      '<a href="' + LAUNCHER_URL + '" data-demo-exit="1">本番に戻る</a>';
     doc.body.insertBefore(b, doc.body.firstChild);
     doc.body.classList.add('demo-mode');
+    var rb = b.querySelector('[data-el="demoReset"]');
+    if (rb) rb.onclick = function () {
+      if (!root.confirm('デモで試しに入れた数字を取り消して、最初の仮の数字に戻しますか？（本番のデータには関係ありません）')) return;
+      rb.disabled = true;
+      showLoading('デモの数字を戻しています...');
+      api('demo.reset').then(function (res) {
+        hideLoading();
+        var n = (res.records || 0) + (res.plans || 0) + (res.entries || 0);
+        toast(n ? '最初の状態に戻しました' : '試しに入れた数字はありません');
+        if (n) setTimeout(function () { root.location.reload(); }, 600);
+        else rb.disabled = false;
+      }, function (err) {
+        hideLoading(); rb.disabled = false;
+        toast('戻せませんでした：' + err.message);
+      });
+    };
     var block = function () {
       Array.prototype.forEach.call(doc.querySelectorAll(DEMO_BLOCK), function (el) {
         if (el.disabled && el.classList.contains('demo-off')) return;
-        el.disabled = true; el.classList.add('demo-off'); el.title = 'デモ表示では保存できません';
+        el.disabled = true; el.classList.add('demo-off'); el.title = 'デモ表示では今日の予定は変えられません';
       });
     };
     block();
