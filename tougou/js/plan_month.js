@@ -7,7 +7,8 @@
  * - 後から1日単位で直せる（欄を直して保存。過去の日も直せる）。変更の履歴（いつ・誰が・前→後）はサーバの「袋出し指示_履歴」
  *
  * TougouPlanMonth.mount({ host, msg, month? }) → { ready, isDirty }
- * 純粋な部品（tests/plan_month_test.js で検算）：weekday・fillAll・fillWeek・fromPrev・changes
+ * - 開いたときの月は、毎月25日以降は翌月・それ以外は今月（defaultMonth。◀▶と月の欄で切り替えられる）
+ * 純粋な部品（tests/plan_month_test.js で検算）：weekday・defaultMonth・fillAll・fillWeek・fromPrev・changes
  */
 (function (root) {
   'use strict';
@@ -19,6 +20,13 @@
     var y = Number(ym.slice(0, 4)), m = Number(ym.slice(5, 7)) - 1 + n;
     y += Math.floor(m / 12); m = ((m % 12) + 12) % 12;
     return y + '-' + String(m + 1).padStart(2, '0');
+  }
+
+  /** 表を開いたときの月：毎月25日以降は翌月、それ以外は今月（2026-10-15 杉さん決定。前の月に翌月の指示を入れやすく） */
+  var NEXT_MONTH_FROM_DAY = 25;
+  function defaultMonth(today) {
+    var ym = String(today).slice(0, 7);
+    return Number(String(today).slice(8, 10)) >= NEXT_MONTH_FROM_DAY ? addMonth(ym, 1) : ym;
   }
 
   /** 表の値は edit['拠点|日付'] = '' | '数字の文字列'。sites：補助をかける拠点の id の配列 */
@@ -227,11 +235,11 @@
     };
     root.addEventListener('beforeunload', function (e) { if (isDirty()) { e.preventDefault(); e.returnValue = ''; } });
 
-    var first = st.month || (o.today || C.ymd(C.now ? C.now() : new Date())).slice(0, 7);
+    var first = st.month || defaultMonth(o.today || C.ymd(C.now ? C.now() : new Date()));
     return { ready: load(first), isDirty: isDirty, load: load };
   }
 
-  var api = { mount: mount, weekday: weekday, isWeekend: isWeekend, addMonth: addMonth,
+  var api = { mount: mount, weekday: weekday, isWeekend: isWeekend, addMonth: addMonth, defaultMonth: defaultMonth,
               fillAll: fillAll, fillWeek: fillWeek, fromPrev: fromPrev, changes: changes };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.TougouPlanMonth = api;

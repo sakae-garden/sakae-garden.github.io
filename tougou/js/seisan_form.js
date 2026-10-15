@@ -25,6 +25,8 @@
  *   nameOf(row) … 一覧の入力者の表示（既定は row.empName）
  *   additive  … true なら袋出し・浸水は「足していく」入力（＋○個・＋○タンクをその日の合計に足す。production.add）。
  *               合計と入力者ごとの内訳を出し、自分の入力を1件ずつ取り消せる（production.cancel）。収穫は上書きのまま（指示 092000）
+ *               袋出し・浸水（2番用・3番用）には「今日は○○無し」のボタンを出す（production.none。0＝作業無しとして記録。
+ *               自分の分は取り消せる。数を足すと自動で外れる。2026-10-15 案b）
  *   dayToggle … true なら「今日／昨日」の切り替えを出す。昨日のあいだは画面の色を変えて「昨日（○/○）の分を入力中」と出す
  *   confirmOverwrite … true なら収穫にすでに値があるとき「すでに ○kg（入力者）が入っています。上書きしますか」と確かめる
  *   planEdit  … true なら袋出しの指示（予定の個数）を入れる欄と、指示と実績の差を出す（代表。production.planSet）。
@@ -50,6 +52,8 @@
   var LS_SITE = 'tougou.today.site';          // GAS 版と同じキー（端末で前回選んだ拠点）
   var ADD_KINDS = { fukurodashi: 1, shinsui_1: 1, shinsui_2: 1, shinsui_3: 1 };   // 足していく入力の種別（Production.gs の PROD_ADD_KINDS と同じ）
   var UNIT = { fukurodashi: '個', shinsui_1: 'タンク', shinsui_2: 'タンク', shinsui_3: 'タンク' };
+  // 「今日は○○無し」のボタンを出す種別（2026-10-15 杉さん決定 案b。4番用は例外なので出さない）。押すと 0（作業無し）として記録する
+  var NONE_KINDS = { fukurodashi: 1, shinsui_1: 1, shinsui_2: 1 };
 
   function addDays(ymd, n) {
     var p = ymd.split('-').map(Number), d = new Date(p[0], p[1] - 1, p[2] + n);
@@ -204,13 +208,13 @@
       return s ? (s.name || s.id) : id;
     }
     /** 送信待ちを一覧の行の形にする（シートの1行と同じ列名） */
-    function pendingRow(rec) {
+    function pendingRow(rec, none) {
       var info = KIND_INFO[rec.kind], me = o.me || {};
       return {
         '拠点': rec.site, '種別': info[0], '入力値': String(rec.value), '入力単位': info[1],
         '個数': info[1] === 'タンク' ? rec.value * st.tank : info[1] === '個' ? rec.value : '',
         '入力者': me.empId || '', '更新日時': nowFull(), siteName: siteName(rec.site),
-        empName: me.name || '', empSurname: me.name || '', kind: rec.kind, _pending: true
+        empName: me.name || '', empSurname: me.name || '', kind: rec.kind, none: !!none, _pending: true
       };
     }
     function overlay() {
@@ -222,14 +226,30 @@
           var i = -1;
           rows.forEach(function (r, j) { if (r['拠点'] === rec.site && r.kind === rec.kind) i = j; });
           if (type === 'upsert') { if (i >= 0) rows[i] = pendingRow(rec); else rows.push(pendingRow(rec)); return; }
+          var same = function (e) { return e.site === rec.site && e.kind === rec.kind; };
+          if (type === 'none') {
+            // 作業無し：その日の行は 0（作業無し）
+            var pn = pendingRow({ site: rec.site, kind: rec.kind, value: 0 }, true);
+            if (i >= 0) rows[i] = pn; else rows.push(pn);
+            ents.push({ id: rec.id, at: nowFull(), date: rec.date, site: rec.site, kind: rec.kind, value: 0, none: true,
+                        empId: me.empId || '', surname: me.name || '', _pending: true });
+            return;
+          }
           // 足していく入力・取り消し：合計を送信待ちの分だけ動かす
           var cur = i >= 0 ? (C.readNum(rows[i]['入力値']) || 0) : 0;
           var sign = type === 'add' ? 1 : -1;
           var pr = pendingRow({ site: rec.site, kind: rec.kind, value: Math.max(0, cur + sign * rec.value) });
           if (i >= 0) rows[i] = pr; else rows.push(pr);
-          if (type === 'add') ents.push({ id: rec.id, at: nowFull(), date: rec.date, site: rec.site, kind: rec.kind, value: rec.value,
-                                          empId: me.empId || '', surname: me.name || '', _pending: true });
-          else ents = ents.filter(function (e) { return e.id !== rec.id; });
+          if (type === 'add') {
+            // 数を足すと作業無しは自動で外れる（サーバと同じ）
+            ents = ents.filter(function (e) { return !(e.none && same(e)); });
+            ents.push({ id: rec.id, at: nowFull(), date: rec.date, site: rec.site, kind: rec.kind, value: rec.value,
+                        empId: me.empId || '', surname: me.name || '', _pending: true });
+          } else {
+            ents = ents.filter(function (e) { return e.id !== rec.id; });
+            // 有効な入力が1件も無くなった（作業無しの取り消しなど）：未入力に戻る（サーバは入力値を空欄にする）
+            if (st.entries.some(same) && !ents.some(same)) rows = rows.filter(function (r) { return !(r['拠点'] === rec.site && r.kind === rec.kind); });
+          }
         });
       });
       st.rows = rows;
@@ -316,9 +336,23 @@
       if (!box) return;
       var total = C.readNum(serverValue(k)) || 0, unit = UNIT[k], me = (o.me || {}).empId;
       var bd = breakdown(st.site, k);
-      var h = '<div class="add-sum">' + dayWord() + 'の合計 <b>' + total.toLocaleString() + unit + '</b>' +
-        (unit === 'タンク' && total ? '（' + (total * st.tank).toLocaleString() + '個）' : '') + (bd ? '（' + C.esc(bd) + '）' : '') + '</div>';
-      var mine = entsOf(st.site, k).filter(function (e) { return e.empId === me; });
+      var nones = entsOf(st.site, k).filter(function (e) { return e.none; });
+      var h;
+      if (nones.length) {
+        // 作業無し：誰がいつ押したか。自分の分は取り消せる（押し間違い）
+        var nz = nones[0];
+        h = '<div class="add-sum add-none-on">' + noneLabel(k) + '（' + C.esc(nz.surname || nz.empId || '') + ' ' + C.esc(String(nz.at).slice(11, 16)) + '）' +
+          (nz._pending ? ' 送信中' : nz.empId === me ? '<button type="button" class="add-cancel" data-id="' + C.esc(nz.id) + '">取り消す</button>' : '') + '</div>';
+      } else {
+        h = '<div class="add-sum">' + dayWord() + 'の合計 <b>' + total.toLocaleString() + unit + '</b>' +
+          (unit === 'タンク' && total ? '（' + (total * st.tank).toLocaleString() + '個）' : '') + (bd ? '（' + C.esc(bd) + '）' : '') + '</div>';
+        // まだ何も入っていない（数の入力も作業無しも無い）日だけ「無し」のボタンを出す。欄に数を入れている間は出さない
+        var typed = C.readNum(inputs[k].value);
+        if (NONE_KINDS[k] && st.site && !total && !entsOf(st.site, k).length && !(typed > 0)) {
+          h += '<button type="button" class="add-none" data-none="' + k + '">' + noneLabel(k) + '</button>';
+        }
+      }
+      var mine = entsOf(st.site, k).filter(function (e) { return e.empId === me && !e.none; });
       if (mine.length) {
         h += '<div class="add-mine">' + mine.map(function (e) {
           return '<span class="add-item">あなたの入力 ＋' + C.esc(e.value) + unit + '（' + C.esc(String(e.at).slice(11, 16)) + '）' +
@@ -329,7 +363,12 @@
       Array.prototype.forEach.call(box.querySelectorAll('.add-cancel'), function (b) {
         b.onclick = function () { cancelEntry(b.dataset.id); };
       });
+      Array.prototype.forEach.call(box.querySelectorAll('.add-none'), function (b) {
+        b.onclick = function () { pressNone(b.dataset.none); };
+      });
     }
+    /** 「今日は袋出し無し」「昨日は浸水（2番用）無し」 */
+    function noneLabel(k) { return dayWord() + 'は' + KIND_NAME[k] + '無し'; }
     function renderRowMarks() {
       KINDS.forEach(function (k) {
         var row = q('[data-row="' + k + '"]');
@@ -406,8 +445,8 @@
         if (r['拠点'] !== last) { last = r['拠点']; h += '<tr class="grp"><td colspan="4">' + C.esc(r.siteName) + '</td></tr>'; }
         h += '<tr' + (Number(r['入力値']) === 0 ? ' class="zero"' : '') + '>' +
           '<td>' + C.esc(KIND_NAME[r.kind] || String(r['種別']).replace('収穫_', '収穫 ')) + '</td>' +
-          '<td class="num">' + C.esc(r['入力値'] + ' ' + r['入力単位']) + '</td>' +
-          '<td class="num">' + (r['個数'] ? Number(r['個数']).toLocaleString() + '個' : '') + '</td>' +
+          '<td class="num">' + (r.none ? '作業無し' : C.esc(r['入力値'] + ' ' + r['入力単位'])) + '</td>' +
+          '<td class="num">' + (r['個数'] && !r.none ? Number(r['個数']).toLocaleString() + '個' : '') + '</td>' +
           '<td>' + C.esc(isAdd(r.kind) && breakdown(r['拠点'], r.kind)
             ? breakdown(r['拠点'], r.kind) + (r._pending ? ' 送信中' : '')
             : who(r) + ' ' + (r._pending ? '送信中' : String(r['更新日時']).slice(11, 16))) + '</td></tr>';
@@ -512,6 +551,9 @@
         });
       }
       if (job.type === 'cancel') return C.api('production.cancel', { id: job.records[0].id });
+      if (job.type === 'none') {
+        return C.api('production.none', { records: job.records.map(function (r) { return { id: r.id, date: r.date, site: r.site, kind: r.kind }; }) });
+      }
       return C.api('production.upsertMany', { records: job.records });
     }
 
@@ -584,7 +626,7 @@
     function jobArrived(job) {
       var has = function (id) { return st.entries.some(function (e) { return e.id === id; }); };
       return job.records.every(function (rec) {
-        if (job.type === 'add') return rec.date === st.date && has(rec.id);
+        if (job.type === 'add' || job.type === 'none') return rec.date === st.date && has(rec.id);
         if (job.type === 'cancel') return rec.date === st.date && !has(rec.id);
         return arrived(rec);
       });
@@ -593,8 +635,9 @@
     function cancelEntry(id) {
       var e = st.ents.filter(function (x) { return x.id === id; })[0];
       if (!e) return;
-      if (!root.confirm(KIND_NAME[e.kind] + ' ＋' + e.value + UNIT[e.kind] + '（' + String(e.at).slice(11, 16) + ' の入力）を取り消しますか')) return;
-      var job = { type: 'cancel', records: [{ id: e.id, date: e.date, site: e.site, kind: e.kind, value: Number(e.value) || 0 }], at: nowFull() };
+      if (!root.confirm(e.none ? '「' + noneLabel(e.kind) + '」を取り消しますか（未入力に戻ります）'
+                               : KIND_NAME[e.kind] + ' ＋' + e.value + UNIT[e.kind] + '（' + String(e.at).slice(11, 16) + ' の入力）を取り消しますか')) return;
+      var job = { type: 'cancel', records: [{ id: e.id, date: e.date, site: e.site, kind: e.kind, value: Number(e.value) || 0, none: !!e.none }], at: nowFull() };
       if (!o.optimistic) {
         C.showLoading('取り消し中...');
         C.api('production.cancel', { id: id }).then(function () { C.hideLoading(); C.toast('取り消しました'); return load(true); },
@@ -605,6 +648,23 @@
       overlay(); renderRowMarks(); renderList();
       guard.setState('saving');
       C.toast('取り消しました');
+      pump();
+    }
+    /** 「今日は○○無し」：その日・拠点・種別を 0（作業無し）として記録する（送信は保存と同じ順番待ちに載せる） */
+    function pressNone(k) {
+      if (!st.site) { msg('拠点を選んでください。', 'ng'); return; }
+      var rec = { id: newId(), date: st.date, site: st.site, kind: k, value: 0 };
+      if (!o.optimistic) {
+        C.showLoading('保存中...');
+        C.api('production.none', { records: [{ id: rec.id, date: rec.date, site: rec.site, kind: rec.kind }] }).then(function () {
+          C.hideLoading(); C.toast('「' + noneLabel(k) + '」を記録しました'); return load(true);
+        }, function (err) { C.hideLoading(); msg('記録できませんでした：' + err.message, 'ng'); });
+        return;
+      }
+      outbox.push({ type: 'none', records: [rec], at: nowFull() }); saveOutbox();
+      overlay(); renderRowMarks(); renderList();
+      guard.setState('saving');
+      C.toast('「' + noneLabel(k) + '」を記録しました');
       pump();
     }
     function pump() {
@@ -637,9 +697,10 @@
      * 拠点が今と違えばその拠点に切り替える。ほかの拠点・日付の分は文言で知らせる。
      */
     function giveBack(state, text) {
-      var recs = [], cancels = [];
+      var recs = [], cancels = [], nones = [];
       outbox.forEach(function (job) {
         if (job.type === 'cancel') cancels = cancels.concat(job.records);
+        else if (job.type === 'none') nones = nones.concat(job.records);   // 欄に戻すものは無い（もう一度押してもらう）
         else recs = recs.concat(job.records.map(function (r) { return Object.assign({ _add: job.type === 'add' }, r); }));
       });
       outbox = []; saveOutbox();
@@ -668,8 +729,11 @@
         return r.date + ' ' + siteName(r.site) + ' ' + KIND_NAME[r.kind] + ' ' + (r._add ? '＋' : '') + r.value;
       });
       if (cancels.length) text += '\n取り消しが届いていない入力があります：' + cancels.map(function (r) {
-        return r.date + ' ' + siteName(r.site) + ' ' + KIND_NAME[r.kind] + ' ＋' + r.value;
+        return r.date + ' ' + siteName(r.site) + ' ' + KIND_NAME[r.kind] + (r.none ? ' 作業無し' : ' ＋' + r.value);
       }).join('、') + '（もう一度「取り消す」を押してください）';
+      if (nones.length) text += '\n「無し」が届いていません：' + nones.map(function (r) {
+        return r.date + ' ' + siteName(r.site) + ' ' + KIND_NAME[r.kind];
+      }).join('、') + '（もう一度「無し」を押してください）';
       renderRowMarks(); renderList();
       guard.changed();
       guard.setState(state);
