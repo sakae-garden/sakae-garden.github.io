@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#1c1c1e">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="/tougou/icons/apple-touch-icon.png">
+<title>栄ガーデン</title>
+<script>
+/*
+ * 入口（統合アプリ完成 A）。通信なしで出す。下のボタンは普通のリンクなので、この script が壊れても動く。
+ *   ?pick=1 が無ければ、前回の入口（sg.entry）へそのまま移る。マスタの入口列で固定された人（sg.person.entry）はそちらを優先
+ *   ?demo=1 は行き先にも付ける
+ */
+(function () {
+  try {
+    var q = location.search || '';
+    var demo = /[?&]demo=1(?:&|$)/.test(q) ? '?demo=1' : '';
+    var PAGES = { haitatsu: 'haitatsu.html', sagyou: 'sagyou.html', kanri: 'kanri.html' };
+    if (/[?&]pick=1(?:&|$)/.test(q)) return;
+    var p = JSON.parse(localStorage.getItem('sg.person') || 'null');
+    var fixed = p && (p.entry === 'haitatsu' || p.entry === 'sagyou') ? p.entry : '';
+    var e = fixed || localStorage.getItem('sg.entry') || '';
+    if (PAGES[e]) location.replace(PAGES[e] + demo);
+  } catch (err) { /* 記憶が読めなければ入口を出す */ }
+})();
+</script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{min-height:100%;background:#f5f3ee;color:#1c1c1e;
+  font-family:'Noto Sans JP','Hiragino Sans','Yu Gothic UI',sans-serif;-webkit-tap-highlight-color:transparent}
+body{max-width:480px;margin:0 auto}
+.hdr{background:#1c1c1e;color:#fff;text-align:center;padding:calc(28px + env(safe-area-inset-top)) 16px 18px}
+.hdr .co{font-size:24px;font-weight:700;letter-spacing:2px;color:#2ecc71}
+.hdr .dt{margin-top:6px;font-size:15px;color:rgba(255,255,255,.75);letter-spacing:1px}
+.main{padding:24px 18px 12px;display:flex;flex-direction:column;gap:16px}
+.big{display:flex;align-items:center;gap:16px;text-decoration:none;color:#1c1c1e;background:#fff;
+  border:1px solid #e5e1d8;border-radius:14px;box-shadow:0 2px 12px rgba(0,0,0,.06);padding:26px 22px;min-height:112px}
+.big:active{transform:scale(.98)}
+.big .mark{width:56px;height:56px;border-radius:12px;display:flex;align-items:center;justify-content:center;
+  color:#fff;font-size:28px;font-weight:700;flex-shrink:0}
+.big .t{font-size:26px;font-weight:700;letter-spacing:.1em}
+.big .s{font-size:13px;color:#6c6c70;margin-top:4px}
+.m-h{background:#2d7a4f}.m-s{background:#b5651d}
+.small{text-align:center;padding:18px 0 8px}
+.small a{color:#6c6c70;font-size:14px;text-decoration:none;border:1px solid #c9c1b0;border-radius:20px;padding:8px 18px;background:rgba(255,255,255,.5)}
+.small a.hide{display:none}
+.foot{text-align:center;font-size:11px;color:#a8a29a;padding:20px 0 calc(20px + env(safe-area-inset-bottom))}
+.demo{background:#c62828;color:#fff;text-align:center;font-weight:700;padding:8px;font-size:14px;display:none}
+</style>
+</head>
+<body>
+<div class="demo" id="demo">デモ（仮の数字）— ここで入れた数字は本番に入りません</div>
+<div class="hdr">
+  <div class="co">株式会社栄ガーデン</div>
+  <div class="dt" id="dt"></div>
+</div>
+<div class="main">
+  <a class="big" href="haitatsu.html" data-entry="haitatsu">
+    <span class="mark m-h">配</span>
+    <span><span class="t">配達</span><br><span class="s">日報・配達商品・サマリー</span></span>
+  </a>
+  <a class="big" href="sagyou.html" data-entry="sagyou">
+    <span class="mark m-s">作</span>
+    <span><span class="t">作業</span><br><span class="s">作業記録・栽培シフト</span></span>
+  </a>
+</div>
+<div class="small"><a href="kanri.html" data-entry="kanri" id="kanri_link">管理</a></div>
+<div class="foot">&copy; 2026 SAKAE GARDEN</div>
+<script>
+(function () {
+  var d = new Date();
+  document.getElementById('dt').textContent =
+    d.getFullYear() + '年' + (d.getMonth() + 1) + '月' + d.getDate() + '日（' + '日月火水木金土'.charAt(d.getDay()) + '）';
+  var demo = /[?&]demo=1(?:&|$)/.test(location.search || '');
+  if (demo) document.getElementById('demo').style.display = 'block';
+  // 管理は代表・管理者として覚えている人か、まだ誰も覚えていない端末だけに出す（中に入るにはパスコードが要る）
+  try {
+    var p = JSON.parse(localStorage.getItem('sg.person') || 'null');
+    if (p && p.role && p.role !== '代表' && p.role !== '管理者') document.getElementById('kanri_link').className = 'hide';
+  } catch (e) {}
+  var links = document.querySelectorAll('a[data-entry]');
+  for (var i = 0; i < links.length; i++) {
+    if (demo) links[i].href = links[i].getAttribute('href') + '?demo=1';
+    links[i].addEventListener('click', function () {
+      try { localStorage.setItem('sg.entry', this.getAttribute('data-entry')); } catch (e) {}
+    });
+  }
+})();
+</script>
+</body>
+</html>

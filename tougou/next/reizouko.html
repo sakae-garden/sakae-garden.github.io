@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#1c1c1e">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="/tougou/icons/apple-touch-icon.png">
+<title>冷蔵庫の在庫 | 栄ガーデン</title>
+<link rel="stylesheet" href="styles/common.css">
+<!--
+  冷蔵庫の在庫（統合アプリ完成 B。設計 2章）。見るだけ（書かない）。
+  - GAS reizouko.status（Reizouko.gs）の結果を表にする：店舗ごとの在庫・基準・不足・入力日、警告、需要への上乗せ
+  - 在庫の出どころは配達日報の「蘇生庫_」列（換算skuの個数に直した値）。サーバは10分キャッシュ。「読み直す」は fresh
+-->
+<style>
+.alert{padding:10px var(--pad-card);border-bottom:1px solid var(--border);font-size:13px;line-height:1.6}
+.alert:last-child{border-bottom:none}
+.alert.warn{background:#fff8e1;color:#8a6100}
+.alert.info{color:var(--sub)}
+.tbl td.ng{color:var(--red);font-weight:700}
+.tbl td.ok{color:var(--green)}
+.tbl td.blank{color:var(--sub)}
+.tbl tr.short td:first-child{color:var(--red);font-weight:700}
+.sum{display:flex;gap:8px;padding:12px var(--pad-card)}
+.sum div{flex:1;text-align:center}
+.sum b{display:block;font-size:22px}
+.sum span{font-size:11px;color:var(--sub)}
+.sum .ng b{color:var(--red)}
+.muted{font-size:11px;color:var(--sub);line-height:1.7;padding:8px var(--pad-card)}
+</style>
+</head>
+<body>
+
+<div class="hdr">
+  <div class="hdr-top">
+    <h1>🧊 冷蔵庫の在庫</h1>
+    <a class="back-btn" href="kanri.html">← 管理</a>
+  </div>
+  <div class="hdr-date" id="hDate"></div>
+</div>
+
+<div class="screen" id="app">
+  <div id="msg"></div>
+
+  <div class="fsec" id="summary"><div class="empty">読み込み中…</div></div>
+
+  <div class="sec-lbl">警告</div>
+  <div class="fsec" id="alerts"><div class="empty">読み込み中…</div></div>
+
+  <div class="sec-lbl">店舗ごと</div>
+  <div class="fsec" id="stores"><div class="empty">読み込み中…</div></div>
+
+  <button type="button" class="load-btn" id="reload">🔄 日報から読み直す</button>
+</div>
+
+<footer class="footer"><a href="kanri.html">📋 管理メニューに戻る</a></footer>
+
+<script src="js/common.js"></script>
+<script src="js/login.js"></script>
+<script src="js/kanri.js"></script>
+<script>
+(function () {
+  'use strict';
+  var C = window.TougouCommon, K = window.SgKanri;
+  var $ = function (id) { return document.getElementById(id); };
+  var esc = C.esc;
+  var n1 = function (x) { return x === null || x === undefined ? '—' : String(Math.round(x * 10) / 10); };
+  var up = function (x) { return Math.ceil(x - 1e-9); };
+  var mdOf = function (d) { return d ? Number(d.slice(5, 7)) + '/' + Number(d.slice(8, 10)) : ''; };
+
+  $('hDate').textContent = C.jpDate(C.now());
+
+  function msg(text, kind) {
+    $('msg').innerHTML = text ? '<div class="notice ' + (kind || 'info') + '">' + esc(text) + '</div>' : '';
+  }
+
+  function render(s) {
+    var u = (s.unit && (s.unit.label || s.unit.sku)) || '';
+    var stores = s.stores || [];
+    $('summary').innerHTML =
+      '<div class="sum">' +
+        '<div class="' + (s.shortCount ? 'ng' : '') + '"><b>' + (s.shortCount || 0) + '</b><span>基準割れの店</span></div>' +
+        '<div><b>' + (s.blankCount || 0) + '</b><span>未入力の店</span></div>' +
+        '<div><b>' + up(s.totalShort || 0) + '</b><span>不足の合計（個）</span></div>' +
+      '</div>' +
+      '<div class="muted">' + esc(mdOf(s.date)) + ' 時点。個数は' + esc(u) + (s.unit && s.unit.grams ? '（' + esc(s.unit.grams) + 'g）' : '') + '換算。' +
+      (s.perDay > 0 ? '不足を ' + esc(s.days) + '日に分けて、1日 約' + n1(s.perDay) + '個（約' + n1(s.perDayKg) + 'kg）を予測の需要に上乗せしています。' : '需要への上乗せはありません。') +
+      '</div>';
+
+    var al = s.alerts || [];
+    $('alerts').innerHTML = al.length
+      ? al.map(function (a) { return '<div class="alert ' + esc(a.level) + '">' + esc(a.text) + '</div>'; }).join('')
+      : '<div class="empty">警告はありません。</div>';
+
+    // 基準割れ → 未入力 → 足りている の順。同じ中は不足の大きい順
+    var ORD = { short: 0, blank: 1, ok: 2 };
+    var list = stores.slice().sort(function (a, b) {
+      return (ORD[a.status] - ORD[b.status]) || ((b.short || 0) - (a.short || 0));
+    });
+    $('stores').innerHTML = list.length
+      ? '<table class="tbl"><tr><th>店舗</th><th>在庫</th><th>基準</th><th>判定</th><th>入力日</th></tr>' +
+        list.map(function (x) {
+          var judge = x.status === 'short' ? '<td class="ng">あと' + up(x.short) + '個</td>'
+            : x.status === 'blank' ? '<td class="blank">未入力</td>'
+            : '<td class="ok">足りている</td>';
+          return '<tr class="' + esc(x.status) + '"><td>' + esc(x.name) + '</td><td class="num">' + n1(x.stock) + '</td><td class="num">' + n1(x.base) + '</td>' +
+            judge + '<td>' + esc(mdOf(x.asOf)) + '</td></tr>';
+        }).join('') + '</table>' +
+        '<div class="muted">在庫は配達日報の「蘇生庫」欄（A品の規格別）を' + esc(u) + 'の個数に換算して合計したもの（大袋は数えません）。' +
+        '直近' + esc(s.lookback) + '日に入力が無い店は「未入力」で、上乗せに数えません。基準は統合マスタの設定 冷蔵庫基準_&lt;店舗&gt;。</div>'
+      : '<div class="empty">対象の店舗がありません（設定 冷蔵庫基準_&lt;店舗&gt;）。</div>';
+
+    if (s.warnings && s.warnings.length) msg('注意：' + s.warnings.join('／'), 'warn');
+  }
+
+  function load(fresh) {
+    if (fresh) C.showLoading('日報から読み直しています...');
+    return C.api('reizouko.status', fresh ? { fresh: true } : null).then(function (s) {
+      C.hideLoading();
+      msg('');
+      render(s);
+    }, function (err) {
+      C.hideLoading();
+      msg('読み込めませんでした：' + err.message, 'ng');
+      ['summary', 'alerts', 'stores'].forEach(function (id) { $(id).innerHTML = '<div class="empty">—</div>'; });
+    });
+  }
+
+  $('reload').addEventListener('click', function () {
+    C.runOnce('reload', $('reload'), '読み直しています…', function () { return load(true); });
+  });
+
+  K.boot(function (session) {
+    $('hDate').textContent = C.jpDate(C.now()) + '　' + (session && session.name || '');
+    load(false);
+  });
+})();
+</script>
+</body>
+</html>

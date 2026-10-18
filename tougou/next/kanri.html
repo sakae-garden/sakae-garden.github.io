@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#1c1c1e">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="/tougou/icons/apple-touch-icon.png">
+<title>管理 | 栄ガーデン</title>
+<link rel="stylesheet" href="styles/common.css">
+<!--
+  管理メニュー（統合アプリ完成 B。設計 2章）。/tougou/ の横スワイプをやめ、縦の一覧にした。
+  - 各行は普通の <a href>（js が壊れてもリンクは動く）。ログインは js/login.js（代表パスコード。sg.session.kanri）
+  - 予測の行には「最終計算 HH:MM（N分前）」を出す（yosoku.precomputed を裏で1回読む。30分を超えていたら裏で計算し直す）
+  - 冷蔵庫の行には基準割れ・未入力の店舗数（reizouko.status。10分キャッシュ）
+  - 外のアプリ（袋詰め・栽培シフト・卸販売・サマリー）は data-demo-exit で ?demo=1 を付けない（デモを知らない画面のため）
+-->
+<style>
+.menu{display:flex;flex-direction:column;gap:10px}
+.mi{display:flex;align-items:center;gap:12px;background:var(--card);border:1px solid var(--border);border-radius:var(--r);box-shadow:var(--shadow);
+  padding:14px var(--pad-card);min-height:64px;text-decoration:none;color:var(--ink)}
+.mi:active{opacity:.75}
+.mi .ic{flex:none;width:36px;height:36px;border-radius:10px;background:#f0ede6;display:flex;align-items:center;justify-content:center;font-size:19px}
+.mi .tx{flex:1;min-width:0}
+.mi .nm,.mi .sub{display:block}
+.mi .nm{font-size:16px;font-weight:700;letter-spacing:.02em}
+.mi .sub{font-size:12px;color:var(--sub);margin-top:2px;line-height:1.5}
+.mi .sub .ng{color:var(--red);font-weight:700}
+.mi .sub .busy{color:#8a6100}
+.mi .go{flex:none;color:var(--divider);font-size:18px}
+.mi.ext .go::after{content:'↗'}
+.mi:not(.ext) .go::after{content:'›'}
+.who{font-size:12px;color:#ccc}
+</style>
+</head>
+<body>
+
+<div class="hdr">
+  <div class="hdr-top">
+    <h1>📋 管理</h1>
+    <span class="who" id="who"></span>
+  </div>
+  <div class="hdr-date" id="hDate"></div>
+</div>
+
+<div class="screen" id="app">
+  <div id="msg"></div>
+
+  <div class="sec-lbl">見る・入れる</div>
+  <nav class="menu">
+    <a class="mi" href="yosoku.html" data-k="yosoku">
+      <span class="ic">📈</span>
+      <span class="tx"><span class="nm">予測</span><span class="sub" id="subYosoku">見込み・警告</span></span><span class="go"></span>
+    </a>
+    <a class="mi" href="kyou.html" data-k="kyou">
+      <span class="ic">☀️</span>
+      <span class="tx"><span class="nm">今日</span><span class="sub">やること・入力・出勤者</span></span><span class="go"></span>
+    </a>
+    <a class="mi" href="seisan.html" data-k="seisan">
+      <span class="ic">🌱</span>
+      <span class="tx"><span class="nm">生産入力・袋出しの指示</span><span class="sub">袋出し・浸水・収穫／袋出しの指示（月）</span></span><span class="go"></span>
+    </a>
+    <a class="mi" href="reizouko.html" data-k="reizouko">
+      <span class="ic">🧊</span>
+      <span class="tx"><span class="nm">冷蔵庫の在庫</span><span class="sub" id="subReizouko">ヤオコー各店のストックと基準</span></span><span class="go"></span>
+    </a>
+  </nav>
+
+  <div class="sec-lbl">ほかのアプリ</div>
+  <nav class="menu">
+    <a class="mi ext" href="https://sakae-garden.github.io/nippo/fukurozume-kanri.html" data-demo-exit="1" data-k="fukuro">
+      <span class="ic">📦</span>
+      <span class="tx"><span class="nm">袋詰めの管理画面</span><span class="sub">パスコードは袋詰めのもの</span></span><span class="go"></span>
+    </a>
+    <a class="mi ext" href="https://sakae-garden.github.io/eigarden-shift-app/saibai.html" data-demo-exit="1" data-k="saibai">
+      <span class="ic">🗓️</span>
+      <span class="tx"><span class="nm">栽培シフト</span><span class="sub">出勤の予定</span></span><span class="go"></span>
+    </a>
+    <a class="mi ext" href="/oroshi.html" data-demo-exit="1" data-k="oroshi">
+      <span class="ic">🏪</span>
+      <span class="tx"><span class="nm">卸販売</span><span class="sub">ハーズ・やおとも ほか</span></span><span class="go"></span>
+    </a>
+    <a class="mi ext" href="/nippo/summary.html" data-demo-exit="1" data-k="summary">
+      <span class="ic">📊</span>
+      <span class="tx"><span class="nm">サマリー</span><span class="sub">配達日報のサマリー</span></span><span class="go"></span>
+    </a>
+  </nav>
+</div>
+
+<footer class="footer"><a href="index.html?pick=1">🚪 入口へ戻る</a></footer>
+
+<script src="js/common.js"></script>
+<script src="js/login.js"></script>
+<script src="js/kanri.js"></script>
+<script>
+(function () {
+  'use strict';
+  var C = window.TougouCommon, K = window.SgKanri;
+  var $ = function (id) { return document.getElementById(id); };
+  var esc = C.esc;
+  $('hDate').textContent = C.jpDate(C.now());
+
+  function start(session) {
+    $('who').textContent = session && session.name ? session.name : '';
+
+    // 予測：事前計算の鮮度を1行で。古ければ裏で計算し直して差し替える（予測を開いたときに待たないように）
+    var sub = $('subYosoku');
+    K.loadForecast(C.api).then(function (r) {
+      sub.textContent = K.freshText(r, { short: true });
+      if (!K.needsRefresh(r, C.DEMO)) return;
+      sub.innerHTML = esc(K.freshText(r, { short: true })) + '・<span class="busy">計算し直しています…</span>';
+      return K.refresh(C.api).then(function (r2) {
+        sub.textContent = K.freshText(r2, { short: true });
+      }, function () {
+        sub.textContent = K.freshText(r, { short: true });
+      });
+    }, function () {
+      sub.textContent = '見込み・警告（最終計算を確かめられませんでした）';
+    });
+
+    // 冷蔵庫：基準割れ・未入力の店舗数
+    C.api('reizouko.status').then(function (s) {
+      var t = [];
+      if (s.shortCount) t.push('<span class="ng">基準割れ ' + s.shortCount + '店</span>');
+      if (s.blankCount) t.push('未入力 ' + s.blankCount + '店');
+      if (!t.length) t.push('全店 基準以上');
+      $('subReizouko').innerHTML = t.join('・');
+    }, function () { /* 一言が出ないだけ */ });
+  }
+
+  K.boot(start);
+})();
+</script>
+</body>
+</html>

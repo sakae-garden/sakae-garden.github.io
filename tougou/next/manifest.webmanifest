@@ -1,0 +1,17 @@
+{
+  "id": "/tougou/next/",
+  "name": "栄ガーデン（テスト版）",
+  "short_name": "栄ガーデン試",
+  "lang": "ja",
+  "start_url": "/tougou/next/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#1c1c1e",
+  "theme_color": "#1c1c1e",
+  "icons": [
+    { "src": "/tougou/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/tougou/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/tougou/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="栄ガーデン">
+<meta name="theme-color" content="#1c1c1e">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="/tougou/icons/apple-touch-icon.png">
+<title>作業 | 栄ガーデン</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://script.google.com">
+<link rel="stylesheet" href="styles/common.css">
+<script>
+// 拠点・1タンクの個数の初期値（初めて開いた端末用。production.options と同じ形。裏で読み直す）
+var INITIAL_OPTIONS = {
+  sites: [{ id: 'yorii', name: '寄居ハウス' }, { id: 'shinrin', name: '森林公園ハウス' }],
+  tankCapacity: 42, defaultSite: ''
+};
+</script>
+<!--
+  作業（統合アプリ完成 D。/sagyou/ の作業記録を next/ に移したもの）
+  - 1ページ目：作業記録（袋出し・浸水・収穫＋その日の入力済み）。2ページ目：栽培シフト（既存のシフト管理アプリを枠の中で開く）
+  - パスコードなし。名字を選ぶのは最初の1回だけ（js/login.js の SgLogin。記憶は sg.person・トークンは sg.session.work）。
+    初回は旧作業記録の sagyou.person を読んで引き継ぐ（旧キーには書かない）
+  - 端末の控え（送信待ち・一覧・再送の ID）は sg.work.cache.*、下書きは sg.work.draft.v1（旧 /sagyou/ の sagyou.* と混ぜない）
+  - 保存は押した瞬間に完了扱い（seisan_form.js の optimistic）。届かなければその時点で入力欄に戻して知らせる
+  - 最上部は本日の指示バーの枠（js/shiji-slot.js。無くても他は動く）
+-->
+<style>
+html,body{height:100%}
+body.sagyou{padding-bottom:0;display:flex;flex-direction:column;height:100vh;height:100dvh;overflow:hidden}
+.shiji-slot{flex:none}
+.shiji-slot:empty{display:none}
+.sagyou .hdr{position:relative;flex:none}
+.hdr-btns{display:flex;gap:6px;align-items:center}
+.who-btn{background:rgba(255,255,255,.15);border:none;color:#fff;border-radius:var(--r-btn);padding:6px 10px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit}
+.track{flex:1;min-height:0;display:flex;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;scrollbar-width:none;
+  margin-bottom:calc(var(--footer-h) + env(safe-area-inset-bottom))}
+.track::-webkit-scrollbar{display:none}
+.page{flex:0 0 100%;width:100%;overflow-y:auto;overflow-x:hidden;scroll-snap-align:start;scroll-snap-stop:always;-webkit-overflow-scrolling:touch}
+body.has-unsaved .page{padding-bottom:70px}
+/* 生産入力の部品（seisan.html と同じ） */
+.shinsui-sub{font-size:11px;color:var(--sub);margin-top:2px}
+.frow-lbl .srv{display:block;font-size:11px;color:var(--sub);font-weight:400;margin-top:1px}
+.frow.chg{background:#fffdf5}
+.frow.chg .frow-lbl{font-weight:700}
+/* 今日／昨日（指示 092000。昨日のあいだは色を変えて常に出す） */
+.day-toggle{display:flex;gap:8px;margin:2px 0 10px}
+.day-toggle button{flex:1;padding:10px 0;font-size:16px;font-weight:700;border:1px solid var(--border);border-radius:var(--r-btn);background:#fff;color:var(--sub);font-family:inherit;cursor:pointer}
+.day-toggle button.on{background:var(--green);border-color:var(--green);color:#fff}
+.day-toggle button[data-day="yday"].on{background:#b45309;border-color:#b45309}
+.yday-bar{position:sticky;top:0;z-index:5;background:#b45309;color:#fff;font-weight:700;font-size:15px;text-align:center;padding:10px;border-radius:var(--r);margin-bottom:10px}
+body.form-yday .hdr{background:#7c2d12}
+body.form-yday .page#p1{background:#fff4e5}
+/* 足していく入力（袋出し・浸水）の合計・内訳・取り消し */
+.add-tag{display:inline-block;margin-left:6px;font-size:11px;font-weight:700;color:var(--green);border:1px solid var(--green);border-radius:4px;padding:0 4px}
+.add-box{padding:0 var(--pad-card,14px) 10px;font-size:13px}
+.add-box:empty{display:none}
+.add-sum b{font-size:15px}
+.add-mine{margin-top:4px;display:flex;flex-direction:column;gap:4px}
+.add-item{color:var(--sub)}
+.add-cancel{margin-left:8px;padding:3px 10px;font-size:12px;border:1px solid var(--border);border-radius:var(--r-btn);background:#fff;font-family:inherit;cursor:pointer}
+.add-note{font-size:12px;color:var(--sub);padding:6px var(--pad-card,14px) 0}
+/* 作業無し（「今日は袋出し無し」。2026-10-15） */
+.add-none{display:block;width:100%;margin-top:6px;padding:9px 10px;font-size:14px;border:1px dashed var(--sub);border-radius:var(--r-btn);background:#fff;color:var(--text,#333);font-family:inherit;cursor:pointer}
+.add-none-on{font-weight:700;color:#555;background:#f1f1f1;border-radius:var(--r-btn);padding:6px 10px}
+.plan-line{background:#eef6ff;border:1px solid #bcd7f5;border-radius:var(--r);padding:8px 12px;margin-bottom:8px;font-size:15px;font-weight:700}
+/* シフト */
+#p2{display:flex;flex-direction:column}
+.shift-frame{flex:1;width:100%;border:0;background:#fff}
+.shift-open{display:block;text-align:center;font-size:12px;color:var(--sub);padding:6px 0 8px;flex:none}
+/* 下のタブ（フッターの位置） */
+.tabbar button{flex:1;height:100%;background:none;border:0;color:rgba(255,255,255,.5);font-family:inherit;font-size:15px;font-weight:700;cursor:pointer;letter-spacing:.04em}
+.tabbar button.on{color:#fff;box-shadow:inset 0 3px 0 var(--green)}
+</style>
+</head>
+<body class="sagyou">
+<div id="shiji" class="shiji-slot"></div>
+<script src="js/shiji-slot.js" defer></script>
+
+<div class="hdr">
+  <div class="hdr-top">
+    <h1>📝 作業記録</h1>
+    <div class="hdr-btns">
+      <button type="button" class="who-btn" id="whoBtn" hidden>名前を変える</button>
+      <!-- js が動かなくても戻れるよう普通のリンク（デモでは common.js が ?demo=1 を足す） -->
+      <a class="back-btn" id="backLink" href="index.html?pick=1">入口へ戻る</a>
+    </div>
+  </div>
+  <div class="hdr-date" id="hDate"></div>
+  <!-- 拠点（作業記録のページだけ） -->
+  <div class="hdr-tabs" id="siteTabs" hidden></div>
+</div>
+
+<div class="track" id="track">
+  <section class="page" id="p1" aria-label="作業記録">
+    <div class="screen" id="app">
+      <div id="msg"></div>
+      <div id="form"></div>
+    </div>
+  </section>
+  <section class="page" id="p2" aria-label="シフト">
+    <iframe class="shift-frame" id="shiftFrame" title="栽培シフト"></iframe>
+    <a class="shift-open" id="shiftOpen" href="/eigarden-shift-app/saibai.html" target="_blank" rel="noopener">見づらいときは別の画面で開く ↗</a>
+  </section>
+</div>
+
+<nav class="footer tabbar" id="tabbar">
+  <button type="button" data-p="0" class="on">📝 作業記録</button>
+  <button type="button" data-p="1">📅 シフト</button>
+</nav>
+
+<script src="js/common.js"></script>
+<script src="js/login.js"></script>
+<script src="js/seisan_form.js"></script>
+<script>
+(function () {
+  'use strict';
+  var C = window.TougouCommon, L = window.SgLogin;
+  var $ = function (id) { return document.getElementById(id); };
+  var SHIFT_URL = '/eigarden-shift-app/saibai.html';   // 栽培シフト
+  // デモ（?demo=1）の試し入力は端末の控え（送信待ち・再送の ID・一覧）を本番と分ける。
+  // 同じキーだと、デモで送れなかった入力が本番の画面で「再送する」に出て、本番に送られうるため（指示 20261009-163000）
+  var CACHE_KEY = C.DEMO ? 'sg.work.demo.cache' : 'sg.work.cache';
+  var DRAFT_KEY = 'sg.work.draft.v1';
+
+  function lsGet(k) { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) { return null; } }
+  function msg(text, kind) {
+    $('msg').innerHTML = text ? '<div class="notice ' + (kind || 'info') + '">' + C.esc(text) + '</div>' : '';
+  }
+
+  var person = null;
+  var form = null;
+
+  function surnameOf(empId) {
+    var e = L.employees().filter(function (x) { return x.id === empId; })[0];
+    return e ? e.surname : '';
+  }
+
+  // ---- 画面
+  $('hDate').textContent = C.jpDate(new Date());
+
+  function showForm() {
+    $('form').hidden = false;
+    $('siteTabs').hidden = curPage !== 0;
+    $('whoBtn').hidden = false;
+    $('hDate').textContent = C.jpDate(new Date()) + '　' + person.surname + 'さん';
+    msg('');
+    if (!form) {
+      form = window.TougouSeisanForm.mount({
+        host: $('form'),
+        siteTabs: $('siteTabs'),
+        msg: msg,
+        pickDate: false,
+        draftKey: DRAFT_KEY,
+        bannerHost: $('app'),
+        linkSelector: '#backLink',   // 保存していない入力があるときは「入口へ戻る」で確かめる
+        cacheKey: CACHE_KEY,
+        initialOptions: INITIAL_OPTIONS,
+        optimistic: true,
+        additive: true,          // 袋出し・浸水は足していく（複数人・複数回の入力で消えない。指示 092000）
+        dayToggle: true,         // 今日／昨日（収穫を翌朝にまとめて入れる）
+        confirmOverwrite: true,  // 収穫は上書き。すでに値があれば確かめる
+        me: { empId: person.id, name: person.surname },
+        nameOf: function (r) { return surnameOf(r['入力者']) || r.empSurname || r.empName || ''; }
+      });
+    }
+    if (!window.__sagyouFormAt) window.__sagyouFormAt = performance.now();   // 実測用（開いてから入力欄が出るまで）
+  }
+
+  function busy(silent) {
+    if (form && form.isDirty()) { if (!silent) C.toast('保存していない入力があります。保存してから切り替えてください'); return true; }
+    if (lsGet(CACHE_KEY + '.outbox')) { if (!silent) C.toast('送信中です。少し待ってから切り替えてください'); return true; }
+    return false;
+  }
+
+  // 名前を変える（入力者は画面を開いたときの人で固定しているので、変えたら読み直す）
+  $('whoBtn').onclick = function () {
+    if (busy()) return;
+    L.pickPerson({ cancelable: true, title: '名前を選んでください', note: '今は ' + person.surname + ' さんです。' }).then(function (p) {
+      if (p.id === person.id) return;
+      location.reload();
+    }, function () { /* やめた */ });
+  };
+
+  // ---- 2ページ（横スワイプ＋下のタブ）
+  var curPage = 0;
+  var track = $('track');
+  function goPage(i, smooth) {
+    track.scrollTo({ left: i * track.clientWidth, behavior: smooth ? 'smooth' : 'auto' });
+    markPage(i);
+  }
+  function markPage(i) {
+    curPage = i;
+    Array.prototype.forEach.call($('tabbar').children, function (b) { b.classList.toggle('on', Number(b.dataset.p) === i); });
+    $('siteTabs').hidden = i !== 0 || !form;
+    if (i === 1) loadShift();
+  }
+  Array.prototype.forEach.call($('tabbar').children, function (b) {
+    b.onclick = function () { goPage(Number(b.dataset.p), true); };
+  });
+  var scrollTimer = null;
+  track.addEventListener('scroll', function () {
+    clearTimeout(scrollTimer);
+    scrollTimer = setTimeout(function () {
+      var i = Math.round(track.scrollLeft / Math.max(1, track.clientWidth));
+      if (i !== curPage) markPage(Math.max(0, Math.min(1, i)));
+    }, 60);
+  });
+  window.addEventListener('resize', function () { goPage(curPage, false); });
+
+  // シフト：既存のシフト管理アプリをそのまま枠の中で開く（作り直さない）。開いたときに初めて読む（作業記録の表示を遅らせない）
+  // 栽培シフトだけを出す（2026-09-26 杉さん指示。中の作業員向けなので袋詰めへの切り替えは出さない）
+  function loadShift() {
+    var f = $('shiftFrame');
+    if (f.getAttribute('src')) return;
+    f.setAttribute('src', SHIFT_URL);
+  }
+
+  // ---- 開始：覚えている人がいればすぐ入力画面、いなければ名字を選ぶ（どちらも通信を待たない。トークンは裏で取る）
+  L.initWork({ lazy: true }).then(function () {
+    person = L.person();
+    showForm();
+    // 名簿を裏で取り直す。覚えている人がマスタから外れていたら、入力が無ければ選び直してもらう
+    L.refreshEmployees().then(function (list) {
+      var p = L.person();
+      if (p && !list.some(function (e) { return e.id === p.id; }) && !busy(true)) {
+        L.forget();
+        location.reload();
+        return;
+      }
+      if (p && p.surname !== person.surname) $('hDate').textContent = C.jpDate(new Date()) + '　' + p.surname + 'さん';
+    }).catch(function () { /* 圏外など。控えのまま */ });
+  }, function (err) {
+    msg('始められませんでした：' + (err && err.message || err) + '。「入口へ戻る」から開き直してください。', 'ng');
+  });
+})();
+</script>
+</body>
+</html>

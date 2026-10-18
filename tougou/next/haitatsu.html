@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#1c1c1e">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="/tougou/icons/apple-touch-icon.png">
+<title>配達 | 栄ガーデン</title>
+<!--
+  配達（統合アプリ完成 A・E）。中身は今の日報アプリ群（見た目・操作は変えない）へのリンク。
+  作業・管理の js（common.js・login.js など）は読み込まない。読むのは本日の指示バーの枠（shiji-slot.js）だけ。
+-->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.34.0/dist/tabler-icons.min.css">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{min-height:100%;background:#f5f3ee;color:#1c1c1e;
+  font-family:'Noto Sans JP','Hiragino Sans','Yu Gothic UI',sans-serif;-webkit-tap-highlight-color:transparent}
+body{max-width:480px;margin:0 auto}
+.hdr{background:#1c1c1e;color:#fff;padding:calc(14px + env(safe-area-inset-top)) 16px 14px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:10}
+.hdr .t{font-size:18px;font-weight:700;letter-spacing:.1em}
+.hdr .dt{font-size:13px;color:rgba(255,255,255,.75)}
+.shiji-slot{display:block}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;padding:20px 18px 12px}
+.app{text-decoration:none;border-radius:18px;color:#fff;aspect-ratio:1/1;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:12px;box-shadow:0 4px 16px rgba(0,0,0,.18)}
+.app:active{transform:scale(.96)}
+.app .icon{font-size:44px;line-height:1}
+.app .name{font-size:16px;font-weight:700;letter-spacing:.06em}
+.green{background:linear-gradient(160deg,#22a35a,#16783f)}
+.orange{background:linear-gradient(160deg,#f47c14,#d65a0a)}
+.blue{background:linear-gradient(160deg,#2e74d8,#1a52a3)}
+.purple{background:linear-gradient(160deg,#9b34c7,#6d22a0)}
+.teal{background:linear-gradient(160deg,#0f9d8a,#0a6f61)}
+.back{text-align:center;padding:16px 0 calc(24px + env(safe-area-inset-bottom))}
+.back a{color:#6c6c70;font-size:14px;text-decoration:none;border:1px solid #c9c1b0;border-radius:20px;padding:8px 18px;background:rgba(255,255,255,.5)}
+</style>
+</head>
+<body>
+<div id="shiji" class="shiji-slot"></div>
+<div class="hdr"><span class="t">配達</span><span class="dt" id="dt"></span></div>
+<div class="grid">
+  <a class="app green" href="/nippo/"><i class="icon ti ti-clipboard-list" aria-hidden="true"></i><span class="name">日報</span></a>
+  <a class="app orange" href="/oroshi.html"><i class="icon ti ti-building-store" aria-hidden="true"></i><span class="name">卸販売</span></a>
+  <a class="app blue" href="/nippo/summary.html"><i class="icon ti ti-chart-bar" aria-hidden="true"></i><span class="name">サマリー</span></a>
+  <a class="app purple" href="/nippo/haitatsu.html"><i class="icon ti ti-package" aria-hidden="true"></i><span class="name">配達商品</span></a>
+  <a class="app teal" href="/nippo/irai.html"><i class="icon ti ti-clipboard-text" aria-hidden="true"></i><span class="name">店舗依頼</span></a>
+</div>
+<div class="back"><a href="index.html?pick=1">入口へ戻る</a></div>
+<script>
+(function () {
+  var d = new Date();
+  document.getElementById('dt').textContent = (d.getMonth() + 1) + '/' + d.getDate() + '（' + '日月火水木金土'.charAt(d.getDay()) + '）';
+  if (/[?&]demo=1(?:&|$)/.test(location.search || '')) {
+    var a = document.querySelector('.back a'); a.href = 'index.html?pick=1&demo=1';
+  }
+})();
+</script>
+<script src="js/shiji-slot.js" defer></script>
+</body>
+</html>

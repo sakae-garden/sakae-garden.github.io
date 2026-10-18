@@ -1,0 +1,151 @@
+/*
+ * 統合アプリ 共通スタイル（指示 20260925-093100 B）
+ *
+ * 配達日報（sakae-garden.github.io/nippo/）の見た目をそのまま抜き出したもの。
+ * 従業員が毎日使っている画面と「違和感がない」ことが目的なので、値は日報から変えない。
+ * 出どころ：
+ *   nippo/index.html    … 色・カード・ヘッダー・戻るボタン・数値入力・送信ボタン・担当者チップ・読み込み中
+ *   nippo/haitatsu.html … 未保存バー・離脱警告モーダル・下書きバナー
+ *   nippo 各画面下の固定フッター「🏠 ホームに戻る」（高さ52px）
+ * 色は日報と同じく3色まで：黒/グレー（文字・枠）、緑（主要操作だけ）、赤（警告だけ）。
+ */
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap');
+
+:root {
+  --bg:#f5f3ee; --card:#fff;
+  --ink:#1c1c1e; --sub:#6c6c70;
+  --border:#e5e1d8; --shadow:0 2px 12px rgba(0,0,0,0.06);
+  --green:#2d7a4f;     /* 主要操作（送信・保存・追加） */
+  --red:#c0392b;       /* 警告 */
+  --orange:#e65100;    /* 未保存の表示（配達商品情報と同じ） */
+  --divider:#c9c1b0;
+  --r:12px;            /* カード角丸 */
+  --r-btn:8px;         /* ボタン角丸 */
+  --pad-card:14px;     /* カード内側余白 */
+  --footer-h:52px;     /* 固定フッター「🏠 ホームに戻る」の高さ */
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+[hidden]{display:none !important}
+body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);min-height:100vh;color:var(--ink);max-width:480px;margin:0 auto;padding-bottom:calc(var(--footer-h) + 20px + env(safe-area-inset-bottom))}
+
+/* ============ ヘッダー（日報 .hdr と同じ。スクロールしても上に残る） ============ */
+.hdr{background:var(--ink);color:#fff;padding:calc(14px + env(safe-area-inset-top)) 18px 0;position:sticky;top:0;z-index:100}
+.hdr-top{display:flex;align-items:center;justify-content:space-between;padding-bottom:10px}
+.hdr h1{font-size:17px;font-weight:700;letter-spacing:.04em}
+.hdr-date{font-size:11px;color:#aaa;margin-top:-6px;padding-bottom:10px;padding-left:2px}
+.back-btn{background:rgba(255,255,255,.15);border:none;color:#fff;border-radius:var(--r-btn);padding:6px 12px;font-size:13px;cursor:pointer;font-family:inherit;text-decoration:none}
+/* ヘッダー内のタブ（日報の経路タブ .rtab と同じ） */
+.hdr-tabs{display:flex;gap:6px;padding:0 0 12px}
+.rtab{flex:1;padding:8px 4px;background:rgba(255,255,255,.1);color:rgba(255,255,255,.6);border:none;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;transition:all .15s;border-radius:var(--r-btn)}
+.rtab.active{background:#fff;color:var(--ink)}
+
+/* ============ 画面共通 ============ */
+.screen{padding:16px}
+.sec-lbl{font-size:11px;font-weight:700;color:var(--sub);letter-spacing:.08em;margin:16px 0 8px 2px}
+.sec-lbl:first-child{margin-top:4px}
+
+/* ============ カード（日報 .fsec と同じ：白・薄いグレー枠1px・角丸12px） ============ */
+.fsec{background:var(--card);border:1px solid var(--border);border-radius:var(--r);margin-bottom:10px;box-shadow:var(--shadow);overflow:hidden}
+.fsec-hdr{padding:10px var(--pad-card);font-size:13px;font-weight:700;letter-spacing:.02em;display:flex;align-items:center;justify-content:space-between;color:var(--ink);border-bottom:1px solid var(--border)}
+.fsec-hdr .note{font-size:11px;font-weight:400;color:var(--sub)}
+.fsec-body{padding:12px var(--pad-card)}
+
+/* ============ 1項目の行（日報 .frow と同じ。数値はテンキー） ============ */
+.frow{display:flex;align-items:center;padding:10px var(--pad-card);border-bottom:1px solid var(--border)}
+.frow:last-child{border-bottom:none}
+.frow-lbl{flex:1;font-size:14px;color:var(--ink)}
+.frow-inp{display:flex;align-items:center;gap:5px}
+.frow-unit{font-size:11px;color:var(--sub)}
+.frow input[inputmode="numeric"],.frow input[inputmode="decimal"]{width:80px;height:40px;border:1px solid var(--border);border-radius:var(--r-btn);text-align:center;font-size:18px;font-weight:600;font-family:inherit;color:var(--ink);background:#fff;-moz-appearance:textfield;-webkit-user-select:text;user-select:text}
+.frow input::-webkit-inner-spin-button,.frow input::-webkit-outer-spin-button{-webkit-appearance:none}
+.frow input:focus{outline:none;border-color:var(--ink)}
+.frow input[type="date"]{height:40px;border:1px solid var(--border);border-radius:var(--r-btn);padding:0 8px;font-size:15px;font-family:inherit;color:var(--ink);background:#fff}
+.frow input[type="date"]:focus{outline:none;border-color:var(--ink)}
+/* ＋／－（日報に無い部品。枠・角丸は数値欄に合わせた） */
+.step-btn{width:40px;height:40px;border:1px solid var(--border);border-radius:var(--r-btn);background:#fff;font-family:inherit;font-size:20px;font-weight:600;color:var(--ink);cursor:pointer}
+.step-btn:active{transform:scale(.95)}
+
+/* ============ 選択チップ（日報の担当者選択 .sbtn と同じ） ============ */
+.chip-row{display:flex;gap:8px;flex-wrap:wrap}
+.sbtn{padding:8px 16px;border-radius:20px;border:1px solid var(--border);background:#fff;font-family:inherit;font-size:14px;cursor:pointer;transition:all .15s;color:var(--ink)}
+.sbtn.sel{background:var(--ink);color:#fff;border-color:var(--ink)}
+
+/* ============ ボタン ============ */
+/* 主要操作（日報の送信ボタン .submit-btn と同じ：緑・全幅） */
+.submit-btn{width:100%;padding:15px;background:var(--green);color:#fff;border:none;border-radius:var(--r);font-family:inherit;font-size:16px;font-weight:700;cursor:pointer;margin-top:4px;letter-spacing:.04em;transition:opacity .15s;box-shadow:var(--shadow)}
+.submit-btn:active{opacity:.8}.submit-btn:disabled{opacity:.5;cursor:not-allowed}
+/* カード見出しの右の小さい主要操作（日報 .apply-btn と同じ） */
+.apply-btn{background:var(--green);color:#fff;border:none;border-radius:var(--r-btn);padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;transition:opacity .15s}
+.apply-btn:active{opacity:.7}.apply-btn:disabled{opacity:.45}
+/* 副次操作（日報「保存データを読み込む」.load-btn と同じ：白） */
+.load-btn{width:100%;padding:11px;background:var(--card);color:var(--ink);border:1px solid var(--border);border-radius:var(--r-btn);font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;margin-bottom:10px;letter-spacing:.02em;transition:opacity .15s;box-shadow:var(--shadow)}
+.load-btn:active{opacity:.7}.load-btn:disabled{opacity:.4;cursor:not-allowed}
+/* 黒い全幅ボタン（日報「📊 サマリーを見る」.summary-link-btn と同じ） */
+.summary-link-btn{display:flex;align-items:center;justify-content:center;gap:8px;background:var(--ink);color:#fff;border-radius:var(--r-btn);padding:13px 16px;text-decoration:none;font-size:15px;font-weight:700;letter-spacing:.04em;margin-bottom:10px;box-shadow:var(--shadow);transition:opacity .15s;border:none;width:100%;font-family:inherit}
+.summary-link-btn:active{opacity:.8}
+
+/* ============ お知らせ（日報の完了画面の状態表示 .done-status の色） ============ */
+.notice{border-radius:10px;padding:10px 14px;font-size:13px;font-weight:600;line-height:1.6;margin-bottom:10px}
+.notice.ok  {background:#edf7f1;color:#2d7a4f;border:1px solid #a5d6b8}
+.notice.ng  {background:#fdecea;color:#b71c1c;border:1px solid #ef9a9a}
+.notice.warn{background:#fff8e1;color:#8a6100;border:1px solid #ffd54f}
+.notice.info{background:#f0f4f8;color:#5b7a99;border:1px dashed #b0bec5}
+
+/* ============ 表（日報の送信完了の確認表 .dc-table の骨格） ============ */
+.tbl{width:100%;border-collapse:collapse;font-size:13px}
+.tbl th{padding:5px 6px;background:#f0ebe0;font-size:10px;font-weight:700;color:#666;letter-spacing:.06em;text-align:center;border-bottom:2px solid #d4c9b0}
+.tbl th:first-child{text-align:left;padding-left:12px}
+.tbl td{padding:7px 6px;border-bottom:1px dotted #e0d9cc;text-align:center;vertical-align:middle}
+.tbl td:first-child{text-align:left;padding-left:12px;color:#555;white-space:nowrap}
+.tbl tr:last-child td{border-bottom:none}
+.tbl .num{text-align:right;font-weight:700;white-space:nowrap}
+.tbl tr.grp td{background:#f8f7f2;font-weight:700;color:var(--ink);font-size:12px}
+.tbl tr.zero td{color:#aaa}
+.empty{font-size:12px;color:var(--sub);font-style:italic;padding:12px var(--pad-card)}
+
+/* ============ 読み込み中（日報 showLoading と同じ） ============ */
+.loading-overlay{position:fixed;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;z-index:200}
+.loading-box{background:#fff;border-radius:var(--r);padding:24px 32px;text-align:center;font-size:14px;font-weight:600}
+.spinner{display:inline-block;width:28px;height:28px;border:3px solid #eee;border-top-color:var(--ink);border-radius:50%;animation:spin .8s linear infinite;margin-bottom:10px}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ============ トースト（配達商品情報と同じ。固定フッターの上に出す） ============ */
+.toast{position:fixed;bottom:calc(var(--footer-h) + 18px + env(safe-area-inset-bottom));left:0;right:0;display:flex;justify-content:center;padding:0 20px;pointer-events:none;z-index:200}
+.toast-inner{background:var(--ink);color:#fff;padding:11px 22px;border-radius:10px;font-size:13px;font-weight:600;box-shadow:0 4px 16px rgba(0,0,0,.2);transform:translateY(80px);opacity:0;transition:transform .3s,opacity .3s;text-align:center}
+.toast-inner.show{transform:translateY(0);opacity:1}
+
+/* ============ 固定フッター「🏠 ホームに戻る」（日報各画面の下と同じ） ============ */
+.footer{position:fixed;bottom:0;left:0;width:100%;height:calc(var(--footer-h) + env(safe-area-inset-bottom));padding-bottom:env(safe-area-inset-bottom);background:var(--ink);display:flex;align-items:center;justify-content:center;z-index:100}
+.footer a{color:#fff;text-decoration:none;font-size:15px;font-weight:500;font-family:'Noto Sans JP',sans-serif}
+
+/* ============ 未保存バー（配達商品情報 .unsaved-bar と同じ。フッターの直上に固定） ============ */
+/* sticky bottom:0 は固定フッターの裏に潜るので使わない（2026-09-10 の罠） */
+.unsaved-bar{position:fixed;left:0;right:0;bottom:calc(var(--footer-h) + env(safe-area-inset-bottom));z-index:99;display:flex;align-items:center;gap:10px;padding:9px 16px;background:rgba(253,251,247,.97);border-top:1px solid var(--border);box-shadow:0 -2px 10px rgba(0,0,0,.07)}
+.unsaved-lbl{flex:1;min-width:0;font-size:12px;font-weight:700;color:var(--orange);letter-spacing:.06em}
+.unsaved-bar.sb-saving .unsaved-lbl{color:#5b7a99}
+.unsaved-bar.sb-failed  .unsaved-lbl{color:#b71c1c}
+.unsaved-bar.sb-unknown .unsaved-lbl{color:#8a6100}
+.unsaved-bar .submit-btn{width:auto;flex:none;padding:11px 22px;font-size:14px;box-shadow:none;margin:0}
+body.has-unsaved{padding-bottom:calc(var(--footer-h) + 80px + env(safe-area-inset-bottom))}
+body.has-unsaved .toast{bottom:calc(var(--footer-h) + 78px + env(safe-area-inset-bottom))}
+
+/* ============ モーダル（日報の金額入力 .price-modal の枠）と離脱警告 ============ */
+.modal-ov{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;z-index:1000;padding:20px}
+.modal{background:#fff;border-radius:var(--r);padding:20px;width:100%;max-width:320px;box-shadow:0 8px 24px rgba(0,0,0,.2)}
+.modal-ttl{font-size:14px;font-weight:700;color:var(--ink);margin-bottom:12px}
+.leave-modal-msg{font-size:12px;color:var(--sub);line-height:1.7;text-align:center;margin-bottom:14px}
+.leave-modal-btns{display:flex;flex-direction:column;gap:8px}
+.leave-modal-btns button{width:100%;padding:11px;border-radius:8px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;border:none}
+.leave-save{background:var(--green);color:#fff}
+.leave-go{background:#fdecea;color:#b71c1c}
+.leave-cancel{background:#f0ede6;color:#666}
+
+/* ============ 下書きバナー（配達商品情報の次回起動時の案内と同じ色） ============ */
+.draft-notice{background:#fff8e1;color:#8a6a1c;border:1px solid #ffcc80;border-radius:8px;padding:9px 10px;margin-bottom:10px;font-size:12px;text-align:center;font-weight:600;line-height:1.9}
+.draft-notice button{border-radius:6px;padding:6px 14px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer}
+.draft-notice .dn-restore{background:#8a6a1c;color:#fff;border:none}
+.draft-notice .dn-discard{margin-left:4px;background:none;border:1px solid #e0c97f;color:#8a6a1c}
+
+@media (max-width: 360px){
+  .frow input[inputmode="numeric"],.frow input[inputmode="decimal"]{width:68px;height:38px;font-size:16px}
+}
