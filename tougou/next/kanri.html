@@ -63,6 +63,10 @@
       <span class="ic">🌱</span>
       <span class="tx"><span class="nm">生産入力・袋出しの指示</span><span class="sub">袋出し・浸水・収穫／袋出しの指示（月）</span></span><span class="go"></span>
     </a>
+    <a class="mi" href="zaiko.html" data-k="zaiko">
+      <span class="ic">🧺</span>
+      <span class="tx"><span class="nm">菌床在庫</span><span class="sub" id="subZaiko">拠点ごとの1番・休養中・2番・3番と棚の空き／棚卸し</span></span><span class="go"></span>
+    </a>
     <a class="mi" href="reizouko.html" data-k="reizouko">
       <span class="ic">🧊</span>
       <span class="tx"><span class="nm">冷蔵庫の在庫</span><span class="sub" id="subReizouko">ヤオコー各店のストックと基準</span></span><span class="go"></span>
@@ -128,6 +132,16 @@
       if (s.blankCount) t.push('未入力 ' + s.blankCount + '店');
       if (!t.length) t.push('全店 基準以上');
       $('subReizouko').innerHTML = t.join('・');
+    }, function () { /* 一言が出ないだけ */ });
+
+    // 菌床在庫：拠点ごとの棚の使用／置ける数（超えたら赤）。棚卸しが無ければ「棚卸し前」
+    C.api('zaiko.status').then(function (z) {
+      $('subZaiko').innerHTML = (z.sites || []).map(function (s) {
+        var nm = esc(String(s.name).replace(/ハウス$/, ''));
+        var t = '棚 ' + Number(s.tana.used).toLocaleString() + '/' + Number(s.tana.cap).toLocaleString();
+        var over = s.tana.over || s.kyuyouBox.over;
+        return nm + ' ' + (over ? '<span class="ng">' + t + '（超過）</span>' : t) + (s.stocktake ? '' : '（棚卸し前）');
+      }).join('・');
     }, function () { /* 一言が出ないだけ */ });
   }
 

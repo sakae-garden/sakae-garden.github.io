@@ -146,6 +146,36 @@ body.has-unsaved .toast{bottom:calc(var(--footer-h) + 78px + env(safe-area-inset
 .draft-notice .dn-restore{background:#8a6a1c;color:#fff;border:none}
 .draft-notice .dn-discard{margin-left:4px;background:none;border:1px solid #e0c97f;color:#8a6a1c}
 
+/* ============ 菌床在庫（2026-10-29）：42個でないタンク・移動の入力 ============ */
+.odd-box{padding:0 var(--pad-card) 6px;font-size:13px}
+.odd-box summary{color:var(--sub);cursor:pointer;padding:4px 0}
+.odd-in{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:4px 0}
+.odd-in input{flex:1;min-width:150px;height:38px;font-size:16px;border:1px solid var(--border);border-radius:var(--r-btn);padding:0 8px;font-family:inherit}
+.idou{padding-bottom:10px}
+.idou-row{display:flex;align-items:center;gap:8px;padding:8px var(--pad-card);border-top:1px solid var(--border)}
+.idou-lbl{flex:none;width:64px;font-size:14px;font-weight:700}
+.idou-btns{flex:1;display:flex;flex-wrap:wrap;gap:6px}
+.idou-btns button{flex:1;min-width:64px;padding:10px 6px;font-size:15px;font-weight:700;border:1px solid var(--border);border-radius:var(--r-btn);background:#fff;color:var(--sub);font-family:inherit;cursor:pointer}
+.idou-btns button.on{background:var(--green);border-color:var(--green);color:#fff}
+.idou-yday .idou-btns[data-el="day"] button.on{background:#b45309;border-color:#b45309}
+.idou-num{flex:1;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.idou-num input{width:90px;height:44px;font-size:20px;text-align:right;border:1px solid var(--border);border-radius:var(--r-btn);padding:0 8px;font-family:inherit}
+.idou-unit{flex:1}
+.idou-count{padding:0 var(--pad-card);font-size:14px;font-weight:700;color:var(--green);min-height:4px}
+.idou-label{padding:4px var(--pad-card);font-size:13px}
+.idou-label summary{color:var(--sub);cursor:pointer;padding:4px 0}
+.idou-label-in{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.idou-label-in input{height:38px;font-size:15px;font-family:inherit}
+.idou-label-note{font-size:12px;color:var(--sub)}
+.idou-save{margin:10px var(--pad-card) 4px;width:calc(100% - 2 * var(--pad-card))}
+.idou-msg{padding:0 var(--pad-card)}
+.idou-list-hd{padding:10px var(--pad-card) 4px;font-size:13px;font-weight:700;color:var(--sub)}
+.idou-list{padding:0 var(--pad-card)}
+.idou-item{padding:8px 0;border-top:1px solid var(--border);font-size:14px;line-height:1.6}
+.idou-who{font-size:12px;color:var(--sub)}
+.idou-sending{color:#8a6100;font-weight:700;margin-left:6px}
+.idou-unknown{color:var(--orange);font-weight:700;margin-left:6px}
+
 @media (max-width: 360px){
   .frow input[inputmode="numeric"],.frow input[inputmode="decimal"]{width:68px;height:38px;font-size:16px}
 }

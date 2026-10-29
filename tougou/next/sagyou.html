@@ -30,6 +30,7 @@ var INITIAL_OPTIONS = {
   - 端末の控え（送信待ち・一覧・再送の ID）は sg.work.cache.*、下書きは sg.work.draft.v1（旧 /sagyou/ の sagyou.* と混ぜない）
   - 保存は押した瞬間に完了扱い（seisan_form.js の optimistic）。届かなければその時点で入力欄に戻して知らせる
   - 最上部は本日の指示バーの枠（js/shiji-slot.js。無くても他は動く）
+  - 作業記録の下に「移動」（js/zaiko_idou.js。拠点の間で菌床を運んだ記録）。浸水には「42個でないタンク」の欄（2026-10-29 菌床在庫）
 -->
 <style>
 html,body{height:100%}
@@ -102,6 +103,7 @@ body.form-yday .page#p1{background:#fff4e5}
     <div class="screen" id="app">
       <div id="msg"></div>
       <div id="form"></div>
+      <div id="idou"></div>
     </div>
   </section>
   <section class="page" id="p2" aria-label="シフト">
@@ -118,6 +120,7 @@ body.form-yday .page#p1{background:#fff4e5}
 <script src="js/common.js"></script>
 <script src="js/login.js"></script>
 <script src="js/seisan_form.js"></script>
+<script src="js/zaiko_idou.js"></script>
 <script>
 (function () {
   'use strict';
@@ -169,6 +172,11 @@ body.form-yday .page#p1{background:#fff4e5}
         me: { empId: person.id, name: person.surname },
         nameOf: function (r) { return surnameOf(r['入力者']) || r.empSurname || r.empName || ''; }
       });
+      // 菌床の移動（2026-10-29 菌床在庫）。部品が読めなくても作業記録は動く
+      if (window.SgIdou) {
+        try { window.SgIdou.mount({ host: $('idou'), me: { empId: person.id, name: person.surname }, cacheKey: CACHE_KEY, sites: INITIAL_OPTIONS.sites }); }
+        catch (e) { console.error(e); }
+      }
     }
     if (!window.__sagyouFormAt) window.__sagyouFormAt = performance.now();   // 実測用（開いてから入力欄が出るまで）
   }

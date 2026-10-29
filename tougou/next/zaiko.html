@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#1c1c1e">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="/tougou/icons/apple-touch-icon.png">
+<title>菌床在庫 | 栄ガーデン</title>
+<link rel="stylesheet" href="styles/common.css">
+<!--
+  菌床在庫（2026-10-29 指示 統合アプリ_菌床在庫）。拠点ごとに 1番・休養中・2番・3番 の床数と、棚・休養の置ける数と空き。
+  - GAS zaiko.status（Zaiko.gs）。袋出し・浸水は作業記録の入力、移動は作業記録の「移動」、起点は最後の棚卸し
+  - 棚卸しの入力（zaiko.stocktakePreview で確かめてから zaiko.stocktakeSet）と置ける数の変更（zaiko.capacitySet）は代表・管理者
+  - 現場の人も見る前提：文字は大きく、色の意味は文字でも書く（「超えています」「余裕」）
+-->
+<style>
+body{font-size:16px}
+.site{margin-bottom:14px}
+.site-hd{display:flex;align-items:baseline;justify-content:space-between;padding:12px var(--pad-card) 6px}
+.site-hd h2{font-size:21px;margin:0}
+.st-line{padding:0 var(--pad-card) 8px;font-size:14px;line-height:1.6}
+.st-line.pre{color:#8a6100;font-weight:700}
+.nums{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;padding:4px var(--pad-card) 10px}
+.nums div{background:#f7f5f0;border-radius:10px;text-align:center;padding:8px 2px}
+.nums b{display:block;font-size:26px;line-height:1.2}
+.nums span{font-size:13px;color:var(--sub)}
+.cap{padding:8px var(--pad-card);border-top:1px solid var(--border)}
+.cap-hd{display:flex;justify-content:space-between;align-items:baseline;font-size:15px;font-weight:700}
+.cap-hd .v{font-size:19px}
+.bar{height:14px;background:#ece8df;border-radius:7px;overflow:hidden;margin:6px 0 4px}
+.bar i{display:block;height:100%;background:var(--green)}
+.cap.over .bar i{background:var(--red)}
+.cap .word{font-size:14px}
+.cap.over .word{color:var(--red);font-weight:700}
+.cap.ok .word{color:var(--green)}
+.cap.over .cap-hd .v{color:var(--red)}
+.flags{background:#fdecea;color:#b71c1c;padding:8px var(--pad-card);font-size:14px;line-height:1.6;border-top:1px solid #f5c6c0}
+.flags b{display:block}
+.note{font-size:13px;color:var(--sub);padding:6px var(--pad-card);line-height:1.6}
+details.dt{border-top:1px solid var(--border)}
+details.dt summary{padding:10px var(--pad-card);font-size:14px;color:var(--sub);cursor:pointer}
+.tbl td,.tbl th{font-size:14px}
+.proj td.hit{font-weight:700}
+.legend{font-size:13px;color:var(--sub);padding:8px var(--pad-card);line-height:1.7}
+/* 棚卸しの入力 */
+.tf{padding:10px var(--pad-card)}
+.tf-row{display:flex;align-items:center;gap:8px;margin:8px 0;flex-wrap:wrap}
+.tf-row .l{width:72px;font-weight:700;font-size:15px}
+.tf input{height:42px;font-size:17px;border:1px solid var(--border);border-radius:var(--r-btn);padding:0 8px;font-family:inherit}
+.tf input.n{width:110px;text-align:right}
+.tf input.d{width:160px}
+.tf .btns{display:flex;gap:6px;flex-wrap:wrap}
+.tf .btns button{padding:10px 14px;font-size:15px;font-weight:700;border:1px solid var(--border);border-radius:var(--r-btn);background:#fff;color:var(--sub);font-family:inherit;cursor:pointer}
+.tf .btns button.on{background:var(--green);border-color:var(--green);color:#fff}
+.tf .sub{font-size:13px;color:var(--sub)}
+.tf .dated{margin-left:80px}
+.tf .add{padding:6px 12px;font-size:14px;border:1px dashed var(--sub);border-radius:var(--r-btn);background:#fff;font-family:inherit;cursor:pointer}
+.tf .sum{font-size:15px;font-weight:700;margin:8px 0}
+.tf .acts{display:flex;gap:8px;margin-top:10px}
+.tf .acts button{flex:1;padding:13px;font-size:16px;font-weight:700;border-radius:var(--r-btn);font-family:inherit;cursor:pointer}
+.tf .pv{background:#fff;border:1px solid var(--green);color:var(--green)}
+.tf .sv{background:var(--green);border:1px solid var(--green);color:#fff}
+.tf textarea{width:100%;min-height:52px;font-size:15px;font-family:inherit;border:1px solid var(--border);border-radius:var(--r-btn);padding:6px 8px;box-sizing:border-box}
+.pvbox{margin-top:10px;background:#eef6ff;border:1px solid #bcd7f5;border-radius:var(--r);padding:10px;font-size:14px;line-height:1.7}
+.stk{padding:8px var(--pad-card);border-top:1px solid var(--border);font-size:14px;line-height:1.6}
+.stk.off{color:var(--sub);text-decoration:line-through}
+.stk button{margin-left:6px;padding:3px 10px;font-size:13px;border:1px solid var(--border);border-radius:var(--r-btn);background:#fff;font-family:inherit;cursor:pointer}
+.capf{padding:10px var(--pad-card)}
+.capf .tf-row .l{width:auto;min-width:150px}
+</style>
+</head>
+<body>
+
+<div class="hdr">
+  <div class="hdr-top">
+    <h1>🧺 菌床在庫</h1>
+    <a class="back-btn" href="kanri.html">← 管理</a>
+  </div>
+  <div class="hdr-date" id="hDate"></div>
+</div>
+
+<div class="screen" id="app">
+  <div id="msg"></div>
+  <div id="sites"><div class="fsec"><div class="empty">読み込み中…</div></div></div>
+
+  <div class="sec-lbl">今後7日の動き（記録を足さない見込み）</div>
+  <div class="fsec" id="proj"><div class="empty">読み込み中…</div></div>
+
+  <button type="button" class="load-btn" id="reload">🔄 読み直す</button>
+
+  <div class="sec-lbl" id="tfLbl">棚卸しを入れる</div>
+  <div class="fsec" id="tf"></div>
+
+  <div class="sec-lbl">棚卸しの記録</div>
+  <div class="fsec" id="stks"><div class="empty">読み込み中…</div></div>
+
+  <div class="sec-lbl">置ける数（統合マスタの設定）</div>
+  <div class="fsec" id="capf"></div>
+
+  <div id="demoBox"></div>
+</div>
+
+<footer class="footer"><a href="kanri.html">📋 管理メニューに戻る</a></footer>
+
+<script src="js/common.js"></script>
+<script src="js/login.js"></script>
+<script src="js/kanri.js"></script>
+<script>
+(function () {
+  'use strict';
+  var C = window.TougouCommon, K = window.SgKanri;
+  var $ = function (id) { return document.getElementById(id); };
+  var esc = C.esc;
+  var fmt = function (n) { return n === null || n === undefined ? '—' : Number(n).toLocaleString(); };
+  var md = function (d) { return d ? Number(d.slice(5, 7)) + '/' + Number(d.slice(8, 10)) : ''; };
+  var mdhm = function (t) { return t ? md(t) + ' ' + String(t).slice(11, 16) : ''; };
+  var wd = function (d) { var p = d.split('-').map(Number); return '日月火水木金土'.charAt(new Date(p[0], p[1] - 1, p[2]).getDay()); };
+  var shortName = function (n) { return String(n || '').replace(/ハウス$/, ''); };
+  var last = null, session = null;
+
+  $('hDate').textContent = C.jpDate(C.now());
+  function msg(text, kind) { $('msg').innerHTML = text ? '<div class="notice ' + (kind || 'info') + '">' + esc(text) + '</div>' : ''; }
+
+  // ---------------------------------------------------------------- 表示
+  function capHtml(title, b) {
+    var over = b.over, pct = b.cap ? Math.min(100, Math.round(b.used / b.cap * 100)) : 0;
+    var word = b.cap === null || b.cap === undefined ? '置ける数が未設定'
+      : over ? '置ける数を ' + fmt(-b.free) + '床 超えています（赤）'
+      : '空き ' + fmt(b.free) + '床（' + (pct >= 90 ? 'ほぼいっぱい' : '余裕あり') + '）';
+    return '<div class="cap ' + (over ? 'over' : 'ok') + '"><div class="cap-hd"><span>' + esc(title) + '</span>' +
+      '<span class="v">' + fmt(b.used) + ' / ' + fmt(b.cap) + '床</span></div>' +
+      '<div class="bar"><i style="width:' + pct + '%"></i></div><div class="word">' + esc(word) + '</div></div>';
+  }
+  function siteHtml(s, params) {
+    var stl;
+    if (s.stocktake) {
+      stl = '<div class="st-line">最後の棚卸し <b>' + esc(mdhm(s.stocktake.at)) + '</b>' + (s.stocktake.surname ? '（' + esc(s.stocktake.surname) + '）' : '') +
+        '・その後の記録 <b>' + fmt(s.applied) + '件</b>' + (s.sameDay ? '（うち棚卸しの当日に入力 ' + s.sameDay + '件）' : '') + '</div>';
+    } else {
+      stl = '<div class="st-line pre">棚卸し前（数が不正確）' + (s.start ? '— ' + esc(md(s.start)) + ' からの記録 ' + fmt(s.applied) + '件だけで数えています' : '') + '</div>';
+    }
+    var h = '<div class="fsec site"><div class="site-hd"><h2>' + esc(s.name) + '</h2></div>' + stl +
+      '<div class="nums">' +
+      '<div><b>' + fmt(s.ichiban.total) + '</b><span>1番</span></div>' +
+      '<div><b>' + fmt(s.kyuyou) + '</b><span>休養中</span></div>' +
+      '<div><b>' + fmt(s.niban) + '</b><span>2番</span></div>' +
+      '<div><b>' + fmt(s.sanban.total) + '</b><span>3番</span></div></div>' +
+      capHtml('栽培の棚（1番＋2番＋3番）', s.tana) + capHtml('休養', s.kyuyouBox);
+    if (s.flags && s.flags.length) {
+      h += '<div class="flags"><b>⚠ 記録と在庫が合っていません（棚卸しで直してください）</b>' +
+        s.flags.slice(0, 5).map(function (f) { return esc(md(f.date)) + '：' + esc(f.text); }).join('<br>') +
+        (s.flags.length > 5 ? '<br>ほか ' + (s.flags.length - 5) + '件' : '') + '</div>';
+    }
+    if (s.ignored4) h += '<div class="note">浸水（4番用・例外）の記録 ' + s.ignored4 + '件は、在庫に数えていません（4番は扱わない）。</div>';
+    var rows1 = s.ichiban.byDate.map(function (x) { return '<tr><td>' + esc(md(x.date)) + '</td><td class="num">' + fmt(x.count) + '</td><td>' + esc(md(x.toKyuyouOn)) + '</td></tr>'; }).join('');
+    var rows3 = s.sanban.byDate.map(function (x) { return '<tr><td>' + esc(md(x.date)) + '</td><td class="num">' + fmt(x.count) + '</td><td>' + esc(md(x.removeOn)) + '</td></tr>'; }).join('');
+    h += '<details class="dt"><summary>1番・3番の日付ごと</summary>' +
+      '<table class="tbl"><tr><th>1番（袋出し日）</th><th>床</th><th>休養へ</th></tr>' + (rows1 || '<tr><td colspan="3">なし</td></tr>') + '</table>' +
+      '<table class="tbl"><tr><th>3番（浸水日）</th><th>床</th><th>消える日</th></tr>' + (rows3 || '<tr><td colspan="3">なし</td></tr>') + '</table>' +
+      '<div class="note">1番は袋出しの ' + params.restDays + '日後の朝に休養中へ、3番は浸水の ' + params.sanDays + '日後の朝に在庫から消えます（廃棄扱い）。</div></details>';
+    return h + '</div>';
+  }
+  function projHtml(r) {
+    if (!r.projection || !r.projection.length) return '<div class="empty">—</div>';
+    var sites = r.sites;
+    var h = '<table class="tbl proj"><tr><th>日</th>' + sites.map(function (s) { return '<th colspan="2">' + esc(shortName(s.name)) + '</th>'; }).join('') + '</tr>' +
+      '<tr><th></th>' + sites.map(function () { return '<th>1番→休養</th><th>3番が消える</th>'; }).join('') + '</tr>';
+    r.projection.forEach(function (p) {
+      h += '<tr><td>' + esc(md(p.date)) + '（' + wd(p.date) + '）</td>' + sites.map(function (s) {
+        var x = p.sites[s.id] || {};
+        return '<td class="num' + (x.toKyuyou ? ' hit' : '') + '">' + (x.toKyuyou ? fmt(x.toKyuyou) : '—') + '</td>' +
+               '<td class="num' + (x.removed ? ' hit' : '') + '">' + (x.removed ? fmt(x.removed) : '—') + '</td>';
+      }).join('') + '</tr>';
+    });
+    var lastP = r.projection[r.projection.length - 1];
+    h += '</table><div class="legend">' + sites.map(function (s) {
+      var x = lastP.sites[s.id] || {};
+      return esc(shortName(s.name)) + '：' + md(lastP.date) + ' には 栽培の棚 ' + fmt(x.tana) + '床・休養 ' + fmt(x.kyuyou) + '床（この先の袋出し・浸水・移動は入れていません）';
+    }).join('<br>') + '</div>';
+    return h;
+  }
+  function stkHtml(r) {
+    var list = r.stocktakes || [];
+    if (!list.length) return '<div class="empty">まだ棚卸しはありません。</div>';
+    var name = {}; r.sites.forEach(function (s) { name[s.id] = shortName(s.name); });
+    return list.map(function (t) {
+      return '<div class="stk' + (t.active ? '' : ' off') + '">' + esc(name[t.site] || t.site) + ' ' + esc(mdhm(t.at)) +
+        '：1番 ' + fmt(t.ichiban) + '・休養中 ' + fmt(t.kyuyou) + '・2番 ' + fmt(t.niban) + '・3番 ' + fmt(t.sanban) +
+        (t.surname ? '（' + esc(t.surname) + '）' : '') + (t.note ? '<br><span class="sub">' + esc(t.note) + '</span>' : '') +
+        (t.active ? '<button type="button" data-cancel="' + esc(t.id) + '">取り消す</button>' : '（取消）') + '</div>';
+    }).join('');
+  }
+  function render(r) {
+    last = r;
+    $('sites').innerHTML = r.sites.map(function (s) { return siteHtml(s, r.params); }).join('');
+    $('proj').innerHTML = projHtml(r);
+    $('stks').innerHTML = stkHtml(r);
+    Array.prototype.forEach.call($('stks').querySelectorAll('[data-cancel]'), function (b) { b.onclick = function () { cancelStk(b.dataset.cancel); }; });
+    if (r.warnings && r.warnings.length) msg('注意：' + r.warnings.join('／'), 'warn');
+    if (!tfMounted) mountTf(r);
+    renderCapf(r);
+  }
+  function load(quiet) {
+    if (!quiet) C.showLoading('読み込み中...');
+    return C.api('zaiko.status').then(function (r) { C.hideLoading(); msg(''); render(r); return r; }, function (err) {
+      C.hideLoading(); msg('読み込めませんでした：' + err.message, 'ng');
+    });
+  }
+
+  // ---------------------------------------------------------------- 棚卸しの入力
+  var tfMounted = false, tf = { site: '', id: '' };
+  function newId() { return 'tana-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8); }
+  function nowLocal() {
+    var d = C.now(), p2 = function (n) { return String(n).padStart(2, '0'); };
+    return C.ymd(d) + 'T' + p2(d.getHours()) + ':' + p2(d.getMinutes());
+  }
+  function datedRow(stage) {
+    return '<div class="tf-row dated" data-dated="' + stage + '"><input type="date" class="d"> <input type="text" class="n" inputmode="numeric" pattern="[0-9]*" placeholder="床"> <span class="sub">床</span></div>';
+  }
+  function mountTf(r) {
+    tfMounted = true;
+    tf.site = r.sites[0] ? r.sites[0].id : '';
+    tf.id = newId();
+    var h = '<div class="tf">' +
+      '<div class="tf-row"><span class="l">拠点</span><div class="btns" data-el="site">' + r.sites.map(function (s) {
+        return '<button type="button" data-v="' + esc(s.id) + '"' + (s.id === tf.site ? ' class="on"' : '') + '>' + esc(shortName(s.name)) + '</button>';
+      }).join('') + '</div></div>' +
+      '<div class="tf-row"><span class="l">日時</span><input type="datetime-local" data-el="at" value="' + nowLocal() + '"><span class="sub">数えた時刻</span></div>' +
+      '<div class="tf-row"><span class="l">1番</span><span class="sub">ラベルの日付（袋出し日）ごと</span></div>' +
+      '<div data-el="ich">' + datedRow('ichiban') + datedRow('ichiban') + '</div>' +
+      '<div class="tf-row dated"><button type="button" class="add" data-add="ich">＋ 日付を足す</button></div>' +
+      '<div class="tf-row"><span class="l">休養中</span><input type="text" class="n" data-el="kyuyou" inputmode="numeric" pattern="[0-9]*" placeholder="0"> <span class="sub">床（合計）</span></div>' +
+      '<div class="tf-row"><span class="l">2番</span><input type="text" class="n" data-el="niban" inputmode="numeric" pattern="[0-9]*" placeholder="0"> <span class="sub">床（合計）</span></div>' +
+      '<div class="tf-row"><span class="l">3番</span><span class="sub">ラベルの日付（タンク出し日）ごと</span></div>' +
+      '<div data-el="san">' + datedRow('sanban') + datedRow('sanban') + '</div>' +
+      '<div class="tf-row dated"><button type="button" class="add" data-add="san">＋ 日付を足す</button></div>' +
+      '<div class="tf-row"><span class="l">メモ</span></div><textarea data-el="note" placeholder="任意（例：音声の報告から入力）"></textarea>' +
+      '<div class="sum" data-el="sum"></div>' +
+      '<div class="note">保存すると、その拠点の在庫をこの数で置き換えます。棚卸しの日時より後に入った袋出し・浸水・移動だけを足し引きします。空欄は0として扱います。</div>' +
+      '<div class="acts"><button type="button" class="pv" data-el="pv">確かめる（保存しない）</button><button type="button" class="sv" data-el="sv">💾 棚卸しを保存</button></div>' +
+      '<div data-el="pvbox"></div></div>';
+    $('tf').innerHTML = h;
+    var box = $('tf');
+    var q = function (s) { return box.querySelector('[data-el="' + s + '"]'); };
+    Array.prototype.forEach.call(q('site').children, function (b) {
+      b.onclick = function () { tf.site = b.dataset.v; Array.prototype.forEach.call(q('site').children, function (x) { x.classList.toggle('on', x === b); }); sum(); };
+    });
+    Array.prototype.forEach.call(box.querySelectorAll('[data-add]'), function (b) {
+      b.onclick = function () { q(b.dataset.add).insertAdjacentHTML('beforeend', datedRow(b.dataset.add === 'ich' ? 'ichiban' : 'sanban')); };
+    });
+    box.addEventListener('input', function () { sum(); q('pvbox').innerHTML = ''; });
+    q('pv').onclick = function () { send(false); };
+    q('sv').onclick = function () { send(true); };
+    sum();
+  }
+  /** 入力 → 送る形。読めなければ { error } */
+  function collectTf() {
+    var box = $('tf'), q = function (s) { return box.querySelector('[data-el="' + s + '"]'); };
+    var bad = '';
+    var num = function (v, what) {
+      var n = C.readNum(v);
+      if (n === null) return 0;
+      if (isNaN(n) || n !== Math.floor(n)) { bad = bad || what + 'の数は整数で入れてください。'; return 0; }
+      return n;
+    };
+    var dated = function (el, what) {
+      var out = [];
+      Array.prototype.forEach.call(el.querySelectorAll('[data-dated]'), function (row) {
+        var d = row.querySelector('.d').value, n = num(row.querySelector('.n').value, what);
+        if (!n && !d) return;
+        if (n && !d) { bad = bad || what + 'のラベルの日付を入れてください（' + n + '床）。'; return; }
+        if (n) out.push({ date: d, count: n });
+      });
+      return out;
+    };
+    var at = String(q('at').value || '').replace('T', ' ');
+    var t = { id: tf.id, site: tf.site, at: at, ichiban: dated(q('ich'), '1番'), kyuyou: num(q('kyuyou').value, '休養中'),
+              niban: num(q('niban').value, '2番'), sanban: dated(q('san'), '3番'), note: q('note').value };
+    if (!t.site) bad = bad || '拠点を選んでください。';
+    if (!/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(at)) bad = bad || '棚卸しの日時を入れてください。';
+    return bad ? { error: bad } : t;
+  }
+  function tot(list) { return list.reduce(function (s, x) { return s + x.count; }, 0); }
+  function sum() {
+    var t = collectTf(), el = $('tf').querySelector('[data-el="sum"]');
+    if (t.error) { el.textContent = t.error; el.style.color = 'var(--red)'; return; }
+    el.style.color = '';
+    var i = tot(t.ichiban), s = tot(t.sanban);
+    el.textContent = '合計：1番 ' + fmt(i) + '・休養中 ' + fmt(t.kyuyou) + '・2番 ' + fmt(t.niban) + '・3番 ' + fmt(s) + '（栽培の棚 ' + fmt(i + t.niban + s) + '床）';
+  }
+  function send(save) {
+    var t = collectTf();
+    if (t.error) { msg(t.error, 'ng'); return; }
+    var pv = $('tf').querySelector('[data-el="pvbox"]');
+    if (save) {
+      var nm = (last.sites.filter(function (s) { return s.id === t.site; })[0] || {}).name || t.site;
+      if (!window.confirm(nm + ' の在庫を ' + t.at + ' の棚卸しの数で置き換えます。保存しますか')) return;
+    }
+    C.showLoading(save ? '保存中...' : '計算中...');
+    C.api(save ? 'zaiko.stocktakeSet' : 'zaiko.stocktakePreview', { stocktake: t }).then(function (r) {
+      C.hideLoading();
+      if (!save) {
+        var s = r.sites.filter(function (x) { return x.id === t.site; })[0];
+        pv.innerHTML = '<div class="pvbox"><b>保存したときの ' + esc(s.name) + '（今）</b><br>1番 ' + fmt(s.ichiban.total) + '・休養中 ' + fmt(s.kyuyou) +
+          '・2番 ' + fmt(s.niban) + '・3番 ' + fmt(s.sanban.total) + '<br>栽培の棚 ' + fmt(s.tana.used) + ' / ' + fmt(s.tana.cap) + '床' + (s.tana.over ? '（超えています）' : '') +
+          '・休養 ' + fmt(s.kyuyouBox.used) + ' / ' + fmt(s.kyuyouBox.cap) + '床' + (s.kyuyouBox.over ? '（超えています）' : '') +
+          '<br>棚卸しの後の記録 ' + fmt(s.applied) + '件を足し引きしています。まだ保存していません。</div>';
+        return;
+      }
+      C.toast(r.dup ? 'この棚卸しは保存済みです' : '棚卸しを保存しました');
+      tfMounted = false;   // 入力欄を作り直す（次の棚卸しは新しい ID）
+      return load(true);
+    }, function (err) { C.hideLoading(); msg((save ? '保存できませんでした：' : '確かめられませんでした：') + err.message, 'ng'); });
+  }
+  function cancelStk(id) {
+    if (!window.confirm('この棚卸しを取り消しますか（前の棚卸し、無ければ記録の開始日から数え直します）')) return;
+    C.showLoading('取り消し中...');
+    C.api('zaiko.stocktakeCancel', { id: id }).then(function () { C.hideLoading(); C.toast('取り消しました'); return load(true); },
+      function (err) { C.hideLoading(); msg('取り消せませんでした：' + err.message, 'ng'); });
+  }
+
+  // ---------------------------------------------------------------- 置ける数
+  function renderCapf(r) {
+    var src = function (s) { return s === '設定' ? '' : '（既定の値。設定に行がありません）'; };
+    $('capf').innerHTML = '<div class="capf">' + r.sites.map(function (s) {
+      return '<div class="tf-row"><span class="l">' + esc(shortName(s.name)) + ' 栽培の棚</span><input type="text" class="n" inputmode="numeric" data-cap="' + esc(s.id) + '|tana" value="' + esc(s.tana.cap === null ? '' : s.tana.cap) + '"> 床 <span class="sub">' + esc(src(s.capSource.tana)) + '</span></div>' +
+        '<div class="tf-row"><span class="l">' + esc(shortName(s.name)) + ' 休養</span><input type="text" class="n" inputmode="numeric" data-cap="' + esc(s.id) + '|kyuyou" value="' + esc(s.kyuyouBox.cap === null ? '' : s.kyuyouBox.cap) + '"> 床 <span class="sub">' + esc(src(s.capSource.kyuyou)) + '</span></div>';
+    }).join('') +
+      '<div class="note">統合マスタ「設定」の 菌床在庫_栽培棚_&lt;拠点ID&gt;・菌床在庫_休養_&lt;拠点ID&gt; に書きます（他の行は変えません）。' + (C.DEMO ? 'デモ表示では変えられません。' : '') + '</div>' +
+      '<div class="acts tf"><button type="button" class="sv" id="capSave"' + (C.DEMO ? ' disabled' : '') + '>置ける数を保存</button></div></div>';
+    if (!C.DEMO) $('capSave').onclick = saveCap;
+  }
+  function saveCap() {
+    var caps = {}, bad = '';
+    Array.prototype.forEach.call($('capf').querySelectorAll('[data-cap]'), function (inp) {
+      var p = inp.dataset.cap.split('|'), n = C.readNum(inp.value);
+      if (n === null) return;
+      if (isNaN(n) || n !== Math.floor(n)) { bad = '置ける数は整数で入れてください。'; return; }
+      var s = last.sites.filter(function (x) { return x.id === p[0]; })[0];
+      var cur = p[1] === 'tana' ? s.tana.cap : s.kyuyouBox.cap;
+      if (n === cur && s.capSource[p[1]] === '設定') return;
+      (caps[p[0]] = caps[p[0]] || {})[p[1]] = n;
+    });
+    if (bad) { msg(bad, 'ng'); return; }
+    if (!Object.keys(caps).length) { C.toast('変えた値がありません'); return; }
+    C.showLoading('保存中...');
+    C.api('zaiko.capacitySet', { caps: caps }).then(function (r) {
+      C.hideLoading(); C.toast('保存しました：' + (r.changed || []).join('、')); return load(true);
+    }, function (err) { C.hideLoading(); msg('保存できませんでした：' + err.message, 'ng'); });
+  }
+
+  // ---------------------------------------------------------------- デモ
+  if (C.DEMO) {
+    $('demoBox').innerHTML = '<div class="sec-lbl">デモ</div><div class="fsec"><div class="note">デモで試しに入れた移動・棚卸しを取り消します（袋出し・浸水の試し入力は上の赤い帯の「最初の状態に戻す」）。</div>' +
+      '<button type="button" class="load-btn" id="demoReset">デモの移動・棚卸しを取り消す</button></div>';
+    $('demoReset').onclick = function () {
+      if (!window.confirm('デモで入れた移動・棚卸しを取り消しますか（本番のデータには関係ありません）')) return;
+      C.showLoading('戻しています...');
+      C.api('zaiko.demoReset').then(function (r) { C.hideLoading(); C.toast('取り消しました（移動 ' + r.moves + '件・棚卸し ' + r.stocktakes + '件）'); tfMounted = false; return load(true); },
+        function (err) { C.hideLoading(); msg('戻せませんでした：' + err.message, 'ng'); });
+    };
+  }
+
+  $('reload').addEventListener('click', function () {
+    C.runOnce('reload', $('reload'), '読み直しています…', function () { return load(true); });
+  });
+
+  K.boot(function (s) {
+    session = s;
+    $('hDate').textContent = C.jpDate(C.now()) + '　' + (s && s.name || '');
+    if (s && s.role && s.role !== '代表' && s.role !== '管理者') {
+      $('tfLbl').hidden = true; $('tf').hidden = true;
+    }
+    load(false);
+  });
+})();
+</script>
+</body>
+</html>

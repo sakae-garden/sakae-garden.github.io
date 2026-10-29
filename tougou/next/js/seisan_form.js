@@ -54,6 +54,29 @@
   var UNIT = { fukurodashi: '個', shinsui_1: 'タンク', shinsui_2: 'タンク', shinsui_3: 'タンク' };
   // 「今日は○○無し」のボタンを出す種別（2026-10-15 杉さん決定 案b。4番用は例外なので出さない）。押すと 0（作業無し）として記録する
   var NONE_KINDS = { fukurodashi: 1, shinsui_1: 1, shinsui_2: 1 };
+  // 42個でないタンク（2026-10-29 菌床在庫）。浸水（2番用・3番用）の足していく入力にだけ出す。
+  // 入力の備考に「42個でないタンク：30,35」と書いて送る（Zaiko.gs が読む。生産記録の行・予測はタンク数×42のまま）
+  var ODD_KINDS = { shinsui_1: 1, shinsui_2: 1 };
+  var ODD_PREFIX = '42個でないタンク：';
+  var ODD_RE = /42個でないタンク[:：]\s*([0-9０-９,，、\s]+)/;
+  /** 欄の文字（30,35 等）→ 個数の配列。空欄は []、読めなければ null */
+  function parseOdd(s) {
+    var t = String(s == null ? '' : s).replace(/[０-９]/g, function (c) { return String.fromCharCode(c.charCodeAt(0) - 0xFEE0); }).trim();
+    if (!t) return [];
+    var a = t.split(/[,，、\s]+/).filter(function (x) { return x !== ''; });
+    if (!a.every(function (x) { return /^\d+$/.test(x) && Number(x) >= 1 && Number(x) <= 200; })) return null;
+    return a.map(Number);
+  }
+  /** 入力の備考から 42個でないタンクの個数の配列（無ければ []） */
+  function oddOfNote(note) {
+    var m = ODD_RE.exec(String(note || ''));
+    return m ? (parseOdd(m[1]) || []) : [];
+  }
+  /** タンク数と 42個でないタンク → 個数 */
+  function tankBeds(tanks, odd, cap) {
+    odd = odd && odd.length <= tanks ? odd : [];
+    return (tanks - odd.length) * cap + odd.reduce(function (s, n) { return s + n; }, 0);
+  }
 
   function addDays(ymd, n) {
     var p = ymd.split('-').map(Number), d = new Date(p[0], p[1] - 1, p[2] + n);
@@ -76,6 +99,10 @@
       '<div class="frow-inp"><button type="button" class="step-btn" data-k="' + k + '" data-d="-1" aria-label="1タンク減らす">－</button>' +
       numInput(k, 'numeric') +
       '<button type="button" class="step-btn" data-k="' + k + '" data-d="1" aria-label="1タンク増やす">＋</button></div></div>' +
+      (additive && ODD_KINDS[k]
+        ? '<details class="odd-box" data-oddbox="' + k + '"><summary>42個でないタンクがあるとき</summary>' +
+          '<div class="odd-in">そのタンクの個数 <input type="text" data-odd="' + k + '" inputmode="numeric" autocomplete="off" placeholder="例：30（2つなら 30,35）"></div></details>'
+        : '') +
       (additive ? addBox(k) : '');
   }
   function kgRow(k, label) {
@@ -134,6 +161,15 @@
                entries: [], ents: [], plans: [], day: 'today' };
     var inputs = {};
     KINDS.forEach(function (k) { inputs[k] = q('input[data-k="' + k + '"]'); });
+    var odds = {};   // 42個でないタンクの欄（additive のときだけある）
+    Object.keys(ODD_KINDS).forEach(function (k) { var x = q('input[data-odd="' + k + '"]'); if (x) odds[k] = x; });
+    /** 欄の 42個でないタンク。{ list:[...] } か { error } */
+    function oddIn(k) {
+      if (!odds[k]) return { list: [] };
+      var a = parseOdd(odds[k].value);
+      if (a === null) return { error: '42個でないタンクの個数は、数字で入れてください（2つ以上は 30,35 のように）。' };
+      return { list: a };
+    }
 
     // ---- 端末の控え（作業記録用。cacheKey が無ければ何もしない）
     function cacheGet(name) {
@@ -244,6 +280,7 @@
             // 数を足すと作業無しは自動で外れる（サーバと同じ）
             ents = ents.filter(function (e) { return !(e.none && same(e)); });
             ents.push({ id: rec.id, at: nowFull(), date: rec.date, site: rec.site, kind: rec.kind, value: rec.value,
+                        note: rec.odd && rec.odd.length ? ODD_PREFIX + rec.odd.join(',') : '',
                         empId: me.empId || '', surname: me.name || '', _pending: true });
           } else {
             ents = ents.filter(function (e) { return e.id !== rec.id; });
@@ -274,6 +311,13 @@
       var out = {}, bad = '';
       KINDS.forEach(function (k) {
         var v = C.readNum(inputs[k].value);
+        if (odds[k] && isAdd(k)) {
+          // 42個でないタンク：タンク数より多くは入れられない。タンク数が空なら保存させない（欄だけ残って消えないように）
+          var od = oddIn(k);
+          if (od.error) { bad = od.error; return; }
+          if (od.list.length && !(v > 0)) { bad = KIND_NAME[k] + 'のタンク数を入れてください（42個でないタンクだけでは保存できません）。'; return; }
+          if (od.list.length > v) { bad = KIND_NAME[k] + 'の42個でないタンクが、タンク数（' + v + '）より多く入っています。'; return; }
+        }
         if (v === null) return;
         if (isNaN(v)) { bad = '数字で入れてください。'; return; }
         if (INT_KINDS[k] && v !== Math.floor(v)) { bad = (k === 'fukurodashi' ? '袋出しは個数' : 'タンク数') + 'を整数で入れてください。'; return; }
@@ -311,7 +355,15 @@
 
     function countText(k) {
       var n = C.readNum(inputs[k].value);
-      return (n === null || isNaN(n) || n === 0) ? '' : '＝ ' + (n * st.tank).toLocaleString() + '個';
+      if (n === null || isNaN(n) || n === 0) return '';
+      var od = oddIn(k).list || [];
+      return '＝ ' + tankBeds(n, od, st.tank).toLocaleString() + '個' + (od.length && od.length <= n ? '（42個でないタンク ' + od.length + '）' : '');
+    }
+    /** その日・拠点の浸水の個数（足していく入力の備考の 42個でないタンクを数える）。入力が無ければ null */
+    function entBeds(site, k) {
+      var es = entsOf(site, k).filter(function (e) { return !e.none; });
+      if (!es.length) return null;
+      return es.reduce(function (s, e) { return s + tankBeds(Number(e.value) || 0, oddOfNote(e.note), st.tank); }, 0);
     }
     var dayWord = function () { return st.day === 'yday' ? '昨日' : '今日'; };
     /** その日・その拠点の足していく入力（送信待ちを含む） */
@@ -344,8 +396,9 @@
         h = '<div class="add-sum add-none-on">' + noneLabel(k) + '（' + C.esc(nz.surname || nz.empId || '') + ' ' + C.esc(String(nz.at).slice(11, 16)) + '）' +
           (nz._pending ? ' 送信中' : nz.empId === me ? '<button type="button" class="add-cancel" data-id="' + C.esc(nz.id) + '">取り消す</button>' : '') + '</div>';
       } else {
+        var beds = unit === 'タンク' && total ? entBeds(st.site, k) : null;
         h = '<div class="add-sum">' + dayWord() + 'の合計 <b>' + total.toLocaleString() + unit + '</b>' +
-          (unit === 'タンク' && total ? '（' + (total * st.tank).toLocaleString() + '個）' : '') + (bd ? '（' + C.esc(bd) + '）' : '') + '</div>';
+          (unit === 'タンク' && total ? '（' + (beds === null ? total * st.tank : beds).toLocaleString() + '個）' : '') + (bd ? '（' + C.esc(bd) + '）' : '') + '</div>';
         // まだ何も入っていない（数の入力も作業無しも無い）日だけ「無し」のボタンを出す。欄に数を入れている間は出さない
         var typed = C.readNum(inputs[k].value);
         if (NONE_KINDS[k] && st.site && !total && !entsOf(st.site, k).length && !(typed > 0)) {
@@ -355,7 +408,9 @@
       var mine = entsOf(st.site, k).filter(function (e) { return e.empId === me && !e.none; });
       if (mine.length) {
         h += '<div class="add-mine">' + mine.map(function (e) {
-          return '<span class="add-item">あなたの入力 ＋' + C.esc(e.value) + unit + '（' + C.esc(String(e.at).slice(11, 16)) + '）' +
+          var od = oddOfNote(e.note);
+          return '<span class="add-item">あなたの入力 ＋' + C.esc(e.value) + unit + (od.length ? '（42個でない：' + C.esc(od.join('・')) + '個）' : '') +
+            '（' + C.esc(String(e.at).slice(11, 16)) + '）' +
             (e._pending ? ' 送信中' : '<button type="button" class="add-cancel" data-id="' + C.esc(e.id) + '">取り消す</button>') + '</span>';
         }).join('') + '</div>';
       }
@@ -392,6 +447,11 @@
     /** 入力欄を保存済みの値にする（足していく欄は空にする）。soft なら、この画面を開いてから手で触った欄はそのまま */
     function fillInputs(soft) {
       KINDS.forEach(function (k) { if (!(soft && st.touched[k])) inputs[k].value = isAdd(k) ? '' : serverValue(k); });
+      Object.keys(odds).forEach(function (k) {
+        if (soft && (st.touched[k] || st.touched['odd_' + k])) return;
+        odds[k].value = '';
+        var box = q('[data-oddbox="' + k + '"]'); if (box) box.open = false;
+      });
       if (!soft) st.touched = {};
       renderRowMarks();
     }
@@ -446,7 +506,8 @@
         h += '<tr' + (Number(r['入力値']) === 0 ? ' class="zero"' : '') + '>' +
           '<td>' + C.esc(KIND_NAME[r.kind] || String(r['種別']).replace('収穫_', '収穫 ')) + '</td>' +
           '<td class="num">' + (r.none ? '作業無し' : C.esc(r['入力値'] + ' ' + r['入力単位'])) + '</td>' +
-          '<td class="num">' + (r['個数'] && !r.none ? Number(r['個数']).toLocaleString() + '個' : '') + '</td>' +
+          '<td class="num">' + (r['個数'] && !r.none
+            ? (isAdd(r.kind) && ODD_KINDS[r.kind] && entBeds(r['拠点'], r.kind) !== null ? entBeds(r['拠点'], r.kind) : Number(r['個数'])).toLocaleString() + '個' : '') + '</td>' +
           '<td>' + C.esc(isAdd(r.kind) && breakdown(r['拠点'], r.kind)
             ? breakdown(r['拠点'], r.kind) + (r._pending ? ' 送信中' : '')
             : who(r) + ' ' + (r._pending ? '送信中' : String(r['更新日時']).slice(11, 16))) + '</td></tr>';
@@ -502,7 +563,12 @@
           return null;
         }
       }
-      return kinds.map(function (k) { return { date: st.date, site: st.site, kind: k, value: p[k] }; });
+      return kinds.map(function (k) {
+        var r = { date: st.date, site: st.site, kind: k, value: p[k] };
+        var od = isAdd(k) && odds[k] ? oddIn(k).list : [];
+        if (od && od.length) r.odd = od;
+        return r;
+      });
     }
     function newId() { return 'c-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8); }
     /**
@@ -523,7 +589,10 @@
           '\nさらに ＋' + r.value + UNIT[r.kind] + ' を足しますか（キャンセルなら足しません）');
         return again ? [Object.assign({ id: newId() }, r)] : [];
       }
-      if (Number(r.value) === rt.total) return rt.recs.map(function (x) { return Object.assign({}, r, { id: x.id, value: x.value, retry: true }); });
+      if (Number(r.value) === rt.total) return rt.recs.map(function (x, i) {
+        // 42個でないタンクは最初の1件にだけ付ける（同じ個数を何件にも数えない）
+        return Object.assign({}, r, { id: x.id, value: x.value, retry: true }, i ? { odd: undefined } : {});
+      });
       return [Object.assign({}, r, { id: left[0].id, retry: true, changed: true })];
     }
     /** 送る単位に分ける：上書き（upsertMany）と足していく入力（add。1件ずつ ID を付ける） */
@@ -538,7 +607,11 @@
     }
     function callJob(job) {
       if (job.type === 'add') {
-        var send = job.records.map(function (r) { return { id: r.id, date: r.date, site: r.site, kind: r.kind, value: r.value }; });
+        var send = job.records.map(function (r) {
+          var s = { id: r.id, date: r.date, site: r.site, kind: r.kind, value: r.value };
+          if (r.odd && r.odd.length) s.note = ODD_PREFIX + r.odd.join(',');   // 42個でないタンク（入力の備考に残す）
+          return s;
+        });
         return C.api('production.add', { records: send }).then(function (res) {
           // 再送で、前の送信がすでに届いていた（サーバが同じ ID を数えなかった）
           var dups = ((res && res.results) || []).filter(function (x) { return x.dup; });
@@ -724,6 +797,12 @@
         if (r._add) addSum[r.kind] = (addSum[r.kind] || 0) + r.value;
         inputs[r.kind].value = String(r._add ? addSum[r.kind] : r.value);
         st.touched[r.kind] = true;
+        if (r._add && r.odd && r.odd.length && odds[r.kind]) {
+          // 42個でないタンクも欄に戻す（届かなかった分を合わせる）
+          var prev = parseOdd(odds[r.kind].value) || [];
+          odds[r.kind].value = prev.concat(r.odd).join(',');
+          var box = q('[data-oddbox="' + r.kind + '"]'); if (box) box.open = true;
+        }
       });
       var others = recs.filter(function (r) { return r.date !== st.date || r.site !== site; }).map(function (r) {
         return r.date + ' ' + siteName(r.site) + ' ' + KIND_NAME[r.kind] + ' ' + (r._add ? '＋' : '') + r.value;
@@ -746,11 +825,16 @@
       isDirty: isDirty,
       snapshot: function () {
         var v = {}; KINDS.forEach(function (k) { v[k] = inputs[k].value; });
+        Object.keys(odds).forEach(function (k) { if (odds[k].value) v['odd_' + k] = odds[k].value; });
         return { date: st.date, site: st.site, values: v };
       },
       restore: function (d) {
         var apply = function () {
           KINDS.forEach(function (k) { if (d.values[k] != null) { inputs[k].value = d.values[k]; st.touched[k] = true; } });
+          Object.keys(odds).forEach(function (k) {
+            var ov = d.values['odd_' + k];
+            if (ov) { odds[k].value = ov; st.touched['odd_' + k] = true; var box = q('[data-oddbox="' + k + '"]'); if (box) box.open = true; }
+          });
           renderRowMarks(); guard.changed();
         };
         if (d.date && d.date !== st.date && !o.pickDate && o.dayToggle && d.date === addDays(todayYmd(), st.day === 'yday' ? 0 : -1)) {
@@ -777,6 +861,9 @@
     // ---- 操作
     KINDS.forEach(function (k) {
       inputs[k].addEventListener('input', function () { st.touched[k] = true; renderRowMarks(); guard.changed(); });
+    });
+    Object.keys(odds).forEach(function (k) {
+      odds[k].addEventListener('input', function () { st.touched['odd_' + k] = true; renderRowMarks(); guard.changed(); });
     });
     Array.prototype.forEach.call(host.querySelectorAll('.step-btn'), function (b) {
       b.addEventListener('click', function () {
