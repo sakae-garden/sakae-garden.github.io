@@ -31,6 +31,11 @@
  *   confirmOverwrite … true なら収穫にすでに値があるとき「すでに ○kg（入力者）が入っています。上書きしますか」と確かめる
  *   planEdit  … true なら袋出しの指示（予定の個数）を入れる欄と、指示と実績の差を出す（代表。production.planSet）。
  *               指示は planEdit でなくても「今日の指示：寄居 150個（杉）」と袋出しの上に出す（差・警告は出さない）
+ *   layout    … 'work' なら現場向けの並び（2026-10-29 杉さん指示「入力する項目の名前と入力欄が一番目立つように」）。
+ *               拠点の大ボタン（siteTabs を本文に置く）→ 日付1行（昨日は小さなリンク）→ 袋出し・1番浸水・2番浸水の大きなカード →「送る」。
+ *               3番浸水・作業無し・収穫・指示・入力済みは「その他」（ふだん閉じる）。合計の内訳と取消は合計をタップしたときだけ開く。
+ *               処理（保存・足していく入力・取消・作業無し・下書き）は従来と同じで、並びと文言だけが違う
+ *   kindNames … 画面に出す名前の差し替え（{ shinsui_1: '1番浸水' } など。保存のキー・シートの種別は変えない）
  * 戻り値 { ready: Promise, reload() }
  */
 (function (root) {
@@ -45,10 +50,11 @@
   };
   // 画面に出す名前（Production.gs の name と同じ。2026-10-09）。N番浸水＝N番の後の浸水＝N+1番を出すための浸水。
   // 保存のキー（shinsui_1 等）とシートの種別（1番浸水 等）は変えない
-  var KIND_NAME = {
+  var KIND_NAME_BASE = {
     fukurodashi: '袋出し', shinsui_1: '浸水（2番用）', shinsui_2: '浸水（3番用）', shinsui_3: '浸水（4番用・例外）',
     shukaku_1: '収穫 1番', shukaku_2plus: '収穫 2番以降', shukaku_c: '収穫 傷'
   };
+  var KIND_NAME = KIND_NAME_BASE;   // mount の中では kindNames で差し替えたもの（同じ名前で影にする）
   var LS_SITE = 'tougou.today.site';          // GAS 版と同じキー（端末で前回選んだ拠点）
   var ADD_KINDS = { fukurodashi: 1, shinsui_1: 1, shinsui_2: 1, shinsui_3: 1 };   // 足していく入力の種別（Production.gs の PROD_ADD_KINDS と同じ）
   var UNIT = { fukurodashi: '個', shinsui_1: 'タンク', shinsui_2: 'タンク', shinsui_3: 'タンク' };
@@ -144,14 +150,57 @@
       '<div class="fsec" data-el="list"><div class="empty">読み込み中…</div></div>';
   }
 
+  // ---- 現場向けの並び（layout:'work'）。data-* の目印は formHtml と同じ（処理は共通）
+  function workHtml(o, N) {
+    function card(k) {
+      var tank = UNIT[k] === 'タンク';
+      return '<div class="wcard" data-row="' + k + '">' +
+        '<div class="wname">' + N[k] + '<span class="srv"></span></div>' +
+        '<div class="winp">' +
+        (tank ? '<button type="button" class="step-btn wstep" data-k="' + k + '" data-d="-1" aria-label="1タンク減らす">－</button>' : '') +
+        '<input type="text" class="wnum" data-k="' + k + '" inputmode="numeric" pattern="[0-9]*" autocomplete="off" placeholder="">' +
+        (tank ? '<button type="button" class="step-btn wstep" data-k="' + k + '" data-d="1" aria-label="1タンク増やす">＋</button>' : '') +
+        '<span class="wunit">' + UNIT[k] + '</span></div>' +
+        (tank ? '<div class="wcount" data-count="' + k + '"></div>' : '') +
+        addBox(k) +
+        (ODD_KINDS[k]
+          ? '<details class="wodd odd-box" data-oddbox="' + k + '"><summary>42個でないタンクがある</summary>' +
+            '<div class="odd-in">そのタンクの個数 <input type="text" data-odd="' + k + '" inputmode="numeric" autocomplete="off" placeholder="例：30（2つなら 30,35）"></div></details>'
+          : '') +
+        '</div>';
+    }
+    return '<div class="wsites" data-el="sites"></div>' +
+      '<div class="wday"><span data-el="dayLabel"></span><span class="wday-toggle" data-el="dayToggle"><button type="button" class="wlink" data-day="yday">昨日の分を入れる</button></span></div>' +
+      '<div class="yday-bar wyday" data-el="ydayBar" hidden></div>' +
+      card('fukurodashi') + card('shinsui_1') + card('shinsui_2') +
+      '<div class="wdone" data-el="done" hidden></div>' +
+      '<button type="button" class="wsend" data-el="save">送る</button>' +
+      '<div data-el="idouSlot"></div>' +
+      '<details class="wmore" data-el="more"><summary>その他</summary><div class="wmore-in">' +
+      '<div class="wmore-lbl">' + N.shinsui_3 + '</div>' + card('shinsui_3') +
+      '<div class="wmore-lbl">作業が無かった日</div><div class="wnone" data-el="noneBox"></div>' +
+      '<div class="plan-line" data-el="plan" hidden></div>' +
+      '<div class="wmore-lbl">収穫（kg・その日の合計。上書き）</div>' +
+      '<div class="fsec">' + kgRow('shukaku_1', '1番') + kgRow('shukaku_2plus', '2番以降') + kgRow('shukaku_c', '傷（C品）') + '</div>' +
+      '<div class="wmore-note">収穫は空欄なら送りません。取り消しは 0 を入れて「送る」。<span data-el="tankNote">1タンク＝42個</span></div>' +
+      '<div class="wmore-lbl">入力済み <span data-el="listDate"></span></div>' +
+      '<div class="fsec" data-el="list"><div class="empty">読み込み中…</div></div>' +
+      '</div></details>';
+  }
+
   function mount(o) {
     var C = root.TougouCommon;
     var host = o.host;
-    host.innerHTML = formHtml(o);
+    var work = o.layout === 'work';
+    var KIND_NAME = o.kindNames ? Object.assign({}, KIND_NAME_BASE, o.kindNames) : KIND_NAME_BASE;
+    host.innerHTML = work ? workHtml(o, KIND_NAME) : formHtml(o);
+    if (work) { o.siteTabs = host.querySelector('[data-el="sites"]'); o.dayToggle = true; o.additive = true; }
     var q = function (sel) { return host.querySelector(sel); };
     var el = { date: q('[data-el="date"]'), today: q('[data-el="today"]'), tankNote: q('[data-el="tankNote"]'), rare: q('[data-el="rare"]'),
                save: q('[data-el="save"]'), list: q('[data-el="list"]'), listDate: q('[data-el="listDate"]'),
-               dayToggle: q('[data-el="dayToggle"]'), ydayBar: q('[data-el="ydayBar"]'), plan: q('[data-el="plan"]') };
+               dayToggle: q('[data-el="dayToggle"]'), ydayBar: q('[data-el="ydayBar"]'), plan: q('[data-el="plan"]'),
+               dayLabel: q('[data-el="dayLabel"]'), done: q('[data-el="done"]'), more: q('[data-el="more"]'), noneBox: q('[data-el="noneBox"]') };
+    var openTot = {};   // 現場向け：合計の内訳を開いている種別（描き直しても閉じない）
     var msg = o.msg || function () {};
     var additive = !!o.additive;
     var isAdd = function (k) { return additive && !!ADD_KINDS[k]; };
@@ -337,7 +386,8 @@
     function renderSites() {
       var sites = (st.opts && st.opts.sites) || [];
       o.siteTabs.innerHTML = sites.map(function (s) {
-        return '<button type="button" class="rtab' + (s.id === st.site ? ' active' : '') + '" data-id="' + C.esc(s.id) + '">' + C.esc(s.name || s.id) + '</button>';
+        return '<button type="button" class="rtab' + (s.id === st.site ? ' active' : '') + '" data-id="' + C.esc(s.id) + '">' +
+          C.esc(work ? String(s.name || s.id).replace(/ハウス$/, '') : (s.name || s.id)) + '</button>';   // 現場向けは「寄居」「森林公園」
       }).join('');
       Array.prototype.forEach.call(o.siteTabs.children, function (b) {
         b.onclick = function () {
@@ -383,9 +433,59 @@
       }
       return order.filter(function (n) { return sum[n] !== 0; }).map(function (n) { return n + ' ' + sum[n]; }).join('・');
     }
+    /** 現場向け：カードの中の合計1行（タップで内訳と取消が開く） */
+    function renderWorkBox(k, box) {
+      var total = C.readNum(serverValue(k)) || 0, unit = UNIT[k], me = (o.me || {}).empId;
+      var es = entsOf(st.site, k), nones = es.filter(function (e) { return e.none; });
+      var mine = es.filter(function (e) { return e.empId === me && !e.none; });
+      var head, inner = '';
+      if (nones.length) {
+        var nz = nones[0];
+        head = noneLabel(k);
+        inner += '<div class="wtot-item">' + C.esc(nz.surname || nz.empId || '') + ' ' + C.esc(String(nz.at).slice(11, 16)) +
+          (nz._pending ? ' 送信中' : nz.empId === me ? '<button type="button" class="add-cancel" data-id="' + C.esc(nz.id) + '">取り消す</button>' : '') + '</div>';
+      } else {
+        var beds = unit === 'タンク' && total ? entBeds(st.site, k) : null;
+        head = dayWord() + 'の合計 <b>' + total.toLocaleString() + unit + '</b>' +
+          (unit === 'タンク' && total ? '（' + (beds === null ? total * st.tank : beds).toLocaleString() + '個）' : '');
+        var bd = breakdown(st.site, k);
+        if (bd) inner += '<div class="wtot-item">' + C.esc(bd) + '</div>';
+        inner += mine.map(function (e) {
+          var od = oddOfNote(e.note);
+          return '<div class="wtot-item">あなた ＋' + C.esc(e.value) + unit + (od.length ? '（42個でない：' + C.esc(od.join('・')) + '個）' : '') +
+            '（' + C.esc(String(e.at).slice(11, 16)) + '）' +
+            (e._pending ? ' 送信中' : '<button type="button" class="add-cancel" data-id="' + C.esc(e.id) + '">取り消す</button>') + '</div>';
+        }).join('');
+      }
+      box.innerHTML = inner
+        ? '<details class="wtot"' + (openTot[k] ? ' open' : '') + '><summary>' + head + '</summary>' + inner + '</details>'
+        : '<div class="wtot wtot-plain">' + head + '</div>';
+      var d = box.querySelector('details');
+      if (d) d.addEventListener('toggle', function () { openTot[k] = d.open; });
+      Array.prototype.forEach.call(box.querySelectorAll('.add-cancel'), function (b) {
+        b.onclick = function () { cancelEntry(b.dataset.id); };
+      });
+    }
+    /** 現場向け：「その他」の「今日は○○無し」のボタン（まだ何も入っていない種別だけ） */
+    function renderNoneBox() {
+      if (!el.noneBox) return;
+      var ks = Object.keys(NONE_KINDS).filter(function (k) {
+        var typed = C.readNum(inputs[k].value);
+        return st.site && !(C.readNum(serverValue(k)) || 0) && !entsOf(st.site, k).length && !(typed > 0);
+      });
+      el.noneBox.innerHTML = ks.length
+        ? ks.map(function (k) { return '<button type="button" class="add-none" data-none="' + k + '">' + noneLabel(k) + '</button>'; }).join('')
+        : '<div class="empty">' + (st.site ? '押せるものはありません（入力済み）' : '拠点を選んでください') + '</div>';
+      Array.prototype.forEach.call(el.noneBox.querySelectorAll('.add-none'), function (b) {
+        b.onclick = function () { pressNone(b.dataset.none); };
+      });
+    }
+    var WEEK = ['日', '月', '火', '水', '木', '金', '土'];
+    function mdw(ymd) { var p = String(ymd).split('-').map(Number); return md(ymd) + '（' + WEEK[new Date(p[0], p[1] - 1, p[2]).getDay()] + '）'; }
     function renderAddBox(k) {
       var box = q('[data-add="' + k + '"]');
       if (!box) return;
+      if (work) { renderWorkBox(k, box); return; }
       var total = C.readNum(serverValue(k)) || 0, unit = UNIT[k], me = (o.me || {}).empId;
       var bd = breakdown(st.site, k);
       var nones = entsOf(st.site, k).filter(function (e) { return e.none; });
@@ -438,10 +538,16 @@
           row.classList.toggle('chg', v !== null && !(sv !== '' && Number(sv) === v));
         }
         var c = q('[data-count="' + k + '"]');
-        if (c) c.textContent = (isAdd(k) && v ? '＋' : '') + countText(k);
+        if (c) c.textContent = (isAdd(k) && v && !work ? '＋' : '') + countText(k);
       });
       // 4番用に保存済みの値・入力があれば、たたまずに見せる
       if (el.rare && (serverValue('shinsui_3') !== '' || C.readNum(inputs.shinsui_3.value) !== null)) el.rare.open = true;
+      if (work) {
+        // 「その他」の欄に戻した値（届かなかった送信・下書き）があれば開いて見せる
+        if (['shinsui_3', 'shukaku_1', 'shukaku_2plus', 'shukaku_c'].some(function (k) { return st.touched[k] && String(inputs[k].value).trim() !== ''; })) el.more.open = true;
+        if (st.date) el.dayLabel.textContent = mdw(st.date) + 'の分';
+        renderNoneBox();
+      }
       renderPlan();
     }
     /** 入力欄を保存済みの値にする（足していく欄は空にする）。soft なら、この画面を開いてから手で触った欄はそのまま */
@@ -685,7 +791,14 @@
       msg('');
       guard.setState('saving');
       guard.changed();
-      C.toast(st.day === 'yday' ? '昨日（' + md(st.date) + '）の分を保存しました' : '保存しました');
+      if (work) {
+        // 現場向け：何を送ったかを大きく（「袋出し 150個／1番浸水 3タンク を送りました」）
+        var sent = records.map(function (r) { return KIND_NAME[r.kind] + ' ' + r.value + (UNIT[r.kind] || 'kg'); }).join('／');
+        el.done.textContent = (st.day === 'yday' ? '昨日（' + md(st.date) + '）の分 ' : '') + sent + ' を送りました';
+        el.done.hidden = false;
+      } else {
+        C.toast(st.day === 'yday' ? '昨日（' + md(st.date) + '）の分を保存しました' : '保存しました');
+      }
       pump();
       return Promise.resolve(true);
     }
@@ -777,6 +890,7 @@
         else recs = recs.concat(job.records.map(function (r) { return Object.assign({ _add: job.type === 'add' }, r); }));
       });
       outbox = []; saveOutbox();
+      if (el.done) el.done.hidden = true;   // 「送りました」を出したままにしない
       keepRetry(recs.filter(function (r) { return r._add; }));   // 「再送する」では同じ ID で送る
       overlay();
       var mine = recs.filter(function (r) { return r.date === st.date; });
@@ -860,7 +974,7 @@
 
     // ---- 操作
     KINDS.forEach(function (k) {
-      inputs[k].addEventListener('input', function () { st.touched[k] = true; renderRowMarks(); guard.changed(); });
+      inputs[k].addEventListener('input', function () { st.touched[k] = true; if (el.done) el.done.hidden = true; renderRowMarks(); guard.changed(); });
     });
     Object.keys(odds).forEach(function (k) {
       odds[k].addEventListener('input', function () { st.touched['odd_' + k] = true; renderRowMarks(); guard.changed(); });
@@ -893,6 +1007,13 @@
     function renderDay() {
       if (!el.dayToggle) return;
       var y = st.day === 'yday';
+      if (work) {
+        // 現場向け：リンク1つで今日⇄昨日。昨日のあいだだけ黄色の帯
+        var lk = el.dayToggle.children[0];
+        lk.dataset.day = y ? 'today' : 'yday';
+        lk.textContent = y ? '今日の分に戻る' : '昨日の分を入れる';
+        if (st.date) el.dayLabel.textContent = mdw(st.date) + 'の分';
+      }
       Array.prototype.forEach.call(el.dayToggle.children, function (b) { b.classList.toggle('on', b.dataset.day === st.day); });
       el.ydayBar.hidden = !y;
       el.ydayBar.textContent = '昨日（' + md(st.date) + '）の分を入力中';
@@ -967,7 +1088,7 @@
     return { ready: ready, reload: function () { return load(true); }, isDirty: isDirty };
   }
 
-  var api = { mount: mount, KINDS: KINDS, KIND_NAME: KIND_NAME };
+  var api = { mount: mount, KINDS: KINDS, KIND_NAME: KIND_NAME_BASE };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.TougouSeisanForm = api;
 })(typeof window !== 'undefined' ? window : globalThis);
