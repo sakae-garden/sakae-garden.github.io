@@ -447,7 +447,7 @@
       } else {
         var beds = unit === 'タンク' && total ? entBeds(st.site, k) : null;
         head = dayWord() + 'の合計 <b>' + total.toLocaleString() + unit + '</b>' +
-          (unit === 'タンク' && total ? '（' + (beds === null ? total * st.tank : beds).toLocaleString() + '個）' : '');
+          (unit === 'タンク' && total ? '（<b>' + (beds === null ? total * st.tank : beds).toLocaleString() + '個</b>）' : '');
         var bd = breakdown(st.site, k);
         if (bd) inner += '<div class="wtot-item">' + C.esc(bd) + '</div>';
         inner += mine.map(function (e) {
