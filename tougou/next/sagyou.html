@@ -75,51 +75,52 @@ body.form-yday .page#p1{background:#fff4e5}
 .add-none-on{font-weight:700;color:#555;background:#f1f1f1;border-radius:var(--r-btn);padding:6px 10px}
 .plan-line{background:#eef6ff;border:1px solid #bcd7f5;border-radius:var(--r);padding:8px 12px;margin-bottom:8px;font-size:15px;font-weight:700}
 /* ---- 現場向けの並び（layout:'work'。2026-10-29）。色は 拠点の選択・送信成功・昨日入力中・エラー だけ */
-.wsites{display:flex;gap:10px;margin:2px 0 8px}
-.wsites .rtab{flex:1;min-height:64px;font-size:24px;font-weight:800;border:2px solid var(--border);border-radius:14px;background:#fff;color:#555;font-family:inherit;cursor:pointer;padding:0}
-.wsites .rtab.active{background:#1d4ed8;border-color:#1d4ed8;color:#fff;box-shadow:0 3px 0 #1e3a8a}
-.wday{display:flex;justify-content:space-between;align-items:baseline;font-size:15px;color:var(--sub);margin:0 2px 10px}
+/* 大きさは通常（2026-10-29 杉さん「今回は通常でいい」。袋詰めのような大きさは不要）。390×844 で拠点〜「送る」が1画面に収まる */
+.wsites{display:flex;gap:8px;margin:0 0 6px}
+.wsites .rtab{flex:1;min-height:48px;font-size:18px;font-weight:700;border:1px solid var(--border);border-radius:10px;background:#fff;color:#555;font-family:inherit;cursor:pointer;padding:0}
+.wsites .rtab.active{background:#1d4ed8;border-color:#1d4ed8;color:#fff}
+.wday{display:flex;justify-content:space-between;align-items:baseline;font-size:14px;color:var(--sub);margin:0 2px 6px}
 .wlink{background:none;border:0;padding:4px 0;color:var(--sub);text-decoration:underline;font-size:14px;font-family:inherit;cursor:pointer}
-.wyday{position:static;background:#fde047;color:#422006;font-size:22px;font-weight:800;padding:12px;border-radius:12px}
+.wyday{position:static;background:#fde047;color:#422006;font-size:16px;font-weight:700;padding:8px;border-radius:10px;margin-bottom:8px}
 body.form-yday .hdr{background:#1c1c1e}
 body.form-yday .page#p1{background:transparent}
-.wcard{background:#fff;border:1px solid var(--border);border-radius:16px;padding:14px 16px 12px;margin-bottom:12px}
+.wcard{background:#fff;border:1px solid var(--border);border-radius:12px;padding:8px 12px;margin-bottom:8px}
 .wcard.chg{border-color:#1c1c1e;box-shadow:inset 0 0 0 1px #1c1c1e}
-.wname{font-size:28px;font-weight:800;letter-spacing:.04em;color:#111;margin-bottom:8px}
+.wname{font-size:19px;font-weight:700;color:#111;margin-bottom:4px}
 .wname .srv{display:none}
-.winp{display:flex;align-items:center;gap:8px}
-.wnum{flex:1;min-width:0;height:64px;font-size:34px;font-weight:800;text-align:center;border:2px solid #9ca3af;border-radius:12px;font-family:inherit;padding:0 6px}
-.wnum:focus{outline:none;border-color:#1d4ed8}
-.wstep{flex:none;width:56px;height:64px;font-size:30px;font-weight:700;border:2px solid var(--border);border-radius:12px;background:#f6f6f6;font-family:inherit;color:#333;cursor:pointer}
-.wunit{flex:none;font-size:24px;font-weight:800;color:#111;min-width:2.6em}
-.wcount{font-size:15px;color:var(--sub);margin-top:4px;min-height:1px}
+.winp{display:flex;align-items:center;gap:6px}
+.wnum{flex:1;min-width:0;height:46px;font-size:20px;font-weight:700;text-align:center;border:1px solid #9ca3af;border-radius:8px;font-family:inherit;padding:0 6px}
+.wnum:focus{outline:none;border-color:#1d4ed8;box-shadow:0 0 0 1px #1d4ed8}
+.wstep{flex:none;width:44px;height:44px;font-size:22px;font-weight:700;border:1px solid var(--border);border-radius:8px;background:#f6f6f6;font-family:inherit;color:#333;cursor:pointer;padding:0}
+.wunit{flex:none;font-size:16px;font-weight:700;color:#111;min-width:3em}
+.wcount{font-size:13px;color:var(--sub);margin-top:2px;min-height:1px}
 .wcount:empty{display:none}
-.wcard .add-box{padding:0;font-size:17px;margin-top:8px}
-.wtot{font-size:17px;color:#333}
-.wtot b{font-size:20px}
+.wcard .add-box{padding:0;font-size:14px;margin-top:4px}
+.wtot{font-size:14px;color:#333}
+.wtot b{font-size:15px}
 .wtot summary{cursor:pointer;list-style:none}
 .wtot summary::-webkit-details-marker{display:none}
-.wtot summary::after{content:' ▾';color:var(--sub);font-size:14px}
+.wtot summary::after{content:' ▾';color:var(--sub);font-size:12px}
 .wtot[open] summary::after{content:' ▴'}
-.wtot-item{font-size:15px;color:var(--sub);padding:6px 0 0}
-.wtot-item .add-cancel{font-size:14px;padding:5px 12px}
-.wcard .wodd{margin-top:6px;padding:0;border:0;background:none}
-.wcard .wodd summary{font-size:13px;color:var(--sub);cursor:pointer;text-decoration:underline;list-style:none;padding:4px 0}
+.wtot-item{font-size:14px;color:var(--sub);padding:4px 0 0}
+.wtot-item .add-cancel{font-size:13px;padding:4px 10px}
+.wcard .wodd{margin-top:2px;padding:0;border:0;background:none}
+.wcard .wodd summary{font-size:12px;color:var(--sub);cursor:pointer;text-decoration:underline;list-style:none;padding:2px 0}
 .wodd summary::-webkit-details-marker{display:none}
-.wodd .odd-in{font-size:15px;padding-top:6px}
-.wodd .odd-in input{width:100%;height:44px;font-size:18px;margin-top:4px;border:1px solid var(--border);border-radius:8px;padding:0 8px;font-family:inherit}
-.wdone{background:#15803d;color:#fff;font-size:22px;font-weight:800;line-height:1.45;padding:14px 16px;border-radius:14px;margin-bottom:12px;text-align:center}
-.wsend{display:block;width:100%;height:72px;font-size:30px;font-weight:800;letter-spacing:.3em;border:0;border-radius:16px;background:#1c1c1e;color:#fff;font-family:inherit;cursor:pointer;margin-bottom:16px}
+.wodd .odd-in{font-size:14px;padding-top:4px}
+.wodd .odd-in input{width:100%;height:40px;font-size:16px;margin-top:4px;border:1px solid var(--border);border-radius:8px;padding:0 8px;font-family:inherit}
+.wdone{background:#15803d;color:#fff;font-size:16px;font-weight:700;line-height:1.4;padding:8px 10px;border-radius:10px;margin-bottom:8px;text-align:center}
+.wsend{display:block;width:100%;height:48px;font-size:18px;font-weight:700;letter-spacing:.2em;border:0;border-radius:10px;background:#1c1c1e;color:#fff;font-family:inherit;cursor:pointer;margin-bottom:12px}
 .wsend:disabled{opacity:.4}
-.wmore{margin:4px 0 24px;border-top:1px solid var(--border)}
-.wmore>summary{font-size:18px;font-weight:700;color:var(--sub);padding:14px 2px;cursor:pointer}
-.wmore-lbl{font-size:14px;font-weight:700;color:var(--sub);margin:14px 2px 6px}
+.wmore{margin:4px 0 20px;border-top:1px solid var(--border)}
+.wmore>summary{font-size:15px;font-weight:700;color:var(--sub);padding:12px 2px;cursor:pointer}
+.wmore-lbl{font-size:14px;font-weight:700;color:var(--sub);margin:12px 2px 6px}
 .wmore-note{font-size:12px;color:var(--sub);margin:6px 2px}
-.wmore .wcard .wname{font-size:22px}
+.wmore .wcard .wname{font-size:17px}
 .wnone{display:flex;flex-direction:column;gap:6px}
-.wnone .add-none{font-size:16px;padding:12px 10px;margin:0}
+.wnone .add-none{font-size:14px;padding:10px;margin:0}
 /* 移動（押したときだけ開く） */
-.wmove-btn{display:block;width:100%;min-height:56px;font-size:20px;font-weight:700;border:2px solid var(--border);border-radius:14px;background:#fff;color:#333;font-family:inherit;cursor:pointer;margin-bottom:8px}
+.wmove-btn{display:block;width:100%;min-height:44px;font-size:15px;font-weight:700;border:1px solid var(--border);border-radius:10px;background:#fff;color:#333;font-family:inherit;cursor:pointer;margin-bottom:8px}
 .wmove-btn[aria-expanded="true"]{border-color:#1c1c1e}
 #idou .sec-lbl,#idou .fsec-hdr{display:none}
 #idou .idou-btns button.on{background:#1d4ed8;border-color:#1d4ed8;color:#fff}
