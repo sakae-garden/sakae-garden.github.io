@@ -204,9 +204,9 @@ details.dt summary{padding:10px var(--pad-card);font-size:14px;color:var(--sub);
     if (!tfMounted) mountTf(r);
     renderCapf(r);
   }
-  function load(quiet) {
+  function load(quiet, keepMsg) {
     if (!quiet) C.showLoading('読み込み中...');
-    return C.api('zaiko.status').then(function (r) { C.hideLoading(); msg(''); render(r); return r; }, function (err) {
+    return C.api('zaiko.status').then(function (r) { C.hideLoading(); if (!keepMsg) msg(''); render(r); return r; }, function (err) {
       C.hideLoading(); msg('読み込めませんでした：' + err.message, 'ng');
     });
   }
@@ -305,6 +305,11 @@ details.dt summary{padding:10px var(--pad-card);font-size:14px;color:var(--sub);
       C.hideLoading();
       if (!save) {
         var s = r.sites.filter(function (x) { return x.id === t.site; })[0];
+        if (r.olderThan) {
+          pv.innerHTML = '<div class="pvbox" style="background:#fff8e1;border-color:#ffcc80"><b>この拠点には、もっと新しい棚卸し（' + esc(mdhm(r.olderThan)) +
+            '）があります。</b><br>この日時で保存しても在庫には使われません（最後の棚卸しが起点）。日時を確かめてください。まだ保存していません。</div>';
+          return;
+        }
         pv.innerHTML = '<div class="pvbox"><b>保存したときの ' + esc(s.name) + '（今）</b><br>1番 ' + fmt(s.ichiban.total) + '・休養中 ' + fmt(s.kyuyou) +
           '・2番 ' + fmt(s.niban) + '・3番 ' + fmt(s.sanban.total) + '<br>栽培の棚 ' + fmt(s.tana.used) + ' / ' + fmt(s.tana.cap) + '床' + (s.tana.over ? '（超えています）' : '') +
           '・休養 ' + fmt(s.kyuyouBox.used) + ' / ' + fmt(s.kyuyouBox.cap) + '床' + (s.kyuyouBox.over ? '（超えています）' : '') +
@@ -312,8 +317,9 @@ details.dt summary{padding:10px var(--pad-card);font-size:14px;color:var(--sub);
         return;
       }
       C.toast(r.dup ? 'この棚卸しは保存済みです' : '棚卸しを保存しました');
+      if (r.olderThan) msg('保存しましたが、もっと新しい棚卸し（' + mdhm(r.olderThan) + '）があるので、在庫にはそちらを使っています。', 'warn');
       tfMounted = false;   // 入力欄を作り直す（次の棚卸しは新しい ID）
-      return load(true);
+      return load(true, !!r.olderThan);
     }, function (err) { C.hideLoading(); msg((save ? '保存できませんでした：' : '確かめられませんでした：') + err.message, 'ng'); });
   }
   function cancelStk(id) {
