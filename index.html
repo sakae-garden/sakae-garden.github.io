@@ -2,295 +2,152 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="theme-color" content="#1c1c1e">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#f4f1ea">
 <link rel="manifest" href="manifest.json">
 <title>栄ガーデン</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@200;300;600&family=Noto+Sans+JP:wght@400;500;700;900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.34.0/dist/tabler-icons.min.css">
 <style>
+/* 【2026-11-10 杉さん承認 23:53】ホームのデザイン刷新（案B ライト）。配達／ハウス作業は左右のスワイプで切り替え。
+   旧 /kanri.html は /index.html#house へ転送。PORTAL_BUILD = 'portal-light-swipe-20261110' */
 *{margin:0;padding:0;box-sizing:border-box}
-html,body{
-  height:100%;
+html,body{height:100%}
+body{
   font-family:'Noto Sans JP','Inter',sans-serif;
-  background:#e8e0d0;
-  color:#1c1c1e;
-  overflow-x:hidden;
-  -webkit-user-select:none;user-select:none;
-  -webkit-tap-highlight-color:transparent;
+  background:#f4f1ea;color:#1c1c1e;
+  display:flex;flex-direction:column;
+  max-width:480px;margin:0 auto;
+  overflow:hidden;
+  -webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;
 }
-
-/* ── ヘッダー ── */
-.header{
-  background:#1c1c1e;
-  color:#fff;
-  text-align:center;
-  padding:44px 16px 20px;
-  position:relative;
-}
-.header::after{
-  content:'';position:absolute;bottom:0;left:10%;right:10%;
-  height:1px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.1),transparent);
-}
-
-/* ロゴ行 */
-.logo-row{
-  display:flex;align-items:center;justify-content:center;gap:14px;
-  margin-bottom:20px;
-}
-.logo-svg{
-  width:56px;height:56px;flex-shrink:0;
-  object-fit:contain;
-  filter:drop-shadow(0 0 8px rgba(46,204,113,.3));
-}
-.logo-name{
-  font-family:'Noto Sans JP',sans-serif;
-  font-size:32px;font-weight:900;
-  color:#2ecc71;
-  letter-spacing:2px;
-  text-shadow:0 0 20px rgba(46,204,113,.25);
-  line-height:1;
-}
-
-/* 時計 */
-.clock-area{margin-top:4px}
-.clock-date{
-  font-family:'Inter','Noto Sans JP',sans-serif;
-  font-size:16px;font-weight:600;
-  color:rgba(255,255,255,.7);
-  letter-spacing:1px;
-  margin-bottom:4px;
-}
-.clock-divider{
-  width:40px;height:1px;margin:6px auto;
-  background:linear-gradient(90deg,transparent,rgba(255,255,255,.2),transparent);
-}
-.clock-time{
-  font-family:'Inter',sans-serif;
-  font-size:36px;font-weight:700;
-  color:#fff;
-  letter-spacing:4px;
-  line-height:1;
-}
-
-/* ── グリッド（2×2） ── */
-.grid{
-  display:grid;
-  grid-template-columns:1fr 1fr;
-  gap:14px;
-  max-width:440px;
-  margin:0 auto;
-  padding:28px 20px 40px;
-}
-
-/* ── アプリカード（案3：カード全体に色） ── */
+.hd{padding:calc(env(safe-area-inset-top,0px) + 26px) 24px 4px;display:flex;justify-content:space-between;align-items:center}
+.br{display:flex;align-items:center;gap:9px}
+.br img{width:30px;height:38px;object-fit:contain}
+.br b{font-size:17px;letter-spacing:.1em;font-weight:900;color:#1e7a48}
+.dt{font-size:12.5px;color:#6c6c70;font-weight:500;letter-spacing:.04em}
+.big{padding:6px 24px 0;font-family:'Inter',sans-serif;font-size:54px;font-weight:200;letter-spacing:.01em;line-height:1.05;font-variant-numeric:tabular-nums}
+.seg{margin:18px 24px 0;display:flex;gap:22px;border-bottom:1px solid #e0dacd}
+.seg button{appearance:none;background:none;border:none;font-family:inherit;padding:8px 2px 10px;font-size:15px;font-weight:700;color:#a8a294;cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-1px}
+.seg button.on{color:#1c1c1e;border-bottom-color:#1e7a48}
+.pages{flex:1;display:flex;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+.pages::-webkit-scrollbar{display:none}
+.page{flex:0 0 100%;scroll-snap-align:start;scroll-snap-stop:always;overflow-y:auto;padding-bottom:20px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:20px}
 .app{
-  text-decoration:none;
-  position:relative;overflow:hidden;
-  border-radius:18px;
-  color:#fff;
-  padding:22px 14px 20px;
-  text-align:center;
-  transition:transform .18s,box-shadow .25s,filter .2s;
-  aspect-ratio:1/1;
-  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;
-  box-shadow:0 4px 16px rgba(0,0,0,.18),inset 0 1px 0 rgba(255,255,255,.18);
+  text-decoration:none;color:#1c1c1e;position:relative;
+  background:#fff;border-radius:18px;padding:16px 12px;
+  display:flex;align-items:center;gap:10px;min-width:0;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.9),0 6px 16px rgba(80,60,20,.08);
+  transition:transform .08s;
 }
-.app::before{
-  content:'';position:absolute;inset:0;border-radius:inherit;pointer-events:none;
-  background:linear-gradient(180deg,rgba(255,255,255,.12),rgba(0,0,0,.08) 60%,rgba(0,0,0,.18));
-}
-.app:hover,.app:focus{
-  transform:translateY(-3px);
-  box-shadow:0 8px 22px rgba(0,0,0,.25),inset 0 1px 0 rgba(255,255,255,.22);
-  filter:saturate(1.05);
-}
-.app:active{transform:scale(.96)}
-
-/* 4色テーマ：カード全体（深め＆鮮やか）。文字・アイコンは白でコントラスト確保。 */
-.app[data-color="green"] {background:linear-gradient(160deg,#22a35a,#16783f)}
-.app[data-color="orange"]{background:linear-gradient(160deg,#f47c14,#d65a0a)}
-.app[data-color="blue"]  {background:linear-gradient(160deg,#2e74d8,#1a52a3)}
-.app[data-color="purple"]{background:linear-gradient(160deg,#9b34c7,#6d22a0)}
-.app[data-color="teal"]  {background:linear-gradient(160deg,#0f9d8a,#0a6f61)}
-
-/* アイコン（Tabler webfont） */
-.app .icon{
-  position:relative;z-index:1;
-  font-size:46px;line-height:1;
-  color:#fff;
-  filter:drop-shadow(0 2px 4px rgba(0,0,0,.25));
-}
-.app .name{
-  position:relative;z-index:1;
-  font-size:16px;font-weight:700;
-  line-height:1.2;
-  color:#fff;
-  letter-spacing:.06em;
-  text-shadow:0 1px 2px rgba(0,0,0,.2);
-}
-
-/* リップル */
-.ripple{
-  position:absolute;border-radius:50%;
-  background:rgba(0,0,0,.1);
-  transform:scale(0);animation:ripple-anim .5s ease-out;
-  pointer-events:none;
-}
-@keyframes ripple-anim{to{transform:scale(3);opacity:0}}
-
-/* 準備中オーバーレイ */
-.app.wip{filter:grayscale(.6) brightness(.85)}
-.app.wip .overlay{
-  position:absolute;inset:0;border-radius:inherit;
-  background:rgba(0,0,0,.35);
-  display:flex;align-items:center;justify-content:center;z-index:2;
-}
-.app.wip .overlay span{
-  font-size:11px;font-weight:700;
-  background:#fff;color:#1c1c1e;
-  padding:4px 12px;border-radius:20px;
-  letter-spacing:1px;
-}
-
-/* トースト */
-.toast{
-  position:fixed;bottom:0;left:0;right:0;
-  display:flex;justify-content:center;
-  padding:0 20px 28px;
-  pointer-events:none;z-index:200;
-}
-.toast-inner{
-  background:#1c1c1e;
-  color:#fff;padding:12px 24px;border-radius:12px;
-  font-size:14px;font-weight:500;
-  box-shadow:0 4px 16px rgba(0,0,0,.2);
-  transform:translateY(80px);opacity:0;
-  transition:transform .3s cubic-bezier(.4,0,.2,1),opacity .3s;
-}
+.app:active{transform:scale(.97)}
+.app .ic{width:48px;height:48px;border-radius:14px;display:flex;align-items:center;justify-content:center;flex:0 0 auto;box-shadow:inset 0 1px 0 rgba(255,255,255,.4)}
+.app .ic i{font-size:26px;color:#fff;line-height:1}
+.app .nm{font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.ic[data-c="green"] {background:linear-gradient(150deg,#34c77b,#128a4a)}
+.ic[data-c="orange"]{background:linear-gradient(150deg,#ffa040,#e0640c)}
+.ic[data-c="blue"]  {background:linear-gradient(150deg,#4f9bff,#1f5fd0)}
+.ic[data-c="purple"]{background:linear-gradient(150deg,#b56bf0,#7a2fc4)}
+.ic[data-c="teal"]  {background:linear-gradient(150deg,#2fd0bd,#0b8a7a)}
+.app.wip .ic{filter:grayscale(1);opacity:.45}
+.app.wip .nm{color:#a8a294}
+.app.wip::after{content:'準備中';position:absolute;top:8px;right:10px;font-size:9.5px;font-weight:700;color:#a8a294;letter-spacing:.05em}
+.dots{display:flex;gap:7px;justify-content:center;padding:10px 0 calc(env(safe-area-inset-bottom,0px) + 22px)}
+.dots i{width:7px;height:7px;border-radius:50%;background:#d4cdbd;display:block}
+.dots i.on{background:#1c1c1e}
+.toast{position:fixed;bottom:0;left:0;right:0;display:flex;justify-content:center;padding:0 20px 56px;pointer-events:none;z-index:200}
+.toast-inner{background:#1c1c1e;color:#fff;padding:12px 24px;border-radius:12px;font-size:14px;font-weight:500;box-shadow:0 4px 16px rgba(0,0,0,.2);transform:translateY(80px);opacity:0;transition:transform .3s,opacity .3s}
 .toast-inner.show{transform:translateY(0);opacity:1}
-
-/* ページ切替リンク（アプリカードとは明確に区別する控えめなテキストリンク） */
-.pagenav{
-  max-width:440px;margin:0 auto;
-  padding:0 20px 30px;
-  text-align:center;
-}
-.pagenav a{
-  display:inline-flex;align-items:center;gap:6px;
-  text-decoration:none;
-  font-size:14px;font-weight:500;
-  letter-spacing:.04em;
-  color:rgba(0,0,0,.45);
-  background:rgba(255,255,255,.35);
-  border:1px solid rgba(0,0,0,.12);
-  border-radius:20px;
-  padding:10px 18px;
-  transition:color .2s,border-color .2s,background .2s;
-}
-.pagenav a:hover,.pagenav a:focus{
-  color:#1c1c1e;
-  border-color:rgba(0,0,0,.22);
-  background:rgba(255,255,255,.6);
-}
-.pagenav a:active{transform:scale(.97)}
-.pagenav i{font-size:16px;line-height:1}
-
-/* フッター */
-.footer{
-  text-align:center;padding:0 20px 24px;
-  font-size:11px;color:rgba(0,0,0,.25);
-  font-family:'Inter',sans-serif;letter-spacing:.5px;
-}
 </style>
 </head>
 <body>
 
-<div class="header">
-  <div class="logo-row">
-    <img class="logo-svg" src="logo.png" alt="栄ガーデン ロゴ">
-    <span class="logo-name">栄ガーデン</span>
-  </div>
-  <div class="clock-area">
-    <div class="clock-date" id="clock-date"></div>
-    <div class="clock-divider"></div>
-    <div class="clock-time" id="clock-time"></div>
-  </div>
+<div class="hd">
+  <div class="br"><img src="logo.png" alt=""><b>栄ガーデン</b></div>
+  <div class="dt" id="clock-date"></div>
 </div>
+<div class="big" id="clock-time"></div>
 
-<div class="grid" id="grid"></div>
-
-<div class="pagenav">
-  <a href="/kanri.html"><i class="ti ti-chevron-right" aria-hidden="true"></i>ハウス作業アプリへ</a>
-</div>
-
-<div class="footer">&copy; 2026 SAKAE GARDEN</div>
+<div class="seg" id="seg"></div>
+<div class="pages" id="pages"></div>
+<div class="dots" id="dots"></div>
 
 <div class="toast"><div class="toast-inner" id="toast"></div></div>
 
 <script>
-// 表示するアプリ（2列グリッド・色被りなし・Tablerアイコン）
-// 左上→右上→左下→右下の順
-const APPS = [
-  { icon:'ti-clipboard-list',  name:'日報',       url:'https://sakae-garden.github.io/nippo/',                 color:'green'  },
-  { icon:'ti-building-store',  name:'卸販売',     url:'https://sakae-garden.github.io/oroshi.html',            color:'orange' },
-  { icon:'ti-chart-bar',       name:'サマリー',   url:'https://sakae-garden.github.io/nippo/summary.html',     color:'blue'   },
-  { icon:'ti-package',         name:'配達商品',   url:'https://sakae-garden.github.io/nippo/haitatsu.html',    color:'purple' },
-  // 店舗依頼ボード（2026-10-03 杉さん了承：3段目に1件でよい）
-  { icon:'ti-clipboard-text',  name:'店舗依頼',   url:'https://sakae-garden.github.io/nippo/irai.html',        color:'teal'   },
+// ページ（左右のスワイプで切り替え）。アプリの並びは 左上→右上→左下→右下。
+const PAGES = [
+  { id:'haitatsu', label:'配達', apps:[
+    { icon:'ti-clipboard-list',  name:'日報',       url:'https://sakae-garden.github.io/nippo/',                 color:'green'  },
+    { icon:'ti-building-store',  name:'卸販売',     url:'https://sakae-garden.github.io/oroshi.html',            color:'orange' },
+    { icon:'ti-chart-bar',       name:'サマリー',   url:'https://sakae-garden.github.io/nippo/summary.html',     color:'blue'   },
+    { icon:'ti-package',         name:'配達商品',   url:'https://sakae-garden.github.io/nippo/haitatsu.html',    color:'purple' },
+    // 店舗依頼ボード（2026-10-03 杉さん了承）
+    { icon:'ti-clipboard-text',  name:'店舗依頼',   url:'https://sakae-garden.github.io/nippo/irai.html',        color:'teal'   },
+  ]},
+  { id:'house', label:'ハウス作業', apps:[
+    // 袋出し記録・栽培シフトは別リポジトリの Project Pages のため絶対URL
+    { icon:'ti-mushroom',   name:'袋出し記録',   url:'https://sakae-garden.github.io/nippo/fukurodashi.html',         color:'teal'   },
+    { icon:'ti-droplet',    name:'浸水記録',     url:'#',                                                             color:'blue',   wip:true },
+    { icon:'ti-scissors',   name:'刈り取り記録', url:'#',                                                             color:'orange', wip:true },
+    { icon:'ti-calendar',   name:'栽培シフト',   url:'https://sakae-garden.github.io/eigarden-shift-app/saibai.html', color:'green'  },
+    // 袋詰めの管理画面（杉さん用。パスコードあり。2026-10-15）
+    { icon:'ti-chart-line', name:'袋詰め管理',   url:'https://sakae-garden.github.io/nippo/fukurozume-kanri.html',    color:'purple' },
+  ]},
 ];
-// 非表示中（必要になったら APPS に戻す。URLで直接アクセス可）
-// 資金繰りはランチャー非掲載。URL直アクセスのみ（従業員の目に触れさせない運用）。
-// パスコード認証は不要と決定（URL秘匿を実質のアクセス制御とする）。
-// { icon:'ti-report-money',   name:'資金繰り',     url:'https://sakae-garden.github.io/shikinguri.html',         color:'green'  },
-// { icon:'ti-truck-delivery', name:'出荷情報',     url:'https://sakae-garden.github.io/shipping.html',           color:'green'  },
-// { icon:'ti-shopping-bag',   name:'袋詰め指示',   url:'https://sakae-garden.github.io/fukurozume.html',         color:'orange' },
-// { icon:'ti-eye-check',      name:'袋詰め確認',   url:'https://sakae-garden.github.io/fukurozume-kakunin.html', color:'blue'   },
-// { icon:'ti-plant',          name:'日次作業入力', url:'https://sakae-garden.github.io/harvest/employee.html',   color:'purple', wip:true },
-// { icon:'ti-trending-up',    name:'収穫予測',     url:'https://sakae-garden.github.io/harvest/owner.html',      color:'green',  wip:true },
+// 資金繰り・出荷情報・袋詰め指示／確認はランチャー非掲載（URL直アクセスのみ。従来どおり）。
 
-const grid = document.getElementById('grid');
-APPS.forEach(app => {
-  const a = document.createElement('a');
-  a.href = app.wip ? '#' : app.url;
-  a.className = 'app' + (app.wip ? ' wip' : '');
-  a.dataset.color = app.color;
-  a.innerHTML =
-    `<i class="icon ti ${app.icon}" aria-hidden="true"></i>` +
-    `<span class="name">${app.name}</span>` +
-    (app.wip ? '<div class="overlay"><span>準備中</span></div>' : '');
-
-  a.addEventListener('click', function(e) {
-    const rect = a.getBoundingClientRect();
-    const r = document.createElement('span');
-    r.className = 'ripple';
-    const size = Math.max(rect.width, rect.height) * 2;
-    r.style.width = r.style.height = size + 'px';
-    r.style.left = (e.clientX - rect.left - size/2) + 'px';
-    r.style.top = (e.clientY - rect.top - size/2) + 'px';
-    a.appendChild(r);
-    setTimeout(() => r.remove(), 500);
-    if (app.wip) {
-      e.preventDefault();
-      showToast('このアプリは現在準備中です');
-    }
+const seg = document.getElementById('seg'), pages = document.getElementById('pages'), dots = document.getElementById('dots');
+PAGES.forEach((pg, idx) => {
+  const b = document.createElement('button'); b.type='button'; b.textContent = pg.label;
+  b.addEventListener('click', () => goPage(idx, true)); seg.appendChild(b);
+  const sec = document.createElement('div'); sec.className = 'page';
+  const grid = document.createElement('div'); grid.className = 'grid';
+  pg.apps.forEach(app => {
+    const a = document.createElement('a');
+    a.href = app.wip ? '#' : app.url;
+    a.className = 'app' + (app.wip ? ' wip' : '');
+    a.innerHTML = `<span class="ic" data-c="${app.color}"><i class="ti ${app.icon}" aria-hidden="true"></i></span><span class="nm">${app.name}</span>`;
+    if (app.wip) a.addEventListener('click', e => { e.preventDefault(); showToast('このアプリは現在準備中です'); });
+    grid.appendChild(a);
   });
-  grid.appendChild(a);
+  sec.appendChild(grid); pages.appendChild(sec);
+  dots.appendChild(document.createElement('i'));
 });
+
+let cur = -1;
+function setActive(idx){
+  if (idx === cur) return; cur = idx;
+  [...seg.children].forEach((b,i) => b.classList.toggle('on', i===idx));
+  [...dots.children].forEach((d,i) => d.classList.toggle('on', i===idx));
+  try { history.replaceState(null, '', idx === 0 ? location.pathname : '#' + PAGES[idx].id); } catch(e){}
+}
+function goPage(idx, smooth){
+  pages.scrollTo({ left: idx * pages.clientWidth, behavior: smooth ? 'smooth' : 'auto' });
+  setActive(idx);
+}
+pages.addEventListener('scroll', () => {
+  const w = pages.clientWidth || 1;
+  setActive(Math.max(0, Math.min(PAGES.length-1, Math.round(pages.scrollLeft / w))));
+}, { passive:true });
+function pageFromHash(){
+  const h = (location.hash || '').replace('#','');
+  const i = PAGES.findIndex(p => p.id === h);
+  return i < 0 ? 0 : i;
+}
+goPage(pageFromHash(), false);
+window.addEventListener('resize', () => goPage(cur < 0 ? 0 : cur, false));
+window.addEventListener('pageshow', () => goPage(pageFromHash(), false));
 
 function updateClock() {
   const now = new Date();
-  const y = now.getFullYear();
-  const mo = String(now.getMonth()+1).padStart(2,'0');
-  const d = String(now.getDate()).padStart(2,'0');
   const wd = ['日','月','火','水','木','金','土'][now.getDay()];
-  const h = String(now.getHours()).padStart(2,'0');
-  const mi = String(now.getMinutes()).padStart(2,'0');
-  document.getElementById('clock-date').textContent = `${y}.${mo}.${d} (${wd})`;
-  document.getElementById('clock-time').textContent = `${h}:${mi}`;
+  document.getElementById('clock-date').textContent = `${now.getMonth()+1}月${now.getDate()}日（${wd}）`;
+  document.getElementById('clock-time').textContent = `${now.getHours()}:${String(now.getMinutes()).padStart(2,'0')}`;
 }
 updateClock();
 setInterval(updateClock, 10000);
@@ -298,8 +155,7 @@ setInterval(updateClock, 10000);
 let toastTimer;
 function showToast(msg) {
   const t = document.getElementById('toast');
-  t.textContent = msg;
-  t.classList.add('show');
+  t.textContent = msg; t.classList.add('show');
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => t.classList.remove('show'), 2500);
 }
