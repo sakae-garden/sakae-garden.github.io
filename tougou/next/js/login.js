@@ -6,7 +6,8 @@
  *   sg.person        { id, surname, role, entry }  覚えている人。entry＝マスタの入口列（'haitatsu'|'sagyou'|''）
  *   sg.employees     [{ id, name, surname, role, site, entry }]  名簿の控え（next.employees の結果）
  *   sg.session.work  { token, role, name, empId }  作業のトークン（auth.login app:'sagyou'。パスコードなし。権限は従業員に固定）
- *   sg.session.kanri { token, role, name, empId }  管理のトークン（auth.login＋パスコード。role は 代表／管理者）
+ *   sg.session.kanri { token, role, name, empId }  管理のトークン（next.loginKanri。パスコードなし・role は マスタの 代表／管理者。
+ *                    2026-11-12 杉さん「まずパスコードいらないです」。GAS が古いときだけ auth.login＋パスコード）
  *   sg.entry         前回の入口（入口 index.html が書く。ここでは読み書きしない）
  * 初回だけ、sg.person が無く旧作業記録の sagyou.person（{id, surname}）があればそれを使う（旧キーは読むだけ）。
  *
@@ -22,8 +23,8 @@
  *                          人がいなければ名字を選ばせる。トークンが無ければログインする（opts.lazy なら待たずに null で返し、
  *                          最初の api 呼び出しのときに裏でログインする）。トークン切れは自動で取り直す
  *   initKanri()            Promise(session)。管理のセッション（sg.session.kanri）で TougouCommon を設定し、
- *                          無ければ覚えている人のパスコードを聞く。代表・管理者でない人は「管理は代表のみ使えます」を出して
- *                          reject（code 'NOT_KANRI'）。トークン切れはパスコードを聞き直して1回だけ呼び直す
+ *                          無ければ覚えている人でパスコードなしにログインする（next.loginKanri）。代表・管理者でない人は
+ *                          「管理は代表のみ使えます」を出して reject（code 'NOT_KANRI'）。トークン切れは裏で取り直して1回だけ呼び直す
  *   logoutKanri()          管理のセッションだけ消す
  *   isKanriRole(role)      代表・管理者か
  *   backLink(el)           「入口へ戻る」。el が <a> なら href を入口にする。それ以外なら中にリンクを足す
@@ -352,7 +353,30 @@
     };
   }
 
-  /** 覚えている人が管理に入れるか確かめてパスコードを聞く。名前を変えたらやり直す */
+  /**
+   * パスコードなしの管理のログイン（next.loginKanri。杉さん 2026-11-12「まずパスコードいらないです」）。
+   * サーバがマスタの権限で決める（従業員は NOT_KANRI）。古い GAS（action が無い）は code 'OLD_GAS' で reject
+   */
+  function kanriLoginNoPass(pp) {
+    return C().callApi({ action: 'next.loginKanri', empId: pp.id }).then(function (res) {
+      if (res && res.code === 'BAD_REQUEST') throw err('古い GAS', 'OLD_GAS');
+      if (res && (res.code === 'NOT_KANRI' || (res.ok && !isKanriRole(res.role)))) {
+        var p2 = lsGet(KEYS.person);
+        if (p2 && p2.id === pp.id) lsPut(KEYS.person, normPerson({ id: p2.id, surname: p2.surname, role: ROLE_EMP, entry: p2.entry }));
+        throw err('管理は代表のみ使えます', 'NOT_KANRI');
+      }
+      if (!res || !res.ok) throw err((res && res.error) || 'ログインできませんでした。', res && res.code);
+      var s = { token: res.token, role: res.role, name: res.name || pp.surname, empId: pp.id };
+      lsPut(KEYS.kanri, s);
+      return s;
+    }, function (e) {
+      var ne = err('通信できませんでした（' + (e && e.message || e) + '）');
+      ne.network = true;
+      throw ne;
+    });
+  }
+
+  /** 覚えている人が管理に入れるか確かめて、パスコードなしでログインする。名前を変えたらやり直す */
   function kanriFlow(note) {
     var p = person();
     var start = p ? Promise.resolve(p) : pickPerson({ note: '管理に入る人を選んでください。' });
@@ -361,9 +385,14 @@
       var check = pp.role ? Promise.resolve(pp) : refreshEmployees().then(function () { return person() || pp; }, function () { return pp; });
       return check.then(function (p2) {
         if (p2.role && !isKanriRole(p2.role)) return denied(p2);
-        return api.ui.passcode({ person: p2, note: note, login: kanriLoginFor(p2) }).then(null, function (e) {
-          if (e && e.code === 'CHANGE') return pickPerson({ cancelable: true }).then(function () { return kanriFlow(note); }, function () { return kanriFlow(note); });
-          throw e;
+        return kanriLoginNoPass(p2).then(null, function (e) {
+          if (e && e.code === 'NOT_KANRI') return denied(person() || p2);
+          if (!e || e.code !== 'OLD_GAS') throw e;
+          // GAS がまだ前の版のとき（Pages を先に出した間）だけ、今までどおりパスコードを聞く
+          return api.ui.passcode({ person: p2, note: note, login: kanriLoginFor(p2) }).then(null, function (e2) {
+            if (e2 && e2.code === 'CHANGE') return pickPerson({ cancelable: true }).then(function () { return kanriFlow(note); }, function () { return kanriFlow(note); });
+            throw e2;
+          });
         });
       });
     });
@@ -382,7 +411,7 @@
   var kanriReauthP = null;
   function kanriReauth() {
     if (kanriReauthP) return kanriReauthP;
-    kanriReauthP = kanriFlow('ログインの有効期限が切れました。もう一度パスコードを入れてください。')
+    kanriReauthP = kanriFlow('ログインの有効期限が切れました。もう一度パスコードを入れてください。')   // 文言は古い GAS のときだけ出る
       .then(function (s) { kanriReauthP = null; return s; }, function (e) { kanriReauthP = null; throw e; });
     return kanriReauthP;
   }

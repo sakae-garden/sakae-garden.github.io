@@ -13,7 +13,7 @@
 <link rel="stylesheet" href="styles/common.css">
 <!--
   管理メニュー（統合アプリ完成 B。設計 2章）。/tougou/ の横スワイプをやめ、縦の一覧にした。
-  - 各行は普通の <a href>（js が壊れてもリンクは動く）。ログインは js/login.js（代表パスコード。sg.session.kanri）
+  - 各行は普通の <a href>（js が壊れてもリンクは動く）。ログインは js/login.js（2026-11-12 からパスコードなし＝next.loginKanri。sg.session.kanri）
   - 予測の行には「最終計算 HH:MM（N分前）」を出す（yosoku.precomputed を裏で1回読む。30分を超えていたら裏で計算し直す）
   - 冷蔵庫の行には基準割れ・未入力の店舗数（reizouko.status。10分キャッシュ）
   - 外のアプリ（袋詰め・栽培シフト・卸販売・サマリー）は data-demo-exit で ?demo=1 を付けない（デモを知らない画面のため）
