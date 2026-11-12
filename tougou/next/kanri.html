@@ -136,7 +136,8 @@
 
     // 菌床在庫：拠点ごとの棚の使用／置ける数（超えたら赤）。棚卸しが無ければ「棚卸し前」
     C.api('zaiko.status').then(function (z) {
-      $('subZaiko').innerHTML = (z.sites || []).map(function (s) {
+      // 森林公園 右（ベルク）の部屋（parent あり）は出さない（第6版。杉さん 19:22）
+      $('subZaiko').innerHTML = (z.sites || []).filter(function (s) { return !s.parent; }).map(function (s) {
         var nm = esc(String(s.name).replace(/ハウス$/, ''));
         var t = '棚 ' + Number(s.tana.used).toLocaleString() + '/' + Number(s.tana.cap).toLocaleString();
         var over = s.tana.over || s.kyuyouBox.over;

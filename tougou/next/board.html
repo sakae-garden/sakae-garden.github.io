@@ -13,55 +13,61 @@
 <link rel="preconnect" href="https://nippo-api-7lc5gs4g6q-an.a.run.app">
 <link rel="stylesheet" href="styles/common.css">
 <!--
-  朝の判断ボード 第5版（指示 20261112-1740。見本 第5版のとおり。tougou/next だけ）
-  - 拠点ごとに1ページ。上のタブか左右のスワイプで切り替える。最後に見ていた拠点を端末で覚える（sg.board.site）
-  - 上から：棚（寄居 左・右／森林公園 左・真ん中）→ 棚 右 ベルク（森林公園だけ）／休養 真ん中（寄居だけ）→ 昨夜の温度 → 今日来る菌床 → 出勤・昨日の収穫。下に固定で「今日の指示を出す」（代表だけ）
+  朝の判断ボード 第6版（指示 20261112-2100。見本 第6版のとおり。tougou/next だけ）
+  - ページは 寄居｜森林公園｜培養舎。上のタブか左右のスワイプで切り替える。最後に見ていたページを端末で覚える（sg.board.site）
+  - 寄居・森林公園：棚（寄居 左・右／森林公園 左・真ん中）→ 休養 真ん中（寄居だけ）→ 昨夜の温度 → 今日の袋出し → 出勤・昨日の収穫。下に固定で「今日の指示を出す」（代表だけ）
     - 棚の置ける数：設定 菌床在庫_栽培棚_*（寄居 3,360・森林公園 5,760）。使っている数：寄居＝1番＋2番＋3番、森林公園＝1番＋休養＋2番＋3番
-    - 休養の置ける数：設定 菌床在庫_休養_yorii（2,200）。％の色は 90%以上で黄、100%超で赤
-    - 棚 右 ベルク（森林公園だけ。2026-11-12 17:39 杉さん）：board.summary の rooms。置ける数 2,880（室 SRN-R3 の収容床数）。使っている数＝1番＋休養＋2番＋3番
-    - 温度：部屋ごとのタイル。押すとその拠点の部屋をまとめて入れる（誰でも。kucho.set）。森林公園 右＝ベルクも出す（board.summary の tempsAll。棚の％には入れない）
-    - 今日来る菌床：今日の完熟の合計。下に 寄居｜森林公園。代表は数字を押すと便ごとに振り分けを変えられる（nyuka.split。代表パスコード）
-  - 読み込みは Cloud Run nippo-api の boardSummary（ログイン不要）。失敗したら統合アプリGAS の board.summary
-  - 出さないもの（杉さん 2026-11-12）：困りごと・7日先の見込み・想定比・袋出しの数・森林公園へ運ぶ数・入荷一覧へのリンク・更新ボタン・更新時刻・説明文
+    - 凡例が4つのときは「空き」を凡例の下の行に右寄せで出す
+    - 森林公園 右（ベルク）は出さない（杉さん 19:22「紛らわしいので除外」）。温度は board.summary の temps（ボード＝N の部屋を除いたもの）
+    - 今日の袋出し：右の大きな数＝見ている拠点の今日の袋出し（完熟のその拠点の分＋培養舎から。board.summary の fukuroToday）。
+      完熟は今日着く便の合計と 寄居｜森林公園（代表は押して振り分けを変えられる。nyuka.split）。完熟が来ない日は「完熟 なし」だけ。
+      培養舎からは代表が決める数（押して個数と仕入れ分を入れる。baiyou.fukuroSet）。決めていない日は 0・一番古い仕入れ分
+  - 培養舎：拠点ごとに仕入れ分（古い順）と合計（board.summary の baiyou）。代表は個数を押して直せる（baiyou.adjust）。青いボタン・出勤・収穫は出さない
+  - 読み込みは Cloud Run nippo-api の boardSummary（ログイン不要）。失敗したら統合アプリGAS の board.summary。
+    代表が保存した後は GAS から読み直す（Cloud Run の覚えた値が追いつくまで、古い値で上書きしない＝generatedAt で比べる）
+  - 出さないもの（杉さん 2026-11-12）：困りごと・7日先の見込み・想定比・森林公園へ運ぶ数・入荷一覧へのリンク・更新ボタン・更新時刻・説明文・培養舎の置ける数
 -->
 <style>
 html,body{height:100%}
-body.b5{margin:0 auto;padding:0;background:#f4f2ee;color:#1b1b1b;height:100vh;height:100dvh;overflow:hidden;display:flex;flex-direction:column;position:relative}
+body.b6{margin:0 auto;padding:0;background:#f4f2ee;color:#1b1b1b;height:100vh;height:100dvh;overflow:hidden;display:flex;flex-direction:column;position:relative}
 .top{flex:none;background:#1b1b1b;color:#fff;padding:calc(10px + env(safe-area-inset-top)) 16px 0}
 .d{font-size:13px;opacity:.7}
 .tabs{display:flex;margin-top:2px}
-.tabs button{flex:1;text-align:center;padding:7px 0 8px;font-size:18px;font-weight:700;opacity:.4;background:none;border:0;border-bottom:4px solid transparent;color:#fff;font-family:inherit;cursor:pointer}
+.tabs button{flex:1;text-align:center;padding:7px 0 8px;font-size:17px;font-weight:700;opacity:.4;background:none;border:0;border-bottom:4px solid transparent;color:#fff;font-family:inherit;cursor:pointer}
 .tabs button.on{opacity:1;border-bottom-color:#fff}
 .track{flex:1;min-height:0;display:flex;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;scrollbar-width:none}
 .track::-webkit-scrollbar{display:none}
 .pg{flex:0 0 100%;width:100%;overflow-y:auto;overflow-x:hidden;scroll-snap-align:start;scroll-snap-stop:always;padding:12px 14px calc(80px + env(safe-area-inset-bottom))}
-.card{background:#fff;border-radius:14px;padding:13px 14px;margin-bottom:10px}
+#pg-baiyou{padding-bottom:calc(14px + env(safe-area-inset-bottom))}
+.card{background:#fff;border-radius:14px;padding:12px 14px;margin-bottom:10px}
 .hd{display:flex;justify-content:space-between;align-items:baseline}
 .hd>span:first-child{font-size:15px;font-weight:700;color:#555}
 .hd small{font-size:12px;color:#999;margin-left:6px;font-weight:500}
-.pc{font-size:56px;font-weight:900;line-height:1}
-.pc small,.pc2 small{font-size:20px;font-weight:700}
-.pc2{font-size:30px;font-weight:900;line-height:1}
-.bar{display:flex;background:#e9e6df;border-radius:10px;overflow:hidden;margin-top:10px}
+.pc{font-size:46px;font-weight:900;line-height:1}
+.pc small{font-size:19px;font-weight:700}
+.bar{display:flex;background:#e9e6df;border-radius:10px;overflow:hidden;margin-top:8px;height:32px}
 .bar i{display:block;height:100%}
-.aki{font-size:13px;color:#777;margin-top:6px;text-align:right}
-.aki b{font-size:19px;color:#1b1b1b}
-.row2{display:flex;justify-content:space-between;align-items:center;margin-top:8px}
-.leg{display:flex;gap:10px;font-size:12.5px;color:#666}
+.aki{font-size:13px;color:#777}
+.aki b{font-size:18px;color:#1b1b1b}
+.row2{display:flex;justify-content:space-between;align-items:center;margin-top:7px}
+.leg{display:flex;gap:9px;font-size:12.5px;color:#666}
 .leg i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:3px}
 .leg b{color:#1b1b1b;font-size:15px;margin-left:3px}
 .temps{display:flex;gap:8px;margin-top:8px}
-.t{flex:1;min-width:0;display:flex;justify-content:space-between;align-items:baseline;border:1px solid #ddd;border-radius:10px;padding:7px 10px;background:#fff;font-family:inherit;color:#1b1b1b;cursor:pointer;text-align:left}
+.t{flex:1;min-width:0;display:flex;justify-content:space-between;align-items:baseline;border:1px solid #ddd;border-radius:10px;padding:6px 10px;background:#fff;font-family:inherit;color:#1b1b1b;cursor:pointer;text-align:left}
 .t span{font-size:13px;color:#666;white-space:nowrap}
-.t span small{font-size:10px;color:#999}
-.t b{font-size:23px}
+.t b{font-size:22px}
 .t.ng{border-color:#d99a00;background:#fff8e1}
 .t.ng b{color:#d99a00}
-.big{font-size:34px;font-weight:900;line-height:1}
-.sp{display:flex;gap:6px;margin-top:10px}
-.s{flex:1;background:#f1efe9;border-radius:10px;padding:7px 12px;display:flex;justify-content:space-between;align-items:baseline;color:#777;border:0;font-family:inherit;text-align:left}
+.big{font-size:30px;font-weight:900;line-height:1}
+.ln{display:flex;justify-content:space-between;align-items:baseline;padding:7px 0;border-top:1px solid #eee;font-size:14px;color:#555}
+.ln b{font-size:22px;color:#1b1b1b}
+.ln small{color:#999;font-size:12px;margin-left:6px}
+button.ln{width:100%;background:none;border:0;border-top:1px solid #eee;font-family:inherit;text-align:left;cursor:pointer;margin:0}
+.sp{display:flex;gap:6px;margin:2px 0 6px}
+.s{flex:1;background:#f1efe9;border-radius:10px;padding:5px 12px;display:flex;justify-content:space-between;align-items:baseline;color:#777;border:0;font-family:inherit;text-align:left}
 .s span{font-size:13px;white-space:nowrap}
-.s b{font-size:22px;color:#555}
+.s b{font-size:19px;color:#555}
 .s.me{background:#e3edff;color:#1d4ed8}
 .s.me b{color:#1d4ed8}
 button.s{cursor:pointer}
@@ -69,15 +75,20 @@ button.s{cursor:pointer}
 .ft b{font-size:15px;color:#1b1b1b;font-weight:700}
 .ft .who{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .btn{position:fixed;left:14px;right:14px;bottom:calc(14px + env(safe-area-inset-bottom));max-width:452px;margin:0 auto;display:block;background:linear-gradient(#3b6cf0,#1d4ed8);color:#fff;text-align:center;font-size:18px;font-weight:700;padding:14px;border-radius:14px;box-shadow:0 3px 0 #163ba8;text-decoration:none;z-index:50}
+.tot{font-size:13px;color:#777;text-align:right;margin-top:6px}
+.tot b{font-size:20px;color:#1b1b1b}
 .msg{font-size:15px;color:#b91c1c;padding:0 4px 8px}
 .msg:empty{display:none}
-/* 温度・振り分けの入力 */
+/* 温度・振り分け・培養舎の入力 */
 .ov{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:300;display:flex;align-items:flex-end;justify-content:center}
 .sheet{background:#fff;width:100%;max-width:480px;border-radius:16px 16px 0 0;padding:14px 16px calc(16px + env(safe-area-inset-bottom))}
 .sheet h3{font-size:18px;margin-bottom:8px}
 .days{display:flex;gap:8px;margin-bottom:10px}
 .days button{flex:1;height:40px;border:1px solid #d1d5db;border-radius:8px;background:#fff;font-size:16px;font-weight:700;font-family:inherit;color:#555}
 .days button.on{background:#1f2937;border-color:#1f2937;color:#fff}
+.lots{display:flex;flex-direction:column;gap:6px;margin-bottom:10px}
+.lots button{height:44px;border:1px solid #d1d5db;border-radius:8px;background:#fff;font-size:16px;font-weight:700;font-family:inherit;color:#555;display:flex;justify-content:space-between;align-items:center;padding:0 14px}
+.lots button.on{background:#1f2937;border-color:#1f2937;color:#fff}
 .trow2{display:flex;align-items:center;gap:8px;margin-bottom:8px}
 .trow2 .k{flex:none;width:4.2em;white-space:nowrap;font-size:17px;font-weight:700}
 .trow2 input{flex:1;min-width:0;height:46px;font-size:20px;font-weight:700;text-align:center;border:1px solid #9ca3af;border-radius:8px;font-family:inherit}
@@ -90,14 +101,15 @@ button.s{cursor:pointer}
 .sheet .msg{padding:0 0 6px}
 </style>
 </head>
-<body class="b5">
+<body class="b6">
 <div class="top">
   <div class="d" id="d"></div>
-  <div class="tabs" id="tabs"><button type="button" data-i="0">寄居</button><button type="button" data-i="1">森林公園</button></div>
+  <div class="tabs" id="tabs"><button type="button" data-i="0">寄居</button><button type="button" data-i="1">森林公園</button><button type="button" data-i="2">培養舎</button></div>
 </div>
 <div class="track" id="track">
   <section class="pg" id="pg-yorii" aria-label="寄居"></section>
   <section class="pg" id="pg-shinrin" aria-label="森林公園"></section>
+  <section class="pg" id="pg-baiyou" aria-label="培養舎"></section>
 </div>
 <a class="btn" id="goShiji" href="shiji.html" hidden>今日の指示を出す</a>
 
@@ -110,7 +122,8 @@ button.s{cursor:pointer}
   var C = window.TougouCommon, L = window.SgLogin, S = window.TougouShift;
   var $ = function (id) { return document.getElementById(id); };
   var BOARD_API = 'https://nippo-api-7lc5gs4g6q-an.a.run.app/api';
-  var ORDER = ['yorii', 'shinrin'];
+  var SITE_IDS = ['yorii', 'shinrin'];
+  var PAGES = ['yorii', 'shinrin', 'baiyou'];
   var SITES = { yorii: '寄居', shinrin: '森林公園' };
   var TANA_ROOMS = { yorii: '左・右', shinrin: '左・真ん中' };
   var COL = { ichiban: '#3f8f4f', kyuyou: '#a9a59c', niban: '#2f6fb5', sanban: '#7b4aa0' };
@@ -120,6 +133,7 @@ button.s{cursor:pointer}
 
   var esc = C.esc;
   function num(n) { return n === null || n === undefined || n === '' || isNaN(n) ? '—' : Number(n).toLocaleString(); }
+  function md(ymd) { var p = String(ymd).split('-').map(Number); return p[1] + '/' + p[2]; }
   function mdw(ymd) { var p = String(ymd).split('-').map(Number); return p[1] + '/' + p[2] + '（' + WEEK[new Date(p[0], p[1] - 1, p[2]).getDay()] + '）'; }
   function addDays(ymd, n) {
     var p = ymd.split('-').map(Number), d = new Date(p[0], p[1] - 1, p[2] + n);
@@ -139,35 +153,40 @@ button.s{cursor:pointer}
   function viaGas() {
     return L.initWork({ lazy: true }).then(function () { return C.api('board.summary'); });
   }
+  /** 今の値より古い（Cloud Run の覚えた値が追いついていない）ものでは上書きしない */
+  function accept(res) {
+    if (data && res && data.today === res.today && String(res.generatedAt || '') < String(data.generatedAt || '')) return false;
+    data = res;
+    return true;
+  }
 
   // ---- 表示
   function siteOf(id) { return ((data && data.sites) || []).filter(function (s) { return s.id === id; })[0]; }
   /** 色は出している整数の％で決める（99.6% を「100%」と出して黄、などの食い違いをしない） */
   function pcColor(p) { return p > 100 ? '#c62828' : p >= 90 ? '#d99a00' : '#1b1b1b'; }
-  /** ％・棒・空き。parts＝[[名前, 数, 色]] */
-  function meter(cap, parts, big) {
+  /** 棚・休養のカード。parts＝[[名前, 数, 色]]。凡例が4つのときは空きを下の行に右寄せ */
+  function meterCard(title, rooms, cap, parts) {
     var used = parts.reduce(function (a, x) { return a + (x[1] || 0); }, 0);
     var ok = cap !== null && cap !== undefined && cap > 0;
     var p = ok ? Math.round(used / cap * 100) : null;
     var den = ok ? Math.max(cap, used) : 1;
-    return {
-      pc: '<span class="' + (big ? 'pc' : 'pc2') + '" style="color:' + (p === null ? '#1b1b1b' : pcColor(p)) + '">' +
-          (p === null ? '—' : p) + '<small>%</small></span>',
-      bar: '<div class="bar" style="height:' + (big ? 40 : 22) + 'px">' + (ok ? parts.filter(function (x) { return x[1] > 0; }).map(function (x) {
-        return '<i style="width:' + (x[1] / den * 100) + '%;background:' + x[2] + '"></i>';
-      }).join('') : '') + '</div>',
-      aki: '空き <b>' + (ok ? num(cap - used) : '—') + '</b>'
-    };
-  }
-  function legend(parts) {
-    return '<div class="leg">' + parts.filter(function (x) { return x[1] > 0; }).map(function (x) {
+    var shown = parts.filter(function (x) { return x[1] > 0; });
+    var aki = '<div class="aki"%s>空き <b>' + (ok ? num(cap - used) : '—') + '</b></div>';
+    var leg = '<div class="leg">' + shown.map(function (x) {
       return '<span><i style="background:' + x[2] + '"></i>' + x[0] + '<b>' + num(x[1]) + '</b></span>';
     }).join('') + '</div>';
+    return '<div class="card"><div class="hd"><span>' + title + '<small>' + rooms + '</small></span>' +
+      '<span class="pc" style="color:' + (p === null ? '#1b1b1b' : pcColor(p)) + '">' + (p === null ? '—' : p) + '<small>%</small></span></div>' +
+      '<div class="bar">' + (ok ? shown.map(function (x) { return '<i style="width:' + (x[1] / den * 100) + '%;background:' + x[2] + '"></i>'; }).join('') : '') + '</div>' +
+      (shown.length >= 4
+        ? '<div class="row2">' + leg + '</div>' + aki.replace('%s', ' style="text-align:right;margin-top:2px"')
+        : '<div class="row2">' + leg + aki.replace('%s', '') + '</div>') +
+      '</div>';
   }
-  /** 今日来る菌床（完熟）。便ごと（分けた便は2行で来るので binKey でまとめる） */
+  /** 今日着く完熟の便（分けた便は2行で来るので binKey でまとめる） */
   function nyukaBins() {
     var bins = {}, order = [];
-    ORDER.forEach(function (id) {
+    SITE_IDS.forEach(function (id) {
       ((siteOf(id) || {}).nyukaToday || []).forEach(function (x) {
         if (x.kind !== '完熟') return;
         var k = x.binKey || [x.date, x.kind, x.bin, x.source, x.site].join('|');
@@ -179,6 +198,13 @@ button.s{cursor:pointer}
     });
     return order.map(function (k) { var b = bins[k]; b.total = b.yorii + b.shinrin; b.canSplit = b.home === 'yorii'; return b; });
   }
+  /** 今日の袋出し（その拠点）。board.summary の fukuroToday が無い（古い GAS）ときは完熟だけ */
+  function fukuroOf(id) {
+    var s = siteOf(id) || {};
+    if (s.fukuroToday) return s.fukuroToday;
+    var kan = nyukaBins().reduce(function (a, b) { return a + b[id]; }, 0);
+    return { kanjuku: kan, baiyou: 0, lot: '', decided: false, total: kan };
+  }
 
   function pageHtml(id) {
     var s = siteOf(id);
@@ -189,38 +215,36 @@ button.s{cursor:pointer}
     var parts = id === 'shinrin'
       ? [['1番', st.ichiban, COL.ichiban], ['休養', st.kyuyou, COL.kyuyou], ['2番', st.niban, COL.niban], ['3番', st.sanban, COL.sanban]]
       : [['1番', st.ichiban, COL.ichiban], ['2番', st.niban, COL.niban], ['3番', st.sanban, COL.sanban]];
-    var m = meter(f.tanaCap, parts, true);
-    h += '<div class="card"><div class="hd"><span>棚<small>' + TANA_ROOMS[id] + '</small></span>' + m.pc + '</div>' + m.bar +
-      '<div class="row2">' + legend(parts) + '<div class="aki" style="margin:0">' + m.aki + '</div></div></div>';
-    // 部屋の棚（森林公園 右＝ベルク。board.summary の rooms）。形は休養と同じ小さめ＋凡例。棚の％（左・真ん中）には入れない
-    (s.rooms || []).forEach(function (r) {
-      var rs = r.stock || {};
-      var rp = [['1番', rs.ichiban, COL.ichiban], ['休養', rs.kyuyou, COL.kyuyou], ['2番', rs.niban, COL.niban], ['3番', rs.sanban, COL.sanban]];
-      var rm = meter((r.free || {}).tanaCap, rp, false);
-      h += '<div class="card"><div class="hd"><span>棚<small>' + esc(r.room) + (r.role ? ' ' + esc(r.role) : '') + '</small></span>' + rm.pc + '</div>' + rm.bar +
-        '<div class="row2">' + legend(rp) + '<div class="aki" style="margin:0">' + rm.aki + '</div></div></div>';
-    });
+    h += meterCard('棚', TANA_ROOMS[id], f.tanaCap, parts);
     // 休養（寄居だけ）
-    if (id === 'yorii') {
-      var k = meter(f.kyuyouCap, [['休養', st.kyuyou, COL.kyuyou]], false);
-      h += '<div class="card"><div class="hd"><span>休養<small>真ん中</small></span>' + k.pc + '</div>' + k.bar + '<div class="aki">' + k.aki + '</div></div>';
-    }
-    // 昨夜の温度
-    var temps = s.tempsAll || s.temps || [];
+    if (id === 'yorii') h += meterCard('休養', '真ん中', f.kyuyouCap, [['休養', st.kyuyou, COL.kyuyou]]);
+    // 昨夜の温度（ボード＝N の部屋〔森林公園 右＝ベルク〕は出さない）
+    var temps = s.temps || [];
     h += '<div class="card"><div class="hd"><span>昨夜の温度</span></div><div class="temps">' + temps.map(function (t) {
       var miss = t.temp === null || t.temp === undefined;
-      return '<button type="button" class="t' + (miss ? ' ng' : '') + '" data-temp="' + id + '"><span>' + esc(t.room) +
-        (t.role === 'ベルク' ? '<small> ベルク</small>' : '') + '</span><b>' + (miss ? '未' : esc(t.temp) + '°') + '</b></button>';
+      return '<button type="button" class="t' + (miss ? ' ng' : '') + '" data-temp="' + id + '"><span>' + esc(t.room) + '</span><b>' +
+        (miss ? '未' : esc(t.temp) + '°') + '</b></button>';
     }).join('') + '</div></div>';
-    // 今日来る菌床
+    // 今日の袋出し
     var bins = nyukaBins(), sum = function (k) { return bins.reduce(function (a, b) { return a + b[k]; }, 0); };
-    var tap = isRep() && bins.some(function (b) { return b.canSplit; });
-    var tag = tap ? 'button' : 'div';
-    var box = function (sid) {
-      return '<' + tag + (tap ? ' type="button" data-split="1"' : '') + ' class="s' + (sid === id ? ' me' : '') + '"><span>' + SITES[sid] + '</span><b>' + num(sum(sid)) + '</b></' + tag + '>';
-    };
-    h += '<div class="card"><div class="hd"><span>今日来る菌床</span><span class="big">' + num(sum('total')) + '</span></div>' +
-      '<div class="sp">' + box('yorii') + box('shinrin') + '</div></div>';
+    var fk = fukuroOf(id), rep = isRep();
+    h += '<div class="card"><div class="hd"><span>今日の袋出し<small>' + md(data.today) + '</small></span><span class="big">' + num(fk.total) + '</span></div>';
+    if (bins.length) {
+      var tap = rep && bins.some(function (b) { return b.canSplit; });
+      var tag = tap ? 'button' : 'div';
+      var box = function (sid) {
+        return '<' + tag + (tap ? ' type="button" data-split="1"' : '') + ' class="s' + (sid === id ? ' me' : '') + '"><span>' + SITES[sid] + '</span><b>' + num(sum(sid)) + '</b></' + tag + '>';
+      };
+      h += '<div class="ln"><span>完熟<small>' + md(data.today) + ' 着 ' + num(sum('total')) + '</small></span></div>' +
+        '<div class="sp">' + box('yorii') + box('shinrin') + '</div>';
+    } else {
+      h += '<div class="ln"><span>完熟 なし</span></div>';
+    }
+    var lotTxt = fk.lot ? '<small>' + md(fk.lot) + ' 仕入れ分</small>' : '';
+    h += rep
+      ? '<button type="button" class="ln" data-bai="' + id + '"><span>培養舎から' + lotTxt + '</span><b>' + num(fk.baiyou || 0) + '</b></button>'
+      : '<div class="ln"><span>培養舎から' + lotTxt + '</span><b>' + num(fk.baiyou || 0) + '</b></div>';
+    h += '</div>';
     // 出勤・昨日の収穫
     var hv = s.harvest || {};
     var kg = hv.a1 === null && hv.a2plus === null && hv.c === null || hv.a1 === undefined && hv.a2plus === undefined && hv.c === undefined
@@ -230,18 +254,39 @@ button.s{cursor:pointer}
     return h;
   }
 
+  /** 培養舎のページ：拠点ごとに仕入れ分（古い順）と合計。代表は個数を押して直せる */
+  function baiyouHtml() {
+    var rep = isRep();
+    return SITE_IDS.map(function (id) {
+      var b = (siteOf(id) || {}).baiyou || { lots: [], total: 0 };
+      return '<div class="card"><div class="hd"><span>' + SITES[id] + 'の培養舎</span></div>' +
+        (b.lots || []).map(function (x) {
+          var inner = '<span>' + md(x.date) + ' 仕入れ分</span><b>' + num(x.count) + '</b>';
+          return rep ? '<button type="button" class="ln" data-adj="' + id + '|' + x.date + '">' + inner + '</button>' : '<div class="ln">' + inner + '</div>';
+        }).join('') +
+        '<div class="tot">合計 <b>' + num(b.total || 0) + '</b></div></div>';
+    }).join('');
+  }
+
   function render() {
     $('d').textContent = mdw(data.today);
-    ORDER.forEach(function (id) {
+    SITE_IDS.forEach(function (id) {
       var pg = $('pg-' + id);
       pg.innerHTML = pageHtml(id);
       Array.prototype.forEach.call(pg.querySelectorAll('[data-temp]'), function (b) { b.onclick = function () { openTemp(b.dataset.temp); }; });
       Array.prototype.forEach.call(pg.querySelectorAll('[data-split]'), function (b) { b.onclick = openSplit; });
+      Array.prototype.forEach.call(pg.querySelectorAll('[data-bai]'), function (b) { b.onclick = function () { openBai(b.dataset.bai); }; });
     });
-    $('goShiji').hidden = !isRep();
+    var bp = $('pg-baiyou');
+    bp.innerHTML = baiyouHtml();
+    Array.prototype.forEach.call(bp.querySelectorAll('[data-adj]'), function (b) {
+      b.onclick = function () { var p = b.dataset.adj.split('|'); openAdj(p[0], p[1]); };
+    });
+    showBtn();
   }
+  function showBtn() { $('goShiji').hidden = !isRep() || PAGES[cur] === 'baiyou'; }
   function showError() {
-    var pg = $('pg-' + ORDER[cur]);
+    var pg = $('pg-' + PAGES[cur]);
     if (!pg.innerHTML) pg.innerHTML = '<div class="msg">読み込めません</div>';
   }
 
@@ -250,29 +295,42 @@ button.s{cursor:pointer}
   function mark(i) {
     cur = i;
     Array.prototype.forEach.call($('tabs').children, function (b) { b.classList.toggle('on', Number(b.dataset.i) === i); });
-    try { localStorage.setItem(LS_SITE, ORDER[i]); } catch (e) { /* 毎回寄居から */ }
+    try { localStorage.setItem(LS_SITE, PAGES[i]); } catch (e) { /* 毎回寄居から */ }
+    showBtn();
   }
   function go(i, smooth) { track.scrollTo({ left: i * track.clientWidth, behavior: smooth ? 'smooth' : 'auto' }); mark(i); }
   Array.prototype.forEach.call($('tabs').children, function (b) { b.onclick = function () { go(Number(b.dataset.i), true); }; });
-  var st = null;
+  var stt = null;
   track.addEventListener('scroll', function () {
-    clearTimeout(st);
-    st = setTimeout(function () {
-      var i = Math.max(0, Math.min(ORDER.length - 1, Math.round(track.scrollLeft / Math.max(1, track.clientWidth))));
+    clearTimeout(stt);
+    stt = setTimeout(function () {
+      var i = Math.max(0, Math.min(PAGES.length - 1, Math.round(track.scrollLeft / Math.max(1, track.clientWidth))));
       if (i !== cur) mark(i);
     }, 60);
   });
   window.addEventListener('resize', function () { go(cur, false); });
   (function () {
     var last = ''; try { last = localStorage.getItem(LS_SITE) || ''; } catch (e) { /* 無視 */ }
-    go(Math.max(0, ORDER.indexOf(last)), false);
+    go(Math.max(0, PAGES.indexOf(last)), false);
   })();
 
   function load(fresh) {
-    return fetchBoard(fresh).then(function (res) { data = res; render(); go(cur, false); }, function (err) {
+    return fetchBoard(fresh).then(function (res) { if (accept(res)) { render(); go(cur, false); } }, function (err) {
       showError();
       if (window.console) console.warn(err);
     });
+  }
+  /** 代表が保存した後：GAS から読み直す（代表のセッションのまま）。Cloud Run にも読み直しを頼む */
+  function reloadAfterSave() {
+    C.api('board.summary').then(function (res) { if (accept(res)) render(); }, function () { /* 次に開いたとき */ });
+    if (!C.DEMO) {
+      var kick = function () {
+        fetch(BOARD_API, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                           body: JSON.stringify({ action: 'boardSummary', params: { fresh: true } }) }).catch(function () { /* 無視 */ });
+      };
+      kick();
+      setTimeout(kick, 35000);   // Cloud Run は30秒以内の読み直しを1回にまとめるので、もう一度頼む
+    }
   }
 
   function showShukkin() {
@@ -296,18 +354,23 @@ button.s{cursor:pointer}
     o.q('[data-el="no"]').onclick = o.close;
     return o;
   }
+  function failed(sh, btn, err) {
+    btn.disabled = false; btn.textContent = '保存';
+    if (err && err.code === 'NOT_KANRI') { sh.close(); return; }
+    sh.q('[data-el="m"]').textContent = '保存できません' + (err && err.network ? '' : '：' + (err && err.message || err));
+  }
 
   // 夜の温度（誰でも。その拠点の部屋をまとめて）
   function openTemp(siteId) {
     var s = siteOf(siteId);
     if (!s) return;
-    var temps = s.tempsAll || s.temps || [];
+    var temps = s.temps || [];
     var today = data.today, yday = data.yesterday || addDays(today, -1);
     var day = new Date().getHours() < 15 ? yday : today;   // 朝は昨夜、夕方からは今夜
     var sh = sheet('<h3>' + esc(SITES[siteId]) + ' 夜の温度</h3>' +
       '<div class="days"><button type="button" data-d="' + yday + '">昨夜</button><button type="button" data-d="' + today + '">今夜</button></div>' +
       temps.map(function (t) {
-        return '<div class="trow2"><span class="k">' + esc(t.room) + (t.role === 'ベルク' ? '<small style="font-size:12px;color:#999"> ベルク</small>' : '') + '</span><input type="text" inputmode="decimal" data-room="' + esc(t.room) + '" autocomplete="off"><span class="u">℃</span></div>';
+        return '<div class="trow2"><span class="k">' + esc(t.room) + '</span><input type="text" inputmode="decimal" data-room="' + esc(t.room) + '" autocomplete="off"><span class="u">℃</span></div>';
       }).join(''));
     var ov = sh.el;
     var fill = function () {
@@ -340,12 +403,12 @@ button.s{cursor:pointer}
     };
   }
 
-  // 今日来る菌床の振り分け（代表だけ。便ごと。寄居＋森林公園＝便の合計）
+  // 完熟の振り分け（代表だけ。便ごと。寄居＋森林公園＝便の合計）
   function openSplit() {
     var bins = nyukaBins().filter(function (b) { return b.canSplit; });
     if (!bins.length) return;
     var many = bins.length > 1;
-    var sh = sheet('<h3>今日来る菌床</h3>' + bins.map(function (b, i) {
+    var sh = sheet('<h3>完熟</h3>' + bins.map(function (b, i) {
       return (many ? '<div class="bin">' + esc(b.bin) + ' ' + num(b.total) + '</div>' : '') +
         '<div class="trow2"><span class="k">寄居</span><input type="text" inputmode="numeric" data-b="' + i + '" data-s="yorii" value="' + b.yorii + '" autocomplete="off"></div>' +
         '<div class="trow2"><span class="k">森林公園</span><input type="text" inputmode="numeric" data-b="' + i + '" data-s="shinrin" value="' + b.shinrin + '" autocomplete="off"></div>';
@@ -377,28 +440,99 @@ button.s{cursor:pointer}
         }, Promise.resolve());
       }).then(function () {
         sh.close();
-        // 覚えた値（Cloud Run）を読み直すまでの間も、変えた数を出しておく
+        // 読み直すまでの間も、変えた数を出しておく
         jobs.forEach(function (j) { j.b.yorii = j.b.total - j.shinrin; j.b.shinrin = j.shinrin; applySplit(j.b); });
         render();
-        load(true);
-      }, function (err) {
-        btn.disabled = false; btn.textContent = '保存';
-        if (err && err.code === 'NOT_KANRI') { sh.close(); return; }
-        sh.q('[data-el="m"]').textContent = '保存できません' + (err && err.network ? '' : '：' + (err && err.message || err));
-      });
+        reloadAfterSave();
+      }, function (err) { failed(sh, btn, err); });
     };
   }
-  /** 振り分けを変えた便を、手元の data の nyukaToday に入れ直す（寄居・森林公園の2行。0の行は置かない） */
+  /** 振り分けを変えた便を、手元の data の nyukaToday・fukuroToday に入れ直す */
   function applySplit(b) {
     var key = [b.date, b.kind, b.bin, b.source].join('|');
-    ORDER.forEach(function (id) {
+    SITE_IDS.forEach(function (id) {
       var s = siteOf(id); if (!s) return;
+      var old = (s.nyukaToday || []).filter(function (x) { return x.date === b.date && x.kind === b.kind && x.bin === b.bin && x.source === b.source; })
+        .reduce(function (a, x) { return a + (Number(x.count) || 0); }, 0);
       s.nyukaToday = (s.nyukaToday || []).filter(function (x) {
         return !(x.date === b.date && x.kind === b.kind && x.bin === b.bin && x.source === b.source);
       });
       if (b[id] > 0 || id === 'yorii') s.nyukaToday.push({ date: b.date, kind: b.kind, bin: b.bin, source: b.source, site: id,
         count: b[id], split: b.shinrin > 0, total: b.total, binKey: key });
+      if (s.fukuroToday) { s.fukuroToday.kanjuku += b[id] - old; s.fukuroToday.total = s.fukuroToday.kanjuku + (s.fukuroToday.baiyou || 0); }
     });
+  }
+
+  // 培養舎から（代表だけ）：今日その拠点で培養舎から袋出しする数と、どの仕入れ分から出すか
+  function openBai(siteId) {
+    var s = siteOf(siteId);
+    if (!s) return;
+    var fk = fukuroOf(siteId);
+    // 選べる仕入れ分。出す数は培養舎のページと同じ残り（shown）。上限は今日すでに決めた数をその仕入れ分に戻して数える（avail）
+    var avail = {}, shown = {}, order = [];
+    ((s.baiyou || {}).lots || []).forEach(function (x) { avail[x.date] = shown[x.date] = x.count; order.push(x.date); });
+    if (fk.decided && fk.baiyou > 0 && fk.lot) {
+      if (avail[fk.lot] === undefined) { avail[fk.lot] = shown[fk.lot] = 0; order.push(fk.lot); order.sort(); }
+      avail[fk.lot] += fk.baiyou;
+    }
+    var lot = fk.lot && avail[fk.lot] !== undefined ? fk.lot : order[0] || '';
+    var sh = sheet('<h3>' + esc(SITES[siteId]) + ' 培養舎から</h3>' +
+      '<div class="lots">' + order.map(function (d) {
+        return '<button type="button" data-lot="' + d + '"><span>' + md(d) + ' 仕入れ分</span><span>' + num(shown[d]) + '</span></button>';
+      }).join('') + '</div>' +
+      '<div class="trow2"><span class="k">個数</span><input type="text" inputmode="numeric" data-el="n" value="' + (fk.decided ? fk.baiyou : '') + '" autocomplete="off"></div>');
+    var ov = sh.el;
+    var mark2 = function () { Array.prototype.forEach.call(ov.querySelectorAll('[data-lot]'), function (b) { b.classList.toggle('on', b.dataset.lot === lot); }); };
+    Array.prototype.forEach.call(ov.querySelectorAll('[data-lot]'), function (b) { b.onclick = function () { lot = b.dataset.lot; mark2(); }; });
+    mark2();
+    sh.q('[data-el="ok"]').onclick = function () {
+      var n = C.readNum(sh.q('[data-el="n"]').value);
+      if (n === null) n = 0;
+      if (isNaN(n) || n !== Math.floor(n) || n < 0) { sh.q('[data-el="m"]').textContent = '個数は整数で入れてください'; return; }
+      if (n > 0 && !lot) { sh.q('[data-el="m"]').textContent = '培養舎に菌床がありません'; return; }
+      if (n > 0 && n > avail[lot]) { sh.q('[data-el="m"]').textContent = md(lot) + ' 仕入れ分は ' + num(avail[lot]) + ' までです'; return; }
+      if (n === (fk.decided ? fk.baiyou : 0) && (n === 0 || lot === fk.lot)) { sh.close(); return; }
+      var btn = this; btn.disabled = true; btn.textContent = '保存中…';
+      L.initKanri().then(function () {
+        return C.api('baiyou.fukuroSet', { date: data.today, site: siteId, count: n, lot: n > 0 ? lot : '' });
+      }).then(function () {
+        sh.close();
+        // 読み直すまでの間も、決めた数を出しておく
+        var b = s.baiyou || { lots: [], total: 0 };
+        var map = {};
+        Object.keys(avail).forEach(function (d) { map[d] = avail[d]; });
+        if (n > 0) map[lot] -= n;
+        b.lots = Object.keys(map).sort().filter(function (d) { return map[d] > 0; }).map(function (d) { return { date: d, count: map[d] }; });
+        b.total = b.lots.reduce(function (a, x) { return a + x.count; }, 0);
+        s.baiyou = b;
+        s.fukuroToday = { date: data.today, kanjuku: fk.kanjuku, baiyou: n, lot: n > 0 ? lot : (b.lots[0] ? b.lots[0].date : ''), decided: true, total: fk.kanjuku + n };
+        render();
+        reloadAfterSave();
+      }, function (err) { failed(sh, btn, err); });
+    };
+  }
+
+  // 培養舎の個数を直す（代表だけ）
+  function openAdj(siteId, lot) {
+    var s = siteOf(siteId);
+    var x = (((s || {}).baiyou || {}).lots || []).filter(function (y) { return y.date === lot; })[0];
+    if (!x) return;
+    var sh = sheet('<h3>' + esc(SITES[siteId]) + 'の培養舎 ' + md(lot) + ' 仕入れ分</h3>' +
+      '<div class="trow2"><span class="k">個数</span><input type="text" inputmode="numeric" data-el="n" value="' + x.count + '" autocomplete="off"></div>');
+    sh.q('[data-el="ok"]').onclick = function () {
+      var n = C.readNum(sh.q('[data-el="n"]').value);
+      if (n === null || isNaN(n) || n !== Math.floor(n) || n < 0) { sh.q('[data-el="m"]').textContent = '個数は整数で入れてください'; return; }
+      if (n === x.count) { sh.close(); return; }
+      var btn = this; btn.disabled = true; btn.textContent = '保存中…';
+      L.initKanri().then(function () { return C.api('baiyou.adjust', { site: siteId, lot: lot, count: n }); }).then(function () {
+        sh.close();
+        x.count = n;
+        s.baiyou.lots = s.baiyou.lots.filter(function (y) { return y.count > 0; });
+        s.baiyou.total = s.baiyou.lots.reduce(function (a, y) { return a + y.count; }, 0);
+        render();
+        reloadAfterSave();
+      }, function (err) { failed(sh, btn, err); });
+    };
   }
 
   document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible' && data) load(false); });

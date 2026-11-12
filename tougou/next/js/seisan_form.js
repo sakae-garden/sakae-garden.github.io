@@ -1094,6 +1094,8 @@
       el.tankNote.textContent = '1タンク＝' + st.tank + '個';
       var last = '';
       try { last = root.localStorage.getItem(LS_SITE) || ''; } catch (e) { /* 無視 */ }
+      // siteAlias（指示 20261112-2100）：選べなくなった場所を覚えていた端末は、代わりの拠点から始める（{ 前の id: 代わりの id }）
+      if (o.siteAlias && o.siteAlias[last]) last = o.siteAlias[last];
       var known = function (id) { return (opt.sites || []).some(function (s) { return s.id === id; }); };
       if (!known(st.site)) st.site = opt.defaultSite || (known(last) ? last : '');
       renderSites();

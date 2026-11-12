@@ -9,6 +9,7 @@
  * 自前の表示（指示 20261112-0900。判断ボードの「今日の指示を出す」で杉さんが出したもの）
  *   Cloud Run nippo-api の boardSummary（ログイン不要・覚えた値を返すので速い）の sites[].shiji を、
  *   「寄居 左 ○○まで 22℃」の形で1行ずつ出す。指示が無ければ何も出さない。デモ（?demo=1）では出さない（本番の指示なので）
+ *   拠点ごとに、今日の袋出しの数（sites[].fukuroToday.total＝完熟のその拠点の分＋代表が決めた培養舎から）が1以上なら「寄居 袋出し 450」を先に出す（第6版）
  */
 (function () {
   'use strict';
@@ -60,6 +61,9 @@
         .then(function (res) {
           var lines = [];
           ((res && res.sites) || []).forEach(function (st) {
+            // 代表が決めた今日の袋出し（完熟のその拠点の分＋培養舎から。board.summary の fukuroToday。指示 20261112-2100）
+            var fk = st.fukuroToday;
+            if (fk && fk.total > 0) lines.push('<div><b>' + esc(SITE_NAME[st.id] || st.id) + '</b>袋出し ' + esc(Number(fk.total).toLocaleString()) + '</div>');
             (st.shiji || []).forEach(function (x) {
               var where = (SITE_NAME[st.id] || st.id) + (x.room ? ' ' + x.room : '');
               var body = [x.kokomade ? x.kokomade : '', x.free ? x.free : ''].filter(Boolean).join('　');

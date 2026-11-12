@@ -165,10 +165,12 @@ body.kyou .tbl{font-size:14px}
   var KIND_ORDER = (window.TougouSeisanForm && window.TougouSeisanForm.KINDS) || [];
   var KIND_NAME = (window.TougouSeisanForm && window.TougouSeisanForm.KIND_NAME) || {};
   var UNIT = { fukurodashi: '個', shinsui_1: 'タンク', shinsui_2: 'タンク', shinsui_3: 'タンク', shukaku_1: 'kg', shukaku_2plus: 'kg', shukaku_c: 'kg' };
+  var HIDE_PLACES = { shinrin_berk: 1 };
   function planGroups(s) {
     var gs = (s.plan || []).map(function (g) { return { site: g.site, siteName: g.siteName, items: g.items.slice() }; });
     st.rows.forEach(function (r) {
       if (!r.kind) return;
+      if (HIDE_PLACES[r['拠点']]) return;   // 森林公園 右（ベルク）は出さない（第6版。杉さん 19:22）
       var g = gs.filter(function (x) { return x.site === r['拠点']; })[0];
       if (!g) {
         var sn = ((s.sites || []).filter(function (x) { return x.id === r['拠点']; })[0] || {}).name || r.siteName || r['拠点'];
