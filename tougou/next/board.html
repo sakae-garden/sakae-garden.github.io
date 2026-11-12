@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#1c1c1e">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="/tougou/icons/apple-touch-icon.png">
+<title>ボード | 栄ガーデン</title>
+<link rel="preconnect" href="https://nippo-api-7lc5gs4g6q-an.a.run.app">
+<link rel="stylesheet" href="styles/common.css">
+<!--
+  朝の判断ボード（指示 20261112-0900。テスト版 tougou/next だけ）
+  - 読み込みは Cloud Run nippo-api の boardSummary（ログイン不要・覚えた値を返すので速い）。失敗したら統合アプリGAS の board.summary
+    （作業のログイン）。デモ（?demo=1）は GAS のデモ用シート
+  - 夜の温度：部屋の温度をタップ → その拠点の部屋をまとめて入れる（誰でも。kucho.set。作業のログイン）
+  - 「今日の指示を出す」は代表だけに出す（shiji.html。代表パスコード）
+  - 森林公園は左＋真ん中を合わせて1つの置き場として空きを出す（2026-11-12 杉さん決定。置ける数＝設定 菌床在庫_栽培棚_shinrin、
+    使っている数＝1番・2番・3番＋休養中）。寄居は栽培（棚）と休養を分けて出す
+  - 「まもなく空く」・労働時間・負荷は出さない（杉さん 2026-11-09・11-12）
+  - 説明文を書かない。注意（困りごと）は困ったときだけ一番上に1行
+-->
+<style>
+body.board{padding-bottom:calc(24px + env(safe-area-inset-bottom))}
+.board .hdr{padding-bottom:10px}
+.board .hdr-top{padding-bottom:0}
+.hdr-r{display:flex;gap:6px;align-items:center}
+.rl-btn{background:rgba(255,255,255,.15);border:0;color:#fff;border-radius:8px;padding:6px 10px;font-size:15px;font-weight:700;font-family:inherit;cursor:pointer}
+.age{font-size:14px;color:#aaa}
+.wrap{padding:8px 10px 0}
+.trouble{background:#fef3c7;color:#78350f;border:1px solid #f59e0b;border-radius:10px;padding:7px 10px;font-size:15px;font-weight:700;margin-bottom:8px;line-height:1.45}
+.trouble:empty{display:none}
+.cards{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.card{background:#fff;border:1px solid var(--border);border-radius:12px;padding:8px 9px}
+.card h2{font-size:17px;font-weight:700;margin-bottom:4px}
+.lbl{font-size:14px;color:#6b7280;font-weight:700}
+.free{display:grid;grid-template-columns:auto 1fr 1fr;gap:0 6px;align-items:baseline;margin-bottom:6px}
+.free .h{font-size:14px;color:#6b7280;text-align:right}
+.free .k{font-size:14px;color:#374151;font-weight:700}
+.free .n{font-size:22px;font-weight:700;text-align:right;font-variant-numeric:tabular-nums}
+.free .n.s{font-size:18px;color:#374151}
+.neg{color:#b91c1c !important}
+.stk{display:grid;grid-template-columns:1fr 1fr;gap:0 8px;border-top:1px solid #eee;border-bottom:1px solid #eee;padding:3px 0;margin-bottom:6px}
+.stk>div{display:flex;justify-content:space-between;align-items:baseline}
+.stk .k{font-size:14px;color:#6b7280}
+.stk .n{font-size:17px;font-weight:700;font-variant-numeric:tabular-nums}
+.temps{display:flex;gap:4px;margin-bottom:6px}
+.temps button{flex:1;min-width:0;border:1px solid #d1d5db;border-radius:8px;background:#f9fafb;padding:3px 0;font-family:inherit;cursor:pointer;color:#111}
+.temps .k{display:block;font-size:14px;color:#6b7280}
+.temps .n{display:block;font-size:18px;font-weight:700}
+.temps button.miss{border-color:#f59e0b;background:#fffbeb}
+.temps button.miss .n{color:#b45309}
+.hv{font-size:15px;line-height:1.5}
+.hv b{font-size:18px}
+.hv .r{font-weight:700}
+.today{background:#fff;border:1px solid var(--border);border-radius:12px;padding:8px 10px;margin-top:8px}
+.trow{display:flex;justify-content:space-between;align-items:baseline;padding:3px 0;font-size:15px}
+.trow+.trow{border-top:1px solid #f1f1f1}
+.trow .n{font-size:20px;font-weight:700;font-variant-numeric:tabular-nums}
+.trow a{color:#1d4ed8;font-size:15px}
+.ratio{font-size:15px;margin-top:8px;padding:0 2px}
+.ratio b{font-size:17px}
+.who{font-size:15px;color:#374151;padding:8px 2px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.go{display:block;width:100%;height:52px;margin:12px 0 0;border:0;border-radius:12px;background:#1d4ed8;color:#fff;font-size:18px;font-weight:700;font-family:inherit;cursor:pointer;text-align:center;line-height:52px;text-decoration:none}
+.msg{font-size:15px;color:#b91c1c;padding:4px 2px}
+.msg:empty{display:none}
+/* 温度の入力 */
+.ov{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:300;display:flex;align-items:flex-end;justify-content:center}
+.sheet{background:#fff;width:100%;max-width:480px;border-radius:16px 16px 0 0;padding:14px 16px calc(16px + env(safe-area-inset-bottom))}
+.sheet h3{font-size:18px;margin-bottom:8px}
+.days{display:flex;gap:8px;margin-bottom:10px}
+.days button{flex:1;height:40px;border:1px solid #d1d5db;border-radius:8px;background:#fff;font-size:16px;font-weight:700;font-family:inherit;color:#555}
+.days button.on{background:#1f2937;border-color:#1f2937;color:#fff}
+.trow2{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.trow2 .k{flex:none;width:3.4em;white-space:nowrap;font-size:17px;font-weight:700}
+.trow2 input{flex:1;height:46px;font-size:20px;font-weight:700;text-align:center;border:1px solid #9ca3af;border-radius:8px;font-family:inherit}
+.trow2 .u{font-size:17px;font-weight:700}
+.sbtns{display:flex;gap:8px;margin-top:6px}
+.sbtns button{flex:1;height:48px;border-radius:10px;font-size:17px;font-weight:700;font-family:inherit;cursor:pointer}
+.sbtns .ok{background:#1c1c1e;color:#fff;border:0}
+.sbtns .no{background:#fff;color:#333;border:1px solid #d1d5db}
+</style>
+</head>
+<body class="board">
+<div class="hdr">
+  <div class="hdr-top">
+    <h1 id="hTitle">ボード</h1>
+    <div class="hdr-r"><span class="age" id="age"></span><button type="button" class="rl-btn" id="reload" aria-label="読み直す">↻</button></div>
+  </div>
+</div>
+<div class="wrap">
+  <div class="msg" id="msg"></div>
+  <div class="trouble" id="trouble"></div>
+  <div class="cards" id="cards"></div>
+  <div class="ratio" id="ratio"></div>
+  <div class="today" id="today" hidden></div>
+  <div class="who" id="who" hidden></div>
+  <a class="go" id="goShiji" href="shiji.html" hidden>今日の指示を出す</a>
+</div>
+
+<script src="js/common.js"></script>
+<script src="js/login.js"></script>
+<script src="js/shift_read.js"></script>
+<script>
+(function () {
+  'use strict';
+  var C = window.TougouCommon, L = window.SgLogin, S = window.TougouShift;
+  var $ = function (id) { return document.getElementById(id); };
+  var BOARD_API = 'https://nippo-api-7lc5gs4g6q-an.a.run.app/api';
+  var SITES = { yorii: '寄居', shinrin: '森林公園' };
+  var SHARED = { shinrin: true };   // 左＋真ん中を合わせて1つの置き場（2026-11-12 杉さん決定。合計5,760）
+  var WEEK = ['日', '月', '火', '水', '木', '金', '土'];
+  var data = null;
+
+  function esc(s) { return C.esc(s); }
+  function num(n) { return n === null || n === undefined || n === '' ? '—' : Number(n).toLocaleString(); }
+  function md(ymd) { var p = String(ymd).split('-').map(Number); return p[1] + '/' + p[2]; }
+  function mdw(ymd) { var p = String(ymd).split('-').map(Number); return md(ymd) + '（' + WEEK[new Date(p[0], p[1] - 1, p[2]).getDay()] + '）'; }
+  function kg(v) { return v === null || v === undefined ? '—' : (Math.round(v * 10) / 10).toLocaleString(); }
+  function pct(r) { return r === null || r === undefined ? '—' : Math.round(r * 100) + '%'; }
+  function addDays(ymd, n) {
+    var p = ymd.split('-').map(Number), d = new Date(p[0], p[1] - 1, p[2] + n);
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  }
+
+  // ---- 読み込み（Cloud Run → だめなら GAS）
+  function fetchBoard(fresh) {
+    if (C.DEMO) return viaGas();
+    return fetch(BOARD_API, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                              body: JSON.stringify({ action: 'boardSummary', params: fresh ? { fresh: true } : {} }) })
+      .then(function (r) { return r.json(); })
+      .then(function (res) { if (!res || !res.ok) throw new Error((res && res.error) || 'boardSummary'); return res; })
+      .catch(viaGas);
+  }
+  function viaGas() {
+    return L.initWork({ lazy: true }).then(function () { return C.api('board.summary'); });
+  }
+
+  // ---- 表示
+  function siteOf(id) { return (data.sites || []).filter(function (s) { return s.id === id; })[0]; }
+  /** 空き。SHARED の拠点は 置ける数 −（棚＋休養） */
+  function freeOf(s) {
+    var f = s.free || {}, f7 = s.free7 || null;
+    if (SHARED[s.id]) {
+      var cap = f.tanaCap;
+      return { shared: true,
+        now: cap === null || cap === undefined ? null : cap - (f.tanaUsed || 0) - (f.kyuyouUsed || 0),
+        d7: !f7 || cap === null || cap === undefined ? null : cap - (f7.tanaUsed || 0) - (f7.kyuyouUsed || 0) - (f7.nyukaKanjuku || 0) };
+    }
+    return { shared: false, tana: f.tana, tana7: f7 ? f7.tana : null, kyu: f.kyuyou, kyu7: f7 ? f7.kyuyou : null };
+  }
+  function nCls(v) { return v !== null && v !== undefined && v < 0 ? ' neg' : ''; }
+
+  function cardHtml(s) {
+    var fr = freeOf(s), st = s.stock || {};
+    var h = '<div class="card"><h2>' + esc(SITES[s.id] || s.name) + '</h2>';
+    h += '<div class="free"><span class="h">' + (fr.shared ? '' : '空き') + '</span><span class="h">今</span><span class="h">7日後</span>';
+    if (fr.shared) {
+      h += '<span class="k">空き</span><span class="n' + nCls(fr.now) + '">' + num(fr.now) + '</span><span class="n s' + nCls(fr.d7) + '">' + num(fr.d7) + '</span>';
+    } else {
+      h += '<span class="k">棚</span><span class="n' + nCls(fr.tana) + '">' + num(fr.tana) + '</span><span class="n s' + nCls(fr.tana7) + '">' + num(fr.tana7) + '</span>';
+      h += '<span class="k">休養</span><span class="n' + nCls(fr.kyu) + '">' + num(fr.kyu) + '</span><span class="n s' + nCls(fr.kyu7) + '">' + num(fr.kyu7) + '</span>';
+    }
+    h += '</div>';
+    h += '<div class="stk">' + [['1番', st.ichiban], ['休養', st.kyuyou], ['2番', st.niban], ['3番', st.sanban]].map(function (x) {
+      return '<div><span class="k">' + x[0] + '</span><span class="n">' + num(x[1]) + '</span></div>';
+    }).join('') + '</div>';
+    h += '<div class="lbl">昨夜</div><div class="temps">' + (s.temps || []).map(function (t) {
+      var miss = t.temp === null || t.temp === undefined;
+      return '<button type="button" class="' + (miss ? 'miss' : '') + '" data-site="' + esc(s.id) + '"><span class="k">' + esc(t.room) + '</span>' +
+        '<span class="n">' + (miss ? '未' : esc(t.temp) + '°') + '</span></button>';
+    }).join('') + '</div>';
+    var hv = s.harvest || {};
+    h += '<div class="lbl">昨日の収穫 kg</div><div class="hv">' +
+      (hv.a1 === null && hv.a2plus === null && hv.c === null ? '—'
+        : [['1番', hv.a1], ['2番〜', hv.a2plus], ['傷', hv.c]].filter(function (x) { return x[1] !== null && x[1] !== undefined; })
+            .map(function (x) { return x[0] + ' <b>' + kg(x[1]) + '</b>'; }).join('　')) + '</div>';
+    return h + '</div>';
+  }
+
+  function troubles() {
+    var out = [];
+    (data.sites || []).forEach(function (s) {
+      var fr = freeOf(s), nm = SITES[s.id] || s.name, bad = [];
+      if (fr.shared) {
+        if (fr.now !== null && fr.now < 0) bad.push('今 ' + num(fr.now));
+        else if (fr.d7 !== null && fr.d7 < 0) bad.push(md(s.free7.date) + ' ' + num(fr.d7));
+      } else {
+        if (fr.tana !== null && fr.tana < 0) bad.push('棚 今 ' + num(fr.tana));
+        else if (fr.tana7 !== null && fr.tana7 < 0) bad.push('棚 ' + md(s.free7.date) + ' ' + num(fr.tana7));
+        if (fr.kyu !== null && fr.kyu < 0) bad.push('休養 今 ' + num(fr.kyu));
+        else if (fr.kyu7 !== null && fr.kyu7 < 0) bad.push('休養 ' + md(s.free7.date) + ' ' + num(fr.kyu7));
+      }
+      if (bad.length) out.push(nm + ' 空き不足 ' + bad.join('・'));
+    });
+    var miss = [];
+    (data.sites || []).forEach(function (s) {
+      (s.temps || []).forEach(function (t) { if (t.temp === null || t.temp === undefined) miss.push((SITES[s.id] || s.name) + ' ' + t.room); });
+    });
+    if (miss.length) out.push('温度なし ' + miss.join('・'));
+    return out;
+  }
+
+  function render() {
+    var d = data;
+    $('hTitle').textContent = 'ボード ' + mdw(d.today);
+    // 古い（30分より前の）ときだけ、いつの数字かを出す
+    var at = d._cache && d._cache.fetchedAt ? d._cache.fetchedAt : d.generatedAt || '';
+    var old = d._cache && d._cache.ageSec > 1800;
+    $('age').textContent = old ? String(at).slice(11, 16) : '';
+    $('trouble').innerHTML = troubles().map(esc).join('<br>');
+    $('cards').innerHTML = ['yorii', 'shinrin'].map(siteOf).filter(Boolean).map(cardHtml).join('');
+    Array.prototype.forEach.call($('cards').querySelectorAll('.temps button'), function (b) {
+      b.onclick = function () { openTemp(b.dataset.site); };
+    });
+    var e = d.harvestExpect;
+    $('ratio').innerHTML = e && !e.error && (e.actual1 !== null || e.actual2plus !== null)
+      ? '想定比　1番 <b>' + pct(e.ratio1) + '</b>　2番〜 <b>' + pct(e.ratio2plus) + '</b>'
+      : '';
+    // 今日
+    var y = siteOf('yorii') || {}, sh = siteOf('shinrin') || {};
+    var inToday = [].concat(y.nyukaToday || [], sh.nyukaToday || []);
+    var inText = inToday.length ? inToday.map(function (x) {
+      return (x.site === 'shinrin' ? '森林公園 ' : '') + x.kind + ' <span class="n">' + num(x.count) + '</span>';
+    }).join('　') : '<span class="n">0</span>';
+    var fk = function (s) { return s.fukuro && s.fukuro.count !== null ? num(s.fukuro.count) : '—'; };
+    var ts = y.toShinrin || null;
+    $('today').innerHTML =
+      '<div class="trow"><span>今日来る菌床</span><span>' + inText + '</span></div>' +
+      '<div class="trow"><span><a href="nyuka.html">入荷一覧 ›</a></span></div>' +
+      '<div class="trow"><span>袋出し</span><span>寄居 <span class="n">' + fk(y) + '</span>' + (sh.fukuro && sh.fukuro.count ? '　森林公園 <span class="n">' + fk(sh) + '</span>' : '') + '</span></div>' +
+      '<div class="trow"><span>森林公園へ運ぶ</span><span class="n">' + (ts ? num(ts.total) : '—') + '</span></div>';
+    $('today').hidden = false;
+    // 代表だけ
+    var p = L.person();
+    $('goShiji').hidden = !(p && p.role === '代表');
+  }
+
+  function showShukkin() {
+    if (!S) return;
+    S.load(8000).then(function (sd) {
+      var names = S.membersOn(data ? data.today : C.ymd(new Date()), sd.master, sd.exceptions).map(function (e) { return e.name; });
+      $('who').textContent = names.length ? '出勤 ' + names.join('・') : '';
+      $('who').hidden = !names.length;
+    }, function () { $('who').hidden = true; });
+  }
+
+  function load(fresh) {
+    $('reload').disabled = true;
+    return fetchBoard(fresh).then(function (res) {
+      data = res; $('msg').textContent = ''; render();
+    }, function (err) {
+      $('msg').textContent = '読み込めません';
+      if (window.console) console.warn(err);
+    }).then(function () { $('reload').disabled = false; });
+  }
+
+  // ---- 夜の温度（誰でも。その拠点の部屋をまとめて）
+  function openTemp(siteId) {
+    var s = siteOf(siteId);
+    if (!s) return;
+    var today = data.today, yday = data.yesterday || addDays(today, -1);
+    var day = new Date().getHours() < 15 ? yday : today;   // 朝は昨夜、夕方からは今夜
+    var ov = document.createElement('div');
+    ov.className = 'ov';
+    ov.innerHTML = '<div class="sheet"><h3>' + esc(SITES[siteId]) + ' 夜の温度</h3>' +
+      '<div class="days"><button type="button" data-d="' + yday + '">昨夜</button><button type="button" data-d="' + today + '">今夜</button></div>' +
+      (s.temps || []).map(function (t) {
+        return '<div class="trow2"><span class="k">' + esc(t.room) + '</span><input type="text" inputmode="decimal" data-room="' + esc(t.room) + '" autocomplete="off"><span class="u">℃</span></div>';
+      }).join('') +
+      '<div class="msg" data-el="m"></div>' +
+      '<div class="sbtns"><button type="button" class="no" data-el="no">やめる</button><button type="button" class="ok" data-el="ok">保存</button></div></div>';
+    document.body.appendChild(ov);
+    var q = function (sel) { return ov.querySelector(sel); };
+    var close = function () { if (ov.parentNode) ov.parentNode.removeChild(ov); };
+    var fill = function () {
+      Array.prototype.forEach.call(ov.querySelectorAll('.days button'), function (b) { b.classList.toggle('on', b.dataset.d === day); });
+      // 昨夜の分は今の表示の値を入れておく（今夜は空欄から）
+      Array.prototype.forEach.call(ov.querySelectorAll('input[data-room]'), function (inp) {
+        var t = (s.temps || []).filter(function (x) { return x.room === inp.dataset.room; })[0];
+        inp.value = day === yday && t && t.temp !== null && t.temp !== undefined ? t.temp : '';
+      });
+    };
+    Array.prototype.forEach.call(ov.querySelectorAll('.days button'), function (b) { b.onclick = function () { day = b.dataset.d; fill(); }; });
+    fill();
+    ov.addEventListener('click', function (e) { if (e.target === ov) close(); });
+    q('[data-el="no"]').onclick = close;
+    q('[data-el="ok"]').onclick = function () {
+      var recs = [], bad = '';
+      Array.prototype.forEach.call(ov.querySelectorAll('input[data-room]'), function (inp) {
+        var v = C.readNum(inp.value);
+        if (v === null) return;
+        if (isNaN(v) || v < 0 || v > 50) { bad = inp.dataset.room + ' の温度が読めません'; return; }
+        recs.push({ date: day, site: siteId, room: inp.dataset.room, temp: v });
+      });
+      if (bad) { q('[data-el="m"]').textContent = bad; return; }
+      if (!recs.length) { close(); return; }
+      var btn = this; btn.disabled = true; btn.textContent = '保存中…';
+      L.initWork({ lazy: true }).then(function () { return C.api('kucho.set', { records: recs }); }).then(function () {
+        close();
+        load(true);
+      }, function (err) {
+        btn.disabled = false; btn.textContent = '保存';
+        q('[data-el="m"]').textContent = '保存できません' + (err && err.network ? '' : '：' + (err && err.message || err));
+      });
+    };
+  }
+
+  $('reload').onclick = function () { load(true); };
+  document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible' && data) load(false); });
+  load(false).then(showShukkin);
+})();
+</script>
+</body>
+</html>

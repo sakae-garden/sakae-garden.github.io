@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#1c1c1e">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="/tougou/icons/apple-touch-icon.png">
+<title>今日の指示 | 栄ガーデン</title>
+<link rel="stylesheet" href="styles/common.css">
+<!--
+  今日の指示を出す（指示 20261112-0900。代表だけ＝代表パスコード。shiji.set は GAS でも代表だけ）
+  - 部屋ごとの「今日ここまで」と夜の温度、拠点ごとの「全体」（共有事項）。今日の分だけ
+  - 温度を入れた部屋は、空調記録（kucho.set）にも今夜の分として入れる（杉さん決定 2026-11-12「夜の温度は基本は杉さんが指示として入れる」）
+  - 出した指示は作業記録（sagyou.html）の上の本日の指示バーに出る（js/shiji-slot.js の自前の表示）
+  - 保存の後に Cloud Run の boardSummary を fresh で呼んで、ボード・指示バーにすぐ出す
+-->
+<style>
+body.shiji{padding-bottom:calc(24px + env(safe-area-inset-bottom))}
+.shiji .hdr{padding-bottom:10px}
+.shiji .hdr-top{padding-bottom:0}
+.wrap{padding:8px 12px 0}
+.site{background:#fff;border:1px solid var(--border);border-radius:12px;padding:8px 10px;margin-bottom:10px}
+.site h2{font-size:18px;margin-bottom:6px}
+.room{display:grid;grid-template-columns:3.6em 1fr 4.6em;gap:6px;align-items:center;margin-bottom:6px}
+.room .k{font-size:17px;font-weight:700}
+.room input,.all textarea{height:44px;font-size:17px;border:1px solid #9ca3af;border-radius:8px;padding:0 8px;font-family:inherit;width:100%;min-width:0}
+.room input.t{text-align:center;font-weight:700}
+.hd{display:grid;grid-template-columns:3.6em 1fr 4.6em;gap:6px;font-size:14px;color:#6b7280;margin-bottom:2px}
+.hd span:last-child{text-align:center}
+.all textarea{height:64px;padding:6px 8px;resize:vertical}
+.all .k{font-size:14px;color:#6b7280;font-weight:700;margin:2px 0}
+.go{display:block;width:100%;height:52px;margin:6px 0 0;border:0;border-radius:12px;background:#1d4ed8;color:#fff;font-size:18px;font-weight:700;font-family:inherit;cursor:pointer}
+.go:disabled{opacity:.5}
+.msg{font-size:15px;padding:4px 2px}
+.msg.ng{color:#b91c1c}
+.msg:empty{display:none}
+.back{color:#fff;font-size:15px;text-decoration:none;background:rgba(255,255,255,.15);border-radius:8px;padding:6px 10px}
+</style>
+</head>
+<body class="shiji">
+<div class="hdr">
+  <div class="hdr-top">
+    <h1 id="hTitle">今日の指示</h1>
+    <a class="back" href="board.html">ボード</a>
+  </div>
+</div>
+<div class="wrap">
+  <div class="msg" id="msg"></div>
+  <div id="form"></div>
+  <button type="button" class="go" id="send" hidden>指示を出す</button>
+</div>
+
+<script src="js/common.js"></script>
+<script src="js/login.js"></script>
+<script>
+(function () {
+  'use strict';
+  var C = window.TougouCommon, L = window.SgLogin;
+  var $ = function (id) { return document.getElementById(id); };
+  var BOARD_API = 'https://nippo-api-7lc5gs4g6q-an.a.run.app/api';
+  var SITES = [{ id: 'yorii', name: '寄居' }, { id: 'shinrin', name: '森林公園' }];
+  // 部屋（ボードに出す部屋。boardSummary が読めないときの控え。統合マスタ 拠点タンクマスタの「部屋の位置」「ボード」）
+  var ROOMS = { yorii: ['左', '真ん中', '右'], shinrin: ['左', '真ん中'] };
+  var WEEK = ['日', '月', '火', '水', '木', '金', '土'];
+  var today = C.ymd(C.now());
+  var esc = C.esc;
+  function msg(t, ng) { $('msg').textContent = t || ''; $('msg').className = 'msg' + (ng ? ' ng' : ''); }
+  function boardCall(params) {
+    return fetch(BOARD_API, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                              body: JSON.stringify({ action: 'boardSummary', params: params || {} }) }).then(function (r) { return r.json(); });
+  }
+
+  function draw(items) {
+    var of = function (site, room) { return items.filter(function (x) { return x.site === site && (x.room || '') === room; })[0] || {}; };
+    $('form').innerHTML = SITES.map(function (s) {
+      var g = of(s.id, '');
+      return '<div class="site"><h2>' + esc(s.name) + '</h2><div class="hd"><span></span><span>今日ここまで</span><span>夜 ℃</span></div>' +
+        ROOMS[s.id].map(function (r) {
+          var x = of(s.id, r);
+          return '<div class="room"><span class="k">' + esc(r) + '</span>' +
+            '<input type="text" data-s="' + s.id + '" data-r="' + esc(r) + '" data-f="kokomade" value="' + esc(x.kokomade || '') + '" autocomplete="off">' +
+            '<input type="text" class="t" inputmode="decimal" data-s="' + s.id + '" data-r="' + esc(r) + '" data-f="temp" value="' + esc(x.temp === null || x.temp === undefined ? '' : x.temp) + '" autocomplete="off"></div>';
+        }).join('') +
+        '<div class="all"><div class="k">全体</div><textarea data-s="' + s.id + '" data-r="" data-f="free">' + esc(g.free || '') + '</textarea></div></div>';
+    }).join('');
+    $('send').hidden = false;
+  }
+
+  function collect() {
+    var by = {}, bad = '';
+    Array.prototype.forEach.call(document.querySelectorAll('[data-f]'), function (el) {
+      var k = el.dataset.s + '|' + el.dataset.r, o = by[k] || (by[k] = { site: el.dataset.s, room: el.dataset.r });
+      var v = String(el.value).trim();
+      if (el.dataset.f === 'temp') {
+        if (v === '') { o.temp = ''; return; }
+        var n = C.readNum(v);
+        if (n === null || isNaN(n) || n < 0 || n > 50) { bad = el.dataset.r + ' の温度が読めません'; return; }
+        o.temp = n;
+      } else o[el.dataset.f] = v;
+    });
+    if (bad) return { error: bad };
+    return { items: Object.keys(by).map(function (k) { return by[k]; }) };
+  }
+
+  $('send').onclick = function () {
+    var c = collect();
+    if (c.error) { msg(c.error, true); return; }
+    var btn = this; btn.disabled = true; btn.textContent = '送信中…';
+    var temps = c.items.filter(function (x) { return x.room && x.temp !== '' && x.temp !== undefined; })
+      .map(function (x) { return { date: today, site: x.site, room: x.room, temp: x.temp }; });
+    C.api('shiji.set', { date: today, items: c.items }).then(function () {
+      return temps.length ? C.api('kucho.set', { records: temps }) : null;
+    }).then(function () {
+      msg('');
+      btn.textContent = '出しました';
+      if (!C.DEMO) boardCall({ fresh: true }).catch(function () { /* 15分以内に裏で読み直される */ });
+      setTimeout(function () { location.href = 'board.html' + (C.DEMO ? '?demo=1' : ''); }, 900);
+    }, function (err) {
+      btn.disabled = false; btn.textContent = '指示を出す';
+      msg('出せません' + (err && err.network ? '' : '：' + (err && err.message || err)), true);
+    });
+  };
+
+  var p = today.split('-').map(Number);
+  $('hTitle').textContent = '今日の指示 ' + p[1] + '/' + p[2] + '（' + WEEK[new Date(p[0], p[1] - 1, p[2]).getDay()] + '）';
+  L.initKanri().then(function (s) {
+    if (s && s.role !== '代表') { msg('代表だけが使えます', true); return; }
+    // 部屋はボードの返り値に合わせる（無ければ控え）
+    var rooms = C.DEMO ? Promise.resolve(null) : boardCall().then(function (res) {
+      (res && res.sites || []).forEach(function (st) { if (st.temps && st.temps.length) ROOMS[st.id] = st.temps.map(function (t) { return t.room; }); });
+    }, function () { /* 控えのまま */ });
+    return Promise.all([rooms, C.api('shiji.get', { date: today })]).then(function (r) { draw((r[1] && r[1].items) || []); });
+  }).catch(function (err) {
+    if (err && err.code === 'NOT_KANRI') return;
+    msg('開けません' + (err && err.network ? '' : '：' + (err && err.message || err)), true);
+  });
+})();
+</script>
+</body>
+</html>

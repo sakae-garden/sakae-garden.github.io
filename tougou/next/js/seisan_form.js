@@ -36,6 +36,9 @@
  *               3番浸水・作業無し・収穫・指示・入力済みは「その他」（ふだん閉じる）。合計の内訳と取消は合計をタップしたときだけ開く。
  *               処理（保存・足していく入力・取消・作業無し・下書き）は従来と同じで、並びと文言だけが違う
  *   kindNames … 画面に出す名前の差し替え（{ shinsui_1: '1番浸水' } など。保存のキー・シートの種別は変えない）
+ *   kgAdd     … true なら収穫（1番・2番以降・傷。kg）も「足していく」入力にする（kari.add・kari.cancel。指示 20261112-0900
+ *               杉さん決定「重さは作業した人が自分のスマホで入れる」）。layout:'work' では「送る」の上に刈り取りのカード
+ *               （1番・2番〜・傷 の3欄）を出し、「その他」の上書きの欄は出さない
  * 戻り値 { ready: Promise, reload() }
  */
 (function (root) {
@@ -57,7 +60,10 @@
   var KIND_NAME = KIND_NAME_BASE;   // mount の中では kindNames で差し替えたもの（同じ名前で影にする）
   var LS_SITE = 'tougou.today.site';          // GAS 版と同じキー（端末で前回選んだ拠点）
   var ADD_KINDS = { fukurodashi: 1, shinsui_1: 1, shinsui_2: 1, shinsui_3: 1 };   // 足していく入力の種別（Production.gs の PROD_ADD_KINDS と同じ）
-  var UNIT = { fukurodashi: '個', shinsui_1: 'タンク', shinsui_2: 'タンク', shinsui_3: 'タンク' };
+  var UNIT = { fukurodashi: '個', shinsui_1: 'タンク', shinsui_2: 'タンク', shinsui_3: 'タンク',
+               shukaku_1: 'kg', shukaku_2plus: 'kg', shukaku_c: 'kg' };
+  var KARI_KINDS = { shukaku_1: 1, shukaku_2plus: 1, shukaku_c: 1 };   // kgAdd のとき足していく収穫（Kari.gs と同じ）
+  function kgRound(v) { return Math.round(v * 100) / 100; }
   // 「今日は○○無し」のボタンを出す種別（2026-10-15 杉さん決定 案b。4番用は例外なので出さない）。押すと 0（作業無し）として記録する
   var NONE_KINDS = { fukurodashi: 1, shinsui_1: 1, shinsui_2: 1 };
   // 42個でないタンク（2026-10-29 菌床在庫）。浸水（2番用・3番用）の足していく入力にだけ出す。
@@ -169,10 +175,20 @@
           : '') +
         '</div>';
     }
+    // 刈り取り（kgAdd）：1枚のカードに 1番・2番〜・傷 の3欄。各欄の下に合計（タップで内訳と取消）
+    function kariCard() {
+      var row = function (k, label) {
+        return '<div class="wkg" data-row="' + k + '"><div class="winp"><span class="wkg-l">' + label + '<span class="srv"></span></span>' +
+          '<input type="text" class="wnum" data-k="' + k + '" inputmode="decimal" autocomplete="off" placeholder="">' +
+          '<span class="wunit">kg</span></div>' + addBox(k) + '</div>';
+      };
+      return '<div class="wcard wkari" data-card="kari"><div class="wname">刈り取り</div>' +
+        row('shukaku_1', '1番') + row('shukaku_2plus', '2番〜') + row('shukaku_c', '傷') + '</div>';
+    }
     return '<div class="wsites" data-el="sites"></div>' +
       '<div class="wday"><span data-el="dayLabel"></span><span class="wday-toggle" data-el="dayToggle"><button type="button" class="wlink" data-day="yday">昨日の分を入れる</button></span></div>' +
       '<div class="yday-bar wyday" data-el="ydayBar" hidden></div>' +
-      card('fukurodashi') + card('shinsui_1') + card('shinsui_2') +
+      card('fukurodashi') + card('shinsui_1') + card('shinsui_2') + (o.kgAdd ? kariCard() : '') +
       '<div class="wdone" data-el="done" hidden></div>' +
       '<button type="button" class="wsend" data-el="save">送る</button>' +
       '<div data-el="idouSlot"></div>' +
@@ -180,9 +196,11 @@
       '<div class="wmore-lbl">' + N.shinsui_3 + '</div>' + card('shinsui_3') +
       '<div class="wmore-lbl">作業が無かった日</div><div class="wnone" data-el="noneBox"></div>' +
       '<div class="plan-line" data-el="plan" hidden></div>' +
-      '<div class="wmore-lbl">収穫（kg・その日の合計。上書き）</div>' +
-      '<div class="fsec">' + kgRow('shukaku_1', '1番') + kgRow('shukaku_2plus', '2番以降') + kgRow('shukaku_c', '傷（C品）') + '</div>' +
-      '<div class="wmore-note">収穫は空欄なら送りません。取り消しは 0 を入れて「送る」。<span data-el="tankNote">1タンク＝42個</span></div>' +
+      (o.kgAdd
+        ? '<span data-el="tankNote" hidden></span>'
+        : '<div class="wmore-lbl">収穫（kg・その日の合計。上書き）</div>' +
+          '<div class="fsec">' + kgRow('shukaku_1', '1番') + kgRow('shukaku_2plus', '2番以降') + kgRow('shukaku_c', '傷（C品）') + '</div>' +
+          '<div class="wmore-note">収穫は空欄なら送りません。取り消しは 0 を入れて「送る」。<span data-el="tankNote">1タンク＝42個</span></div>') +
       '<div class="wmore-lbl">入力済み <span data-el="listDate"></span></div>' +
       '<div class="fsec" data-el="list"><div class="empty">読み込み中…</div></div>' +
       '</div></details>';
@@ -203,7 +221,7 @@
     var openTot = {};   // 現場向け：合計の内訳を開いている種別（描き直しても閉じない）
     var msg = o.msg || function () {};
     var additive = !!o.additive;
-    var isAdd = function (k) { return additive && !!ADD_KINDS[k]; };
+    var isAdd = function (k) { return additive && (!!ADD_KINDS[k] || (!!o.kgAdd && !!KARI_KINDS[k])); };
     // base＝サーバから読んだ行、rows＝base に送信待ちを重ねたもの（画面はこちらを見る）
     // entries＝足していく入力（サーバ）、ents＝それに送信待ちを重ねたもの。plans＝袋出しの指示。day＝'today'|'yday'（dayToggle）
     var st = { opts: null, date: '', site: '', base: [], rows: [], seq: 0, tank: 42, touched: {}, loaded: false,
@@ -249,7 +267,7 @@
         var k = r.date + '|' + r.site + '|' + r.kind, cur = retry[k] || (retry[k] = { recs: [], total: 0 });
         if (cur.recs.some(function (x) { return x.id === r.id; })) return;
         cur.recs.push({ id: r.id, value: r.value });
-        cur.total += Number(r.value) || 0;
+        cur.total = kgRound(cur.total + (Number(r.value) || 0));
       });
       saveRetry();
     }
@@ -323,7 +341,7 @@
           // 足していく入力・取り消し：合計を送信待ちの分だけ動かす
           var cur = i >= 0 ? (C.readNum(rows[i]['入力値']) || 0) : 0;
           var sign = type === 'add' ? 1 : -1;
-          var pr = pendingRow({ site: rec.site, kind: rec.kind, value: Math.max(0, cur + sign * rec.value) });
+          var pr = pendingRow({ site: rec.site, kind: rec.kind, value: Math.max(0, kgRound(cur + sign * rec.value)) });
           if (i >= 0) rows[i] = pr; else rows.push(pr);
           if (type === 'add') {
             // 数を足すと作業無しは自動で外れる（サーバと同じ）
@@ -431,7 +449,7 @@
         var who = o.nameOf || function (x) { return x.empName || ''; };
         return r && C.readNum(r['入力値']) ? who(r) + ' ' + C.readNum(r['入力値']) : '';
       }
-      return order.filter(function (n) { return sum[n] !== 0; }).map(function (n) { return n + ' ' + sum[n]; }).join('・');
+      return order.filter(function (n) { return sum[n] !== 0; }).map(function (n) { return n + ' ' + kgRound(sum[n]); }).join('・');
     }
     /** 現場向け：カードの中の合計1行（タップで内訳と取消が開く） */
     function renderWorkBox(k, box) {
@@ -444,6 +462,17 @@
         head = noneLabel(k);
         inner += '<div class="wtot-item">' + C.esc(nz.surname || nz.empId || '') + ' ' + C.esc(String(nz.at).slice(11, 16)) +
           (nz._pending ? ' 送信中' : nz.empId === me ? '<button type="button" class="add-cancel" data-id="' + C.esc(nz.id) + '">取り消す</button>' : '') + '</div>';
+      } else if (unit === 'kg') {
+        // 刈り取り（kgAdd）：まだ何も無い欄は何も出さない。合計は「計 ○kg」
+        if (!total && !es.length) { box.innerHTML = ''; return; }
+        head = '計 <b>' + kgRound(total).toLocaleString() + 'kg</b>';
+        var bdk = breakdown(st.site, k);
+        var others = es.some(function (e) { return e.empId !== me; });   // 自分だけなら内訳は「あなた」の行と同じなので出さない
+        if (bdk && others) inner += '<div class="wtot-item">' + C.esc(bdk) + '</div>';
+        inner += mine.map(function (e) {
+          return '<div class="wtot-item">あなた ＋' + C.esc(e.value) + 'kg（' + C.esc(String(e.at).slice(11, 16)) + '）' +
+            (e._pending ? ' 送信中' : '<button type="button" class="add-cancel" data-id="' + C.esc(e.id) + '">取り消す</button>') + '</div>';
+        }).join('');
       } else {
         var beds = unit === 'タンク' && total ? entBeds(st.site, k) : null;
         head = dayWord() + 'の合計 <b>' + total.toLocaleString() + unit + '</b>' +
@@ -544,7 +573,7 @@
       if (el.rare && (serverValue('shinsui_3') !== '' || C.readNum(inputs.shinsui_3.value) !== null)) el.rare.open = true;
       if (work) {
         // 「その他」の欄に戻した値（届かなかった送信・下書き）があれば開いて見せる
-        if (['shinsui_3', 'shukaku_1', 'shukaku_2plus', 'shukaku_c'].some(function (k) { return st.touched[k] && String(inputs[k].value).trim() !== ''; })) el.more.open = true;
+        if ((o.kgAdd ? ['shinsui_3'] : ['shinsui_3', 'shukaku_1', 'shukaku_2plus', 'shukaku_c']).some(function (k) { return st.touched[k] && String(inputs[k].value).trim() !== ''; })) el.more.open = true;
         if (st.date) el.dayLabel.textContent = mdw(st.date) + 'の分';
         renderNoneBox();
       }
@@ -704,11 +733,14 @@
     /** 送る単位に分ける：上書き（upsertMany）と足していく入力（add。1件ずつ ID を付ける） */
     function jobsOf(records) {
       var up = records.filter(function (r) { return !isAdd(r.kind); });
-      var add = [];
-      records.filter(function (r) { return isAdd(r.kind); }).forEach(function (r) { add = add.concat(addRecsOf(r)); });
+      var add = [], kari = [];
+      records.filter(function (r) { return isAdd(r.kind); }).forEach(function (r) {
+        if (KARI_KINDS[r.kind]) kari = kari.concat(addRecsOf(r)); else add = add.concat(addRecsOf(r));
+      });
       var jobs = [], at = nowFull();
       if (up.length) jobs.push({ type: 'upsert', records: up, at: at });
       if (add.length) jobs.push({ type: 'add', records: add, at: at });
+      if (kari.length) jobs.push({ type: 'add', records: kari, at: at });   // 刈り取り（kari.add。callJob が種別で送り先を決める）
       return jobs;
     }
     function callJob(job) {
@@ -718,7 +750,7 @@
           if (r.odd && r.odd.length) s.note = ODD_PREFIX + r.odd.join(',');   // 42個でないタンク（入力の備考に残す）
           return s;
         });
-        return C.api('production.add', { records: send }).then(function (res) {
+        return C.api(KARI_KINDS[job.records[0].kind] ? 'kari.add' : 'production.add', { records: send }).then(function (res) {
           // 再送で、前の送信がすでに届いていた（サーバが同じ ID を数えなかった）
           var dups = ((res && res.results) || []).filter(function (x) { return x.dup; });
           if (dups.length) {
@@ -729,7 +761,7 @@
           return res;
         });
       }
-      if (job.type === 'cancel') return C.api('production.cancel', { id: job.records[0].id });
+      if (job.type === 'cancel') return C.api(KARI_KINDS[job.records[0].kind] ? 'kari.cancel' : 'production.cancel', { id: job.records[0].id });
       if (job.type === 'none') {
         return C.api('production.none', { records: job.records.map(function (r) { return { id: r.id, date: r.date, site: r.site, kind: r.kind }; }) });
       }
@@ -826,7 +858,7 @@
       var job = { type: 'cancel', records: [{ id: e.id, date: e.date, site: e.site, kind: e.kind, value: Number(e.value) || 0, none: !!e.none }], at: nowFull() };
       if (!o.optimistic) {
         C.showLoading('取り消し中...');
-        C.api('production.cancel', { id: id }).then(function () { C.hideLoading(); C.toast('取り消しました'); return load(true); },
+        C.api(KARI_KINDS[e.kind] ? 'kari.cancel' : 'production.cancel', { id: id }).then(function () { C.hideLoading(); C.toast('取り消しました'); return load(true); },
           function (err) { C.hideLoading(); msg('取り消せませんでした：' + err.message, 'ng'); });
         return;
       }
@@ -908,7 +940,7 @@
       mine.forEach(function (r) {
         if (r.site !== site || typed[r.kind]) return;
         // 足していく入力は、届かなかった分を合わせて欄に戻す（送り直すときは前と同じ ID で送る＝届いていれば二重に足さない）
-        if (r._add) addSum[r.kind] = (addSum[r.kind] || 0) + r.value;
+        if (r._add) addSum[r.kind] = kgRound((addSum[r.kind] || 0) + r.value);
         inputs[r.kind].value = String(r._add ? addSum[r.kind] : r.value);
         st.touched[r.kind] = true;
         if (r._add && r.odd && r.odd.length && odds[r.kind]) {

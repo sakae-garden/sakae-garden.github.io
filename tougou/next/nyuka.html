@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#1c1c1e">
+<link rel="manifest" href="manifest.webmanifest">
+<title>入荷 | 栄ガーデン</title>
+<link rel="stylesheet" href="styles/common.css">
+<!--
+  入荷一覧（判断ボードの「明日から ›」の行き先。指示 20261112-0900）。読むだけ。
+  Cloud Run nippo-api の nyukaList（ログイン不要）で、明日から60日分。分けた便は寄居・森林公園の2行で出る
+-->
+<style>
+body.nyuka{padding-bottom:calc(24px + env(safe-area-inset-bottom))}
+.nyuka .hdr{padding-bottom:10px}
+.nyuka .hdr-top{padding-bottom:0}
+.back{color:#fff;font-size:15px;text-decoration:none;background:rgba(255,255,255,.15);border-radius:8px;padding:6px 10px}
+.wrap{padding:8px 12px 0}
+.day{background:#fff;border:1px solid var(--border);border-radius:10px;padding:6px 10px;margin-bottom:6px}
+.day .d{font-size:16px;font-weight:700}
+.row{display:flex;justify-content:space-between;font-size:15px;padding:2px 0}
+.row .n{font-weight:700;font-size:18px;font-variant-numeric:tabular-nums}
+.msg{font-size:15px;color:#b91c1c;padding:4px 2px}
+.msg:empty{display:none}
+</style>
+</head>
+<body class="nyuka">
+<div class="hdr"><div class="hdr-top"><h1>入荷</h1><a class="back" href="board.html">ボード</a></div></div>
+<div class="wrap"><div class="msg" id="msg"></div><div id="list"></div></div>
+<script src="js/common.js"></script>
+<script>
+(function () {
+  'use strict';
+  var C = window.TougouCommon;
+  var BOARD_API = 'https://nippo-api-7lc5gs4g6q-an.a.run.app/api';
+  var SITES = { yorii: '寄居', shinrin: '森林公園' };
+  var WEEK = ['日', '月', '火', '水', '木', '金', '土'];
+  function addDays(ymd, n) {
+    var p = ymd.split('-').map(Number), d = new Date(p[0], p[1] - 1, p[2] + n);
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  }
+  var today = C.ymd(C.now());
+  var from = addDays(today, 1), to = addDays(today, 60);
+  fetch(BOARD_API, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                     body: JSON.stringify({ action: 'nyukaList', params: { from: from, to: to } }) })
+    .then(function (r) { return r.json(); })
+    .then(function (res) {
+      if (!res || !res.ok) throw new Error((res && res.error) || '読めません');
+      var by = {};
+      (res.rows || []).forEach(function (x) { (by[x.date] = by[x.date] || []).push(x); });
+      var days = Object.keys(by).sort();
+      document.getElementById('list').innerHTML = days.length ? days.map(function (d) {
+        var p = d.split('-').map(Number);
+        return '<div class="day"><div class="d">' + p[1] + '/' + p[2] + '（' + WEEK[new Date(p[0], p[1] - 1, p[2]).getDay()] + '）</div>' +
+          by[d].map(function (x) {
+            return '<div class="row"><span>' + C.esc((SITES[x.site] || x.site) + ' ' + x.kind + '・' + x.bin) + '</span><span class="n">' + Number(x.count).toLocaleString() + '</span></div>';
+          }).join('') + '</div>';
+      }).join('') : '<div class="day">なし</div>';
+    })
+    .catch(function () { document.getElementById('msg').textContent = '読み込めません'; });
+})();
+</script>
+</body>
+</html>

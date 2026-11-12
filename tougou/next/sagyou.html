@@ -115,6 +115,14 @@ body.form-yday .page#p1{background:transparent}
 .wcard[data-row] .wnum{border-color:var(--wl);background:#fff}
 .wcard[data-row] .wstep{border-color:var(--wl);background:#fff;color:var(--wn)}
 .wcard[data-row].chg{border-color:var(--wc);border-left-color:var(--wc);box-shadow:inset 0 0 0 1px var(--wc)}
+/* 刈り取り（kg を1人ずつ足していく。2026-11-12）。色は緑（収穫） */
+.wkari{--wc:#15803d;--wn:#166534;--wb:#f0fdf4;--wl:#86efac;border-left:6px solid var(--wc);background:var(--wb);padding-left:10px}
+.wkari .wname{color:var(--wn)}
+.wkg+.wkg{margin-top:6px}
+.wkg-l{flex:none;width:3.6em;font-size:17px;font-weight:700;color:var(--wn)}
+.wkg-l .srv{display:none}
+.wkari .wnum{border-color:var(--wl);background:#fff}
+.wkg.chg .wnum{border-color:var(--wc);box-shadow:0 0 0 1px var(--wc)}
 .wodd summary::-webkit-details-marker{display:none}
 .wodd .odd-in{font-size:14px;padding-top:4px}
 .wodd .odd-in input{width:100%;height:40px;font-size:16px;margin-top:4px;border:1px solid var(--border);border-radius:8px;padding:0 8px;font-family:inherit}
@@ -156,7 +164,7 @@ body.has-unsaved #p1{padding-bottom:calc(var(--footer-h) + env(safe-area-inset-b
 </style>
 </head>
 <body class="sagyou">
-<div id="shiji" class="shiji-slot"></div>
+<div id="shiji" class="shiji-slot" data-own="1"></div>
 <script src="js/shiji-slot.js" defer></script>
 
 <div class="hdr">
@@ -236,7 +244,9 @@ body.has-unsaved #p1{padding-bottom:calc(var(--footer-h) + env(safe-area-inset-b
       form = window.TougouSeisanForm.mount({
         host: $('form'),
         layout: 'work',          // 現場向けの並び（2026-10-29）。拠点のボタンは本文に描く
-        kindNames: { shinsui_1: '1番浸水', shinsui_2: '2番浸水', shinsui_3: '3番浸水' },
+        kindNames: { shinsui_1: '1番浸水', shinsui_2: '2番浸水', shinsui_3: '3番浸水',
+                     shukaku_1: '刈り取り 1番', shukaku_2plus: '刈り取り 2番〜', shukaku_c: '刈り取り 傷' },
+        kgAdd: true,             // 刈り取りの重さは作業した人が自分で足していく（2026-11-12 杉さん決定。kari.add）
         msg: msg,
         pickDate: false,
         draftKey: DRAFT_KEY,
