@@ -178,7 +178,9 @@ body.kyou .tbl{font-size:14px}
       g.items.push({ kind: r.kind, label: KIND_NAME[r.kind] || r['種別'], unit: UNIT[r.kind] || r['入力単位'], calc: 0, count: null, detail: '', override: null, value: 0, onlyActual: true });
     });
     var sid = (s.sites || []).map(function (x) { return x.id; });
-    gs.sort(function (a, b) { return sid.indexOf(a.site) - sid.indexOf(b.site); });
+    // 拠点の一覧に無い場所（森林公園 右＝ベルク。2026-11-12）は最後に出す
+    var rank = function (id) { var i = sid.indexOf(id); return i < 0 ? sid.length : i; };
+    gs.sort(function (a, b) { return rank(a.site) - rank(b.site); });
     gs.forEach(function (g) { g.items.sort(function (a, b) { return KIND_ORDER.indexOf(a.kind) - KIND_ORDER.indexOf(b.kind); }); });
     return gs;
   }

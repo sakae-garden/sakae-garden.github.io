@@ -225,6 +225,11 @@
                dayToggle: q('[data-el="dayToggle"]'), ydayBar: q('[data-el="ydayBar"]'), plan: q('[data-el="plan"]'),
                dayLabel: q('[data-el="dayLabel"]'), done: q('[data-el="done"]'), more: q('[data-el="more"]'), noneBox: q('[data-el="noneBox"]') };
     var openTot = {};   // 現場向け：合計の内訳を開いている種別（描き直しても閉じない）
+    // extraSites（指示 20261112 1740 への追加）：拠点の後ろに足す場所（森林公園 右＝ベルク）。[{ id, name, label, kinds:{ 種別:1 } }]。
+    // kinds に無い種別（収穫）はその場所を選んでいる間は出さず、送らない
+    var EXTRA = o.extraSites || [];
+    function extraOf(id) { return EXTRA.filter(function (x) { return x.id === id; })[0] || null; }
+    function allowed(k) { var x = extraOf(st.site); return !x || !!(x.kinds && x.kinds[k]); }
     var msg = o.msg || function () {};
     var additive = !!o.additive;
     var isAdd = function (k) { return additive && (!!ADD_KINDS[k] || (!!o.kgAdd && !!KARI_KINDS[k])); };
@@ -383,6 +388,7 @@
     function pending() {
       var out = {}, bad = '';
       KINDS.forEach(function (k) {
+        if (!allowed(k)) return;   // その場所では記録しない種別（森林公園 右＝ベルクの収穫）
         var v = C.readNum(inputs[k].value);
         if (odds[k] && isAdd(k)) {
           // 42個でないタンク：タンク数より多くは入れられない。タンク数が空なら保存させない（欄だけ残って消えないように）
@@ -411,8 +417,12 @@
       var sites = (st.opts && st.opts.sites) || [];
       o.siteTabs.innerHTML = sites.map(function (s) {
         return '<button type="button" class="rtab' + (s.id === st.site ? ' active' : '') + '" data-id="' + C.esc(s.id) + '">' +
-          C.esc(work ? String(s.name || s.id).replace(/ハウス$/, '') : (s.name || s.id)) + '</button>';   // 現場向けは「寄居」「森林公園」
+          C.esc(work ? s.label || String(s.name || s.id).replace(/ハウス$/, '') : (s.name || s.id)) + '</button>';   // 現場向けは「寄居」「森林公園」「右 ベルク」
       }).join('');
+      // その場所で記録しない種別の欄・カードは出さない（森林公園 右＝ベルクの刈り取り）
+      KINDS.forEach(function (k) { var row = q('[data-row="' + k + '"]'); if (row) row.hidden = !allowed(k); });
+      var kc = q('[data-card="kari"]');
+      if (kc) kc.hidden = !allowed('shukaku_1') && !allowed('shukaku_2plus') && !allowed('shukaku_c');
       Array.prototype.forEach.call(o.siteTabs.children, function (b) {
         b.onclick = function () {
           if (b.dataset.id === st.site) return;
@@ -1074,6 +1084,11 @@
 
     // ---- 開始：初期値（今日・拠点一覧・所属拠点・1タンクの個数）→ その日の一覧
     function applyOptions(opt) {
+      if (EXTRA.length) {
+        // 拠点の後ろに足す場所（サーバの拠点一覧には無い。production.options は変えない）
+        var have = (opt.sites || []).map(function (s) { return s.id; });
+        opt = Object.assign({}, opt, { sites: (opt.sites || []).concat(EXTRA.filter(function (x) { return have.indexOf(x.id) < 0; })) });
+      }
       st.opts = opt;
       st.tank = Number(opt.tankCapacity) || 42;
       el.tankNote.textContent = '1タンク＝' + st.tank + '個';

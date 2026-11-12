@@ -21,6 +21,10 @@ var INITIAL_OPTIONS = {
   sites: [{ id: 'yorii', name: '寄居ハウス' }, { id: 'shinrin', name: '森林公園ハウス' }],
   tankCapacity: 42, defaultSite: ''
 };
+// 森林公園 右（ベルク）の部屋（指示 20261112 1740 への追加。杉さん 17:39「うちと同じ感覚で管理してよい」）。
+// 拠点の選び方に1つ足す。記録できるのは袋出し・浸水と移動だけ（収穫は出さない）。id は統合アプリGAS の ZAIKO_EXTRA_PLACES と同じ
+var BERK_PLACE = { id: 'shinrin_berk', name: '森林公園 右（ベルク）', label: '右 ベルク',
+                   kinds: { fukurodashi: 1, shinsui_1: 1, shinsui_2: 1, shinsui_3: 1 } };
 </script>
 <!--
   作業（統合アプリ完成 D。/sagyou/ の作業記録を next/ に移したもの）
@@ -34,6 +38,7 @@ var INITIAL_OPTIONS = {
   - 2026-10-29 画面の作り直し（杉さん「入力する項目の名前と入力欄が一番目立つように」）：seisan_form.js の layout:'work'。
     拠点の大ボタン → 日付1行 → 袋出し・1番浸水・2番浸水のカード →「送る」→「寄居⇄森林公園へ運んだ」→「その他」。
     表示名は 1番浸水＝shinsui_1・2番浸水＝shinsui_2・3番浸水＝shinsui_3（保存のキー・シートの種別は変えない）
+  - 2026-11-12 拠点のボタンに「右 ベルク」（森林公園 右の部屋。拠点 shinrin_berk として袋出し・浸水・移動を記録。刈り取りは出さない）
 -->
 <style>
 html,body{height:100%}
@@ -154,6 +159,7 @@ body.has-unsaved #p1{padding-bottom:calc(var(--footer-h) + env(safe-area-inset-b
 #idou .sec-lbl,#idou .fsec-hdr{display:none}
 #idou .idou-btns button.on{background:#1f2937;border-color:#1f2937;color:#fff}
 #idou .idou-save{background:#1c1c1e}
+#idou .idou-dirs-many button{flex:1 1 40%}   /* 移動元→移動先が6通り（右 ベルクを足したとき）は2列 */
 /* シフト */
 #p2{display:flex;flex-direction:column}
 .shift-frame{flex:1;width:100%;border:0;background:#fff}
@@ -248,6 +254,7 @@ body.has-unsaved #p1{padding-bottom:calc(var(--footer-h) + env(safe-area-inset-b
                      shukaku_1: '刈り取り 1番', shukaku_2plus: '刈り取り 2番〜', shukaku_c: '刈り取り 傷' },
         kgAdd: true,             // 刈り取りの重さは作業した人が自分で足していく（2026-11-12 杉さん決定。kari.add）
         saveInBar: true,         // ボタンは画面の下の「保存する」1つ（本文の「送る」は出さない。2026-11-12 杉さん）
+        extraSites: [BERK_PLACE], // 拠点のボタンに「右 ベルク」を足す（森林公園 右の部屋の在庫。2026-11-12 17:39 杉さん）
         msg: msg,
         pickDate: false,
         draftKey: DRAFT_KEY,
@@ -266,7 +273,7 @@ body.has-unsaved #p1{padding-bottom:calc(var(--footer-h) + env(safe-area-inset-b
       // 「送る」の下に置き、ボタンを押したときだけ開く
       if (window.SgIdou) {
         try {
-          window.SgIdou.mount({ host: $('idou'), me: { empId: person.id, name: person.surname }, cacheKey: CACHE_KEY, sites: INITIAL_OPTIONS.sites });
+          window.SgIdou.mount({ host: $('idou'), me: { empId: person.id, name: person.surname }, cacheKey: CACHE_KEY, sites: INITIAL_OPTIONS.sites.concat([BERK_PLACE]) });
           var slot = $('form').querySelector('[data-el="idouSlot"]');
           if (slot) slot.appendChild($('moveWrap'));
           $('moveWrap').hidden = false;

@@ -1,7 +1,8 @@
 /*
  * 菌床の移動の入力（作業記録 next/sagyou.html に置く。2026-10-29 菌床在庫）。
  *
- *   SgIdou.mount({ host, me:{ empId, name }, cacheKey, sites:[{id,name}] }) → { reload() }
+ *   SgIdou.mount({ host, me:{ empId, name }, cacheKey, sites:[{id,name,label?}] }) → { reload() }
+ *   sites が3か所（寄居・森林公園・森林公園 右＝ベルク）なら、移動元→移動先は6通り（label があれば画面はそれで出す）
  *
  * - 日付（今日／昨日）・移動元→移動先・状態（1番／休養中／2番／3番）・数（コンテナ または 個。1コンテナ＝8個）
  * - 1番・3番はラベルの日付を任意で指定できる（空欄なら 1番は新しい日付から、3番は古い日付から動いたとみなす。Zaiko.gs）
@@ -31,9 +32,12 @@
     var sites = o.sites && o.sites.length ? o.sites : [{ id: 'yorii', name: '寄居ハウス' }, { id: 'shinrin', name: '森林公園ハウス' }];
     var KEY = (o.cacheKey || 'sg.work.cache') + '.idou.outbox';
     var st = { today: C.ymd(C.now()), day: 'today', dir: 0, stage: '', unit: 'container', container: 8, moves: [], loaded: false, seq: 0 };
+    // 移動元→移動先の組み合わせ（2か所なら今までどおり2つ。森林公園 右＝ベルクを足した3か所なら6つ）
     var dirs = [];
-    if (sites.length >= 2) dirs = [[sites[0].id, sites[1].id], [sites[1].id, sites[0].id]];
-    var nameOf = function (id) { var s = sites.filter(function (x) { return x.id === id; })[0]; return s ? short(s.name) : id; };
+    for (var i = 0; i < sites.length; i++) {
+      for (var j = i + 1; j < sites.length; j++) dirs.push([sites[i].id, sites[j].id], [sites[j].id, sites[i].id]);
+    }
+    var nameOf = function (id) { var s = sites.filter(function (x) { return x.id === id; })[0]; return s ? s.label || short(s.name) : id; };
 
     function lsGet() { try { return JSON.parse(root.localStorage.getItem(KEY) || '[]') || []; } catch (e) { return []; } }
     function lsPut(v) { try { if (v.length) root.localStorage.setItem(KEY, JSON.stringify(v)); else root.localStorage.removeItem(KEY); } catch (e) { /* 無視 */ } }
@@ -45,8 +49,9 @@
       '<div class="fsec-hdr">菌床の移動<span class="note">拠点の間で運んだら記録</span></div>' +
       '<div class="idou-row"><div class="idou-lbl">日付</div><div class="idou-btns" data-el="day">' +
       '<button type="button" data-v="today" class="on">今日</button><button type="button" data-v="yday">昨日</button></div></div>' +
-      '<div class="idou-row"><div class="idou-lbl">どこから</div><div class="idou-btns" data-el="dir">' +
-      dirs.map(function (d, i) { return '<button type="button" data-v="' + i + '"' + (i === 0 ? ' class="on"' : '') + '>' + C.esc(nameOf(d[0])) + ' → ' + C.esc(nameOf(d[1])) + '</button>'; }).join('') +
+      '<div class="idou-row"><div class="idou-lbl">どこから</div><div class="idou-btns' + (dirs.length > 2 ? ' idou-dirs-many' : '') + '" data-el="dir">' +
+      // 6通りのときは2列に並べ、移動先を2行目に置く（場所の名前の途中で折り返さない）
+      dirs.map(function (d, i) { return '<button type="button" data-v="' + i + '"' + (i === 0 ? ' class="on"' : '') + '>' + C.esc(nameOf(d[0])) + (dirs.length > 2 ? '<br>' : ' ') + '→ ' + C.esc(nameOf(d[1])) + '</button>'; }).join('') +
       '</div></div>' +
       '<div class="idou-row"><div class="idou-lbl">状態</div><div class="idou-btns" data-el="stage">' +
       STAGES.map(function (s) { return '<button type="button" data-v="' + s[0] + '">' + s[1] + '</button>'; }).join('') + '</div></div>' +

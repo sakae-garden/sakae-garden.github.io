@@ -15,9 +15,10 @@
 <!--
   朝の判断ボード 第5版（指示 20261112-1740。見本 第5版のとおり。tougou/next だけ）
   - 拠点ごとに1ページ。上のタブか左右のスワイプで切り替える。最後に見ていた拠点を端末で覚える（sg.board.site）
-  - 上から：棚（寄居 左・右／森林公園 左・真ん中）→ 休養 真ん中（寄居だけ）→ 昨夜の温度 → 今日来る菌床 → 出勤・昨日の収穫。下に固定で「今日の指示を出す」（代表だけ）
+  - 上から：棚（寄居 左・右／森林公園 左・真ん中）→ 棚 右 ベルク（森林公園だけ）／休養 真ん中（寄居だけ）→ 昨夜の温度 → 今日来る菌床 → 出勤・昨日の収穫。下に固定で「今日の指示を出す」（代表だけ）
     - 棚の置ける数：設定 菌床在庫_栽培棚_*（寄居 3,360・森林公園 5,760）。使っている数：寄居＝1番＋2番＋3番、森林公園＝1番＋休養＋2番＋3番
     - 休養の置ける数：設定 菌床在庫_休養_yorii（2,200）。％の色は 90%以上で黄、100%超で赤
+    - 棚 右 ベルク（森林公園だけ。2026-11-12 17:39 杉さん）：board.summary の rooms。置ける数 2,880（室 SRN-R3 の収容床数）。使っている数＝1番＋休養＋2番＋3番
     - 温度：部屋ごとのタイル。押すとその拠点の部屋をまとめて入れる（誰でも。kucho.set）。森林公園 右＝ベルクも出す（board.summary の tempsAll。棚の％には入れない）
     - 今日来る菌床：今日の完熟の合計。下に 寄居｜森林公園。代表は数字を押すと便ごとに振り分けを変えられる（nyuka.split。代表パスコード）
   - 読み込みは Cloud Run nippo-api の boardSummary（ログイン不要）。失敗したら統合アプリGAS の board.summary
@@ -191,6 +192,14 @@ button.s{cursor:pointer}
     var m = meter(f.tanaCap, parts, true);
     h += '<div class="card"><div class="hd"><span>棚<small>' + TANA_ROOMS[id] + '</small></span>' + m.pc + '</div>' + m.bar +
       '<div class="row2">' + legend(parts) + '<div class="aki" style="margin:0">' + m.aki + '</div></div></div>';
+    // 部屋の棚（森林公園 右＝ベルク。board.summary の rooms）。形は休養と同じ小さめ＋凡例。棚の％（左・真ん中）には入れない
+    (s.rooms || []).forEach(function (r) {
+      var rs = r.stock || {};
+      var rp = [['1番', rs.ichiban, COL.ichiban], ['休養', rs.kyuyou, COL.kyuyou], ['2番', rs.niban, COL.niban], ['3番', rs.sanban, COL.sanban]];
+      var rm = meter((r.free || {}).tanaCap, rp, false);
+      h += '<div class="card"><div class="hd"><span>棚<small>' + esc(r.room) + (r.role ? ' ' + esc(r.role) : '') + '</small></span>' + rm.pc + '</div>' + rm.bar +
+        '<div class="row2">' + legend(rp) + '<div class="aki" style="margin:0">' + rm.aki + '</div></div></div>';
+    });
     // 休養（寄居だけ）
     if (id === 'yorii') {
       var k = meter(f.kyuyouCap, [['休養', st.kyuyou, COL.kyuyou]], false);
@@ -298,7 +307,7 @@ button.s{cursor:pointer}
     var sh = sheet('<h3>' + esc(SITES[siteId]) + ' 夜の温度</h3>' +
       '<div class="days"><button type="button" data-d="' + yday + '">昨夜</button><button type="button" data-d="' + today + '">今夜</button></div>' +
       temps.map(function (t) {
-        return '<div class="trow2"><span class="k">' + esc(t.room) + '</span><input type="text" inputmode="decimal" data-room="' + esc(t.room) + '" autocomplete="off"><span class="u">℃</span></div>';
+        return '<div class="trow2"><span class="k">' + esc(t.room) + (t.role === 'ベルク' ? '<small style="font-size:12px;color:#999"> ベルク</small>' : '') + '</span><input type="text" inputmode="decimal" data-room="' + esc(t.room) + '" autocomplete="off"><span class="u">℃</span></div>';
       }).join(''));
     var ov = sh.el;
     var fill = function () {
