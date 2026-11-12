@@ -214,6 +214,12 @@
     host.innerHTML = work ? workHtml(o, KIND_NAME) : formHtml(o);
     if (work) { o.siteTabs = host.querySelector('[data-el="sites"]'); o.dayToggle = true; o.additive = true; }
     var q = function (sel) { return host.querySelector(sel); };
+    // saveInBar（指示 20261112-1740 杉さん「ボタンは保存する1つ」）：本文の「送る」を出さず、画面の下の「保存する」（未保存バー）だけで送る。
+    // デモでは未保存バーが出ないので、本文のボタンを「保存する」として残す
+    if (work && o.saveInBar) {
+      var sb = q('[data-el="save"]');
+      if (C.DEMO) sb.textContent = '保存する'; else sb.hidden = true;
+    }
     var el = { date: q('[data-el="date"]'), today: q('[data-el="today"]'), tankNote: q('[data-el="tankNote"]'), rare: q('[data-el="rare"]'),
                save: q('[data-el="save"]'), list: q('[data-el="list"]'), listDate: q('[data-el="listDate"]'),
                dayToggle: q('[data-el="dayToggle"]'), ydayBar: q('[data-el="ydayBar"]'), plan: q('[data-el="plan"]'),
