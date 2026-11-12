@@ -434,6 +434,9 @@
         };
       });
       el.save.disabled = !st.site;
+      // 選んでいる拠点を知らせる（本日の指示バー shiji-slot.js が、その拠点の袋出しだけを出す。指示 20261112-2210）
+      root.__sgSite = st.site || '';
+      try { document.dispatchEvent(new CustomEvent('sg:site', { detail: { site: st.site || '' } })); } catch (e) { /* 古い端末。バーは全拠点のまま */ }
       if (!st.site && sites.length) msg('上の拠点を選んでください（次からはこの端末で選んだ拠点が最初から選ばれます）。', 'warn');
     }
 

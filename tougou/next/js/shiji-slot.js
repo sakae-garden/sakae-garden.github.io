@@ -10,6 +10,7 @@
  *   Cloud Run nippo-api の boardSummary（ログイン不要・覚えた値を返すので速い）の sites[].shiji を、
  *   「寄居 左 ○○まで 22℃」の形で1行ずつ出す。指示が無ければ何も出さない。デモ（?demo=1）では出さない（本番の指示なので）
  *   拠点ごとに、今日の袋出しの数（sites[].fukuroToday.total＝完熟のその拠点の分＋代表が決めた培養舎から）が1以上なら「寄居 袋出し 450」を先に出す（第6版）
+ *   作業記録で拠点を選んでいれば、袋出しはその拠点の1行だけ「袋出し 450」（第6版の直し。拠点を切り替えたら描き直す）
  */
 (function () {
   'use strict';
@@ -54,27 +55,38 @@
     css.textContent = '.shiji-own{background:#115e59;color:#fff;padding:8px 12px;font-size:15px;line-height:1.5}' +
       '.shiji-own b{font-weight:700;margin-right:6px}.shiji-own .sj-t{opacity:.8;font-size:14px;margin-left:6px}';
     document.head.appendChild(css);
+    // 作業記録で選んでいる拠点（seisan_form.js が window.__sgSite と 'sg:site' で知らせる）。
+    // 選んでいれば袋出しはその拠点の1行だけ「袋出し ○」（指示 20261112-2210。杉さん「自分の拠点の袋出しだけ出せばいい」）。
+    // 拠点をまだ選んでいない・部品が無い画面では、今までどおり拠点ごとに出す
+    var mySite = function () { return SITE_NAME[window.__sgSite] ? window.__sgSite : ''; };
+    var last = null;
+    var draw = function () {
+      var res = last, lines = [], head = [], my = mySite();
+      ((res && res.sites) || []).forEach(function (st) {
+        // 代表が決めた今日の袋出し（完熟のその拠点の分＋培養舎から。board.summary の fukuroToday。指示 20261112-2100）
+        // 自分の拠点の「袋出し ○」は拠点名を付けないので、ほかの拠点の指示の後ろに来ないよう一番上に出す
+        var fk = st.fukuroToday;
+        if (fk && fk.total > 0 && (!my || my === st.id)) {
+          (my ? head : lines).push('<div>' + (my ? '' : '<b>' + esc(SITE_NAME[st.id] || st.id) + '</b>') + '袋出し ' + esc(Number(fk.total).toLocaleString()) + '</div>');
+        }
+        (st.shiji || []).forEach(function (x) {
+          var where = (SITE_NAME[st.id] || st.id) + (x.room ? ' ' + x.room : '');
+          var body = [x.kokomade ? x.kokomade : '', x.free ? x.free : ''].filter(Boolean).join('　');
+          lines.push('<div><b>' + esc(where) + '</b>' + esc(body) +
+            (x.temp !== null && x.temp !== undefined && x.temp !== '' ? '<span class="sj-t">' + esc(x.temp) + '℃</span>' : '') + '</div>');
+        });
+      });
+      lines = head.concat(lines);
+      el.innerHTML = lines.length ?'<div class="shiji-own">' + lines.join('') + '</div>' : '';
+    };
     var load = function () {
       fetch(BOARD_API, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
                          body: JSON.stringify({ action: 'boardSummary', params: {} }) })
         .then(function (r) { return r.json(); })
-        .then(function (res) {
-          var lines = [];
-          ((res && res.sites) || []).forEach(function (st) {
-            // 代表が決めた今日の袋出し（完熟のその拠点の分＋培養舎から。board.summary の fukuroToday。指示 20261112-2100）
-            var fk = st.fukuroToday;
-            if (fk && fk.total > 0) lines.push('<div><b>' + esc(SITE_NAME[st.id] || st.id) + '</b>袋出し ' + esc(Number(fk.total).toLocaleString()) + '</div>');
-            (st.shiji || []).forEach(function (x) {
-              var where = (SITE_NAME[st.id] || st.id) + (x.room ? ' ' + x.room : '');
-              var body = [x.kokomade ? x.kokomade : '', x.free ? x.free : ''].filter(Boolean).join('　');
-              lines.push('<div><b>' + esc(where) + '</b>' + esc(body) +
-                (x.temp !== null && x.temp !== undefined && x.temp !== '' ? '<span class="sj-t">' + esc(x.temp) + '℃</span>' : '') + '</div>');
-            });
-          });
-          el.innerHTML = lines.length ? '<div class="shiji-own">' + lines.join('') + '</div>' : '';
-        })
+        .then(function (res) { last = res; draw(); })
         .catch(function () { /* 圏外など。出さないだけ */ });
     };
+    document.addEventListener('sg:site', function () { if (last) draw(); });
     load();
     document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') load(); });
   }

@@ -11,8 +11,13 @@
 <title>入荷 | 栄ガーデン</title>
 <link rel="stylesheet" href="styles/common.css">
 <!--
-  入荷一覧（判断ボードの「明日から ›」の行き先。指示 20261112-0900）。読むだけ。
-  Cloud Run nippo-api の nyukaList（ログイン不要）で、明日から60日分。分けた便は寄居・森林公園の2行で出る
+  入荷一覧（判断ボードの「明日から ›」の行き先。指示 20261112-0900）。
+  Cloud Run nippo-api の nyukaList（ログイン不要）で、今日から60日分。分けた便は寄居・森林公園の2行で出る
+  - 代表は便を押して「寄居 ○｜森林公園 ○」に分けられる（nyuka.split。完熟・未培養とも。ボードの完熟の振り分けと同じ形）。
+    未培養は分けた数が着いた日にそれぞれの拠点の培養舎に足される（Baiyou.gs）。森林公園の培養舎の置ける数は出さない
+    （指示 20261112-2210。杉さん「未培養を森林公園の培養舎に入れることは数か月以内にある」）。
+    当日着いた便も分けられるよう、一覧は今日から（前は明日から）
+  - 従業員は読むだけ（今までどおり）
 -->
 <style>
 body.nyuka{padding-bottom:calc(24px + env(safe-area-inset-bottom))}
@@ -24,18 +29,33 @@ body.nyuka{padding-bottom:calc(24px + env(safe-area-inset-bottom))}
 .day .d{font-size:16px;font-weight:700}
 .row{display:flex;justify-content:space-between;font-size:15px;padding:2px 0}
 .row .n{font-weight:700;font-size:18px;font-variant-numeric:tabular-nums}
+button.bin{display:block;width:100%;background:none;border:0;padding:0;font-family:inherit;color:inherit;text-align:left;cursor:pointer}
+button.bin+button.bin{border-top:1px solid #eee}
 .msg{font-size:15px;color:#b91c1c;padding:4px 2px}
 .msg:empty{display:none}
+/* 振り分けの入力（ボードと同じ） */
+.ov{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:300;display:flex;align-items:flex-end;justify-content:center}
+.sheet{background:#fff;width:100%;max-width:480px;border-radius:16px 16px 0 0;padding:14px 16px calc(16px + env(safe-area-inset-bottom))}
+.sheet h3{font-size:18px;margin-bottom:8px}
+.trow2{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.trow2 .k{flex:none;width:4.2em;white-space:nowrap;font-size:17px;font-weight:700}
+.trow2 input{flex:1;min-width:0;height:46px;font-size:20px;font-weight:700;text-align:center;border:1px solid #9ca3af;border-radius:8px;font-family:inherit}
+.sbtns{display:flex;gap:8px;margin-top:6px}
+.sbtns button{flex:1;height:48px;border-radius:10px;font-size:17px;font-weight:700;font-family:inherit;cursor:pointer}
+.sbtns .ok{background:#1d4ed8;color:#fff;border:0}
+.sbtns .no{background:#fff;color:#333;border:1px solid #d1d5db}
+.sheet .msg{padding:0 0 6px}
 </style>
 </head>
 <body class="nyuka">
 <div class="hdr"><div class="hdr-top"><h1>入荷</h1><a class="back" href="board.html">ボード</a></div></div>
 <div class="wrap"><div class="msg" id="msg"></div><div id="list"></div></div>
 <script src="js/common.js"></script>
+<script src="js/login.js"></script>
 <script>
 (function () {
   'use strict';
-  var C = window.TougouCommon;
+  var C = window.TougouCommon, L = window.SgLogin;
   var BOARD_API = 'https://nippo-api-7lc5gs4g6q-an.a.run.app/api';
   var SITES = { yorii: '寄居', shinrin: '森林公園' };
   var WEEK = ['日', '月', '火', '水', '木', '金', '土'];
@@ -43,25 +63,131 @@ body.nyuka{padding-bottom:calc(24px + env(safe-area-inset-bottom))}
     var p = ymd.split('-').map(Number), d = new Date(p[0], p[1] - 1, p[2] + n);
     return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
   }
+  function num(n) { return Number(n).toLocaleString(); }
+  function md(ymd) { var p = String(ymd).split('-').map(Number); return p[1] + '/' + p[2]; }
+  function isRep() { var p = L && L.person(); return !!(p && p.role === '代表'); }
   var today = C.ymd(C.now());
-  var from = addDays(today, 1), to = addDays(today, 60);
-  fetch(BOARD_API, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                     body: JSON.stringify({ action: 'nyukaList', params: { from: from, to: to } }) })
-    .then(function (r) { return r.json(); })
-    .then(function (res) {
-      if (!res || !res.ok) throw new Error((res && res.error) || '読めません');
-      var by = {};
-      (res.rows || []).forEach(function (x) { (by[x.date] = by[x.date] || []).push(x); });
-      var days = Object.keys(by).sort();
-      document.getElementById('list').innerHTML = days.length ? days.map(function (d) {
-        var p = d.split('-').map(Number);
-        return '<div class="day"><div class="d">' + p[1] + '/' + p[2] + '（' + WEEK[new Date(p[0], p[1] - 1, p[2]).getDay()] + '）</div>' +
-          by[d].map(function (x) {
-            return '<div class="row"><span>' + C.esc((SITES[x.site] || x.site) + ' ' + x.kind + '・' + x.bin) + '</span><span class="n">' + Number(x.count).toLocaleString() + '</span></div>';
-          }).join('') + '</div>';
-      }).join('') : '<div class="day">なし</div>';
-    })
+  var from = today, to = addDays(today, 60);
+  var rows = [];
+
+  /** 便ごとにまとめる（分けた便は2行で来るので binKey で1つに）。寄居着の便だけ分けられる */
+  function bins() {
+    var by = {}, order = [];
+    rows.forEach(function (x) {
+      var k = x.binKey || [x.date, x.kind, x.bin, x.source, x.site].join('|');
+      var b = by[k];
+      if (!b) { b = by[k] = { key: k, date: x.date, kind: x.kind, bin: x.bin, source: x.source, yorii: 0, shinrin: 0, home: x.site, rows: [] }; order.push(k); }
+      b[x.site] = (b[x.site] || 0) + (Number(x.count) || 0);
+      b.rows.push(x);
+      if (x.split) b.home = 'yorii';
+    });
+    return order.map(function (k) { var b = by[k]; b.total = b.yorii + b.shinrin; b.canSplit = b.home === 'yorii'; return b; });
+  }
+
+  function render() {
+    var rep = isRep(), list = bins(), by = {};
+    list.forEach(function (b) { (by[b.date] = by[b.date] || []).push(b); });
+    var days = Object.keys(by).sort();
+    var line = function (x) {
+      return '<div class="row"><span>' + C.esc((SITES[x.site] || x.site) + ' ' + x.kind + '・' + x.bin) + '</span><span class="n">' + num(x.count) + '</span></div>';
+    };
+    var el = document.getElementById('list');
+    el.innerHTML = days.length ? days.map(function (d) {
+      var p = d.split('-').map(Number);
+      return '<div class="day"><div class="d">' + p[1] + '/' + p[2] + '（' + WEEK[new Date(p[0], p[1] - 1, p[2]).getDay()] + '）</div>' +
+        by[d].map(function (b) {
+          var inner = b.rows.map(line).join('');
+          return rep && b.canSplit ? '<button type="button" class="bin" data-k="' + C.esc(b.key) + '">' + inner + '</button>' : inner;
+        }).join('') + '</div>';
+    }).join('') : '<div class="day">なし</div>';
+    Array.prototype.forEach.call(el.querySelectorAll('button[data-k]'), function (btn) {
+      btn.onclick = function () {
+        var b = list.filter(function (x) { return x.key === btn.dataset.k; })[0];
+        if (b) openSplit(b);
+      };
+    });
+  }
+
+  function fetchList(fresh) {
+    return fetch(BOARD_API, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                              body: JSON.stringify({ action: 'nyukaList', params: fresh ? { from: from, to: to, fresh: true } : { from: from, to: to } }) })
+      .then(function (r) { return r.json(); })
+      .then(function (res) { if (!res || !res.ok) throw new Error((res && res.error) || '読めません'); return res; });
+  }
+  fetchList(false).then(function (res) { rows = res.rows || []; render(); })
     .catch(function () { document.getElementById('msg').textContent = '読み込めません'; });
+
+  // ---- 振り分け（代表だけ。便ごと。寄居＋森林公園＝便の合計）
+  function sheet(html) {
+    var ov = document.createElement('div');
+    ov.className = 'ov';
+    ov.innerHTML = '<div class="sheet">' + html + '<div class="msg" data-el="m"></div>' +
+      '<div class="sbtns"><button type="button" class="no" data-el="no">やめる</button><button type="button" class="ok" data-el="ok">保存</button></div></div>';
+    document.body.appendChild(ov);
+    var o = { el: ov, q: function (sel) { return ov.querySelector(sel); },
+              close: function () { if (ov.parentNode) ov.parentNode.removeChild(ov); } };
+    ov.addEventListener('click', function (e) { if (e.target === ov) o.close(); });
+    o.q('[data-el="no"]').onclick = o.close;
+    return o;
+  }
+  function openSplit(b) {
+    var sh = sheet('<h3>' + C.esc(md(b.date) + ' ' + b.kind + '・' + b.bin + ' ' + num(b.total)) + '</h3>' +
+      '<div class="trow2"><span class="k">寄居</span><input type="text" inputmode="numeric" data-s="yorii" value="' + b.yorii + '" autocomplete="off"></div>' +
+      '<div class="trow2"><span class="k">森林公園</span><input type="text" inputmode="numeric" data-s="shinrin" value="' + b.shinrin + '" autocomplete="off"></div>');
+    var inp = function (s) { return sh.q('input[data-s="' + s + '"]'); };
+    ['yorii', 'shinrin'].forEach(function (s) {
+      inp(s).addEventListener('input', function () {
+        var v = C.readNum(inp(s).value);
+        if (v === null || isNaN(v)) return;
+        inp(s === 'yorii' ? 'shinrin' : 'yorii').value = Math.max(0, b.total - v);
+      });
+    });
+    sh.q('[data-el="ok"]').onclick = function () {
+      var n = C.readNum(inp('shinrin').value), y = C.readNum(inp('yorii').value);
+      if (n === null || y === null || isNaN(n) || isNaN(y) || n !== Math.floor(n) || n < 0 || n > b.total || y + n !== b.total) {
+        sh.q('[data-el="m"]').textContent = '寄居と森林公園の合計を ' + num(b.total) + ' にしてください';
+        return;
+      }
+      if (n === b.shinrin) { sh.close(); return; }
+      var btn = this; btn.disabled = true; btn.textContent = '保存中…';
+      L.initKanri().then(function () {
+        return C.api('nyuka.split', { date: b.date, kind: b.kind, bin: b.bin, source: b.source, shinrin: n });
+      }).then(function () {
+        sh.close();
+        applySplit(b, n);
+        render();
+        reloadAfterSave();
+      }, function (err) {
+        btn.disabled = false; btn.textContent = '保存';
+        if (err && err.code === 'NOT_KANRI') { sh.close(); return; }
+        sh.q('[data-el="m"]').textContent = '保存できません' + (err && err.network ? '' : '：' + (err && err.message || err));
+      });
+    };
+  }
+  /** 読み直すまでの間も、変えた数を出しておく（GAS の nyuka.list と同じ形：分けた便は寄居・森林公園の2行、分けていない便は1行） */
+  function applySplit(b, n) {
+    var base = b.rows[0], key = [b.date, b.kind, b.bin, b.source].join('|');
+    var keep = rows.filter(function (x) { return b.rows.indexOf(x) < 0; });
+    var one = function (site, count, split) {
+      var r = { date: b.date, kind: b.kind, count: count, bin: b.bin, site: site, source: b.source, at: base.at };
+      if (split) { r.split = true; r.total = b.total; r.binKey = key; r.over = false; }
+      return r;
+    };
+    var add = n > 0 ? [one('yorii', b.total - n, true), one('shinrin', n, true)] : [one('yorii', b.total, false)];
+    var at = rows.indexOf(base);
+    keep.splice(Math.min(at, keep.length), 0, add[0]);
+    if (add[1]) keep.splice(Math.min(at, keep.length) + 1, 0, add[1]);
+    rows = keep;
+  }
+  /** 保存の後：GAS から読み直す（代表のセッションのまま）。Cloud Run にも読み直しを頼む（ボードと同じ） */
+  function reloadAfterSave() {
+    C.api('nyuka.list', { from: from, to: to }).then(function (res) { if (res && res.ok) { rows = res.rows || []; render(); } }, function () { /* 次に開いたとき */ });
+    if (!C.DEMO) {
+      var kick = function () { fetchList(true).catch(function () { /* 無視 */ }); };
+      kick();
+      setTimeout(kick, 35000);
+    }
+  }
 })();
 </script>
 </body>
