@@ -336,7 +336,7 @@
 
   function kanriLoginFor(pp) {
     return function (passcode) {
-      return C().callApi({ action: 'auth.login', empId: pp.id, passcode: passcode }).then(function (res) {
+      return C().callApi({ action: 'auth.login', empId: pp.id, passcode: passcode, app: 'next' }).then(function (res) {
         if (!res || !res.ok) throw err((res && res.error) || 'ログインできませんでした。', res && res.code);
         if (!isKanriRole(res.role)) {
           // マスタで権限が外れていた（従業員はパスコードなしでログインできてしまう）。セッションは使わない
