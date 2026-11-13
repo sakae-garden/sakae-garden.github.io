@@ -4,6 +4,8 @@
  * - 最初の画面はホーム画面のようなアイコンの並び。横にめくると種類が切り替わる（3ページ）。
  * - 何をどのページに置くか・だれに見せるかは下の LAUNCHER_PAGES 1か所で決める。
  * - ログインは統合API（GAS doPost）の auth.employees／auth.login。トークンは URL ではなく localStorage に持つ。
+ * - 代表・管理者はパスコードを1回入れると、そのスマホに device（覚えたスマホのトークン・90日）を覚え、以後は聞かない
+ *   （auth.deviceLogin。localStorage 'tougou.device'。2026-11-13 杉さん承認）。番号は GAS 側でだけ確かめる
  * - 既存の配達アプリ（配達日報など）は作り直さず、同じ窓でそのまま開く。
  *   manifest の scope を "/" にしてあるので、sakae-garden.github.io 配下へ移っても全画面のまま。
  *
@@ -16,6 +18,22 @@
   var C = (typeof module !== 'undefined' && module.exports) ? require('./js/common.js') : root.TougouCommon;
   var API_URL = C.API_URL;
   var LS_PAGE = 'tougou.lastPage';
+  var LS_DEVICE = 'tougou.device';   // { empId, device }
+
+  function loadDevice() { try { return JSON.parse(localStorage.getItem(LS_DEVICE) || 'null'); } catch (e) { return null; } }
+  function saveDevice(empId, device) { try { localStorage.setItem(LS_DEVICE, JSON.stringify({ empId: empId, device: device })); } catch (e) { /* 記憶できないだけ */ } }
+  function dropDevice() { try { localStorage.removeItem(LS_DEVICE); } catch (e) { /* 無視 */ } }
+
+  /** 覚えたスマホで入る。Promise(res|null)。無効なら覚えを捨てて null */
+  function deviceLogin(empId) {
+    var d = loadDevice();
+    if (!d || !d.device || d.empId !== empId) return Promise.resolve(null);
+    return callApi({ action: 'auth.deviceLogin', empId: empId, device: d.device }).then(function (res) {
+      if (res && res.ok) return res;
+      if (res && res.code === 'NEED_PASSCODE') dropDevice();
+      return null;
+    }, function () { return null; });
+  }
 
   var ALL = ['従業員', '管理者', '代表'];
   var MGR = ['管理者', '代表'];
@@ -107,8 +125,13 @@
           saveSession(session);
           renderLauncher();
         } else if (res && res.code === 'AUTH') {
+          var empId = session.empId;
           clearSession(); session = null;
-          showLogin('ログインの有効期限が切れました。もう一度名前を選んでください。');
+          // 覚えたスマホならパスコードを聞かずに入り直す
+          deviceLogin(empId).then(function (r2) {
+            if (r2) { enter(r2, empId); return; }
+            showLogin('ログインの有効期限が切れました。もう一度名前を選んでください。');
+          });
         }
       }).catch(function () { /* 圏外など。手元の権限で表示を続ける */ });
     } else {
@@ -230,10 +253,20 @@
             Array.prototype.forEach.call($('names').children, function (x) { x.classList.remove('sel'); });
             b.classList.add('sel');
             selected = { id: b.dataset.id, pass: b.dataset.pass === '1' };
-            $('passWrap').hidden = !selected.pass;
+            $('passWrap').hidden = true;
             $('pass').value = '';
             $('loginBtn').disabled = false;
-            if (selected.pass) $('pass').focus();
+            if (!selected.pass) return;
+            // 代表・管理者：このスマホでパスコードが通っていれば聞かずに入る。無ければパスコード欄を出す
+            var me = selected;
+            $('loginBtn').disabled = true;
+            deviceLogin(me.id).then(function (res) {
+              if (selected !== me) return;
+              if (res) { enter(res, me.id); return; }
+              $('passWrap').hidden = false;
+              $('loginBtn').disabled = false;
+              $('pass').focus();
+            });
           };
         });
       }).catch(function (err) {
@@ -246,11 +279,11 @@
       var btn = $('loginBtn');
       btn.disabled = true;
       btn.textContent = '確認しています…';
-      callApi({ action: 'auth.login', empId: selected.id, passcode: selected.pass ? $('pass').value : '' }).then(function (res) {
+      var empId = selected.id;
+      callApi({ action: 'auth.login', empId: empId, passcode: selected.pass ? $('pass').value : '' }).then(function (res) {
         if (!res || !res.ok) throw new Error(res && res.error || 'ログインできませんでした');
-        session = { token: res.token, role: res.role, name: res.name };
-        saveSession(session);
-        renderLauncher();
+        if (res.device) saveDevice(empId, res.device);   // このスマホは以後パスコードを聞かない
+        enter(res, empId);
       }).catch(function (err) {
         $('loginMsg').textContent = err.message;
         $('loginMsg').hidden = false;
@@ -259,6 +292,13 @@
         btn.textContent = 'はじめる';
       });
     };
+
+    function enter(res, empId) {
+      session = { token: res.token, role: res.role, name: res.name, empId: empId };
+      saveSession(session);
+      $('loginMsg').hidden = true;
+      renderLauncher();
+    }
 
     // --- ホーム画面への追加の案内（全画面で開いているときは出さない）
     function renderInstallHint() {
