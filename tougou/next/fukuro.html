@@ -88,7 +88,6 @@ table.cal{width:calc(100% - 24px);margin:0 12px;border-collapse:collapse;table-l
 .dim{position:fixed;inset:0;background:rgba(0,0,0,.33);z-index:300;display:flex;align-items:flex-end;justify-content:center}
 .sheet{background:#fff;width:100%;max-width:480px;border-radius:16px 16px 0 0;padding:16px 16px calc(16px + env(safe-area-inset-bottom));max-height:96dvh;overflow-y:auto}
 .sheet .ttl{display:flex;justify-content:space-between;align-items:center;font-size:17px;font-weight:700}
-.sheet .x{font-size:22px;color:#888;width:36px;height:30px}
 .sheet h3{font-size:16px;margin:12px 0 8px}
 .chips{display:flex;gap:8px;flex-wrap:wrap}
 .chips button{padding:9px 12px;border-radius:20px;border:1.5px solid #ccc;font-size:15px}
@@ -115,10 +114,8 @@ table.cal{width:calc(100% - 24px);margin:0 12px;border-collapse:collapse;table-l
 .edit span{font-weight:700;font-size:15px;white-space:nowrap}
 .edit input{flex:1;min-width:0;height:44px;font-size:20px;font-weight:700;text-align:center;border:1px solid #9ca3af;border-radius:8px;font-family:inherit}
 .edit button{height:44px;padding:0 12px;border-radius:8px;font-size:15px;font-weight:700;background:#fff;border:1.5px solid #ccc}
-.edit .ok{background:#2f5d3a;color:#fff;border-color:#2f5d3a}
+.edit .ok{border-color:#2f5d3a;color:#2f5d3a}
 .hidedate{position:absolute;opacity:0;width:1px;height:1px;pointer-events:none}
-.toast{position:fixed;left:50%;bottom:96px;transform:translateX(-50%);background:#1c1c1e;color:#fff;padding:10px 20px;border-radius:10px;font-size:14px;z-index:400;opacity:0;transition:opacity .2s;pointer-events:none}
-.toast.show{opacity:1}
 </style>
 </head>
 <body>
@@ -145,7 +142,6 @@ table.cal{width:calc(100% - 24px);margin:0 12px;border-collapse:collapse;table-l
 </div>
 <div class="foot" id="foot" hidden><button type="button" class="btn" id="recBtn">袋出しを記録</button></div>
 <div class="foot" id="multiFoot" hidden><div class="multi"><span id="multiN"></span><button type="button" id="multiNo">やめる</button><button type="button" class="del" id="multiDel">空にする</button></div></div>
-<div class="toast" id="toast"></div>
 
 <script src="js/common.js"></script>
 <script src="js/login.js"></script>
@@ -180,11 +176,6 @@ table.cal{width:calc(100% - 24px);margin:0 12px;border-collapse:collapse;table-l
   }
   function colorOf(ymd) { return colors[ymd] || '#ddd'; }
   function newId() { return 'T' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
-  var toastTimer;
-  function toast(msg) {
-    var t = $('toast'); t.textContent = msg; t.classList.add('show');
-    clearTimeout(toastTimer); toastTimer = setTimeout(function () { t.classList.remove('show'); }, 2200);
-  }
 
   var today = C.ymd(C.now());
   var st = {
@@ -481,7 +472,6 @@ table.cal{width:calc(100% - 24px);margin:0 12px;border-collapse:collapse;table-l
       C.runOnce('tana', btn, '送信中…', function () {
         return C.api('tana.clear', { site: site, room: room.room, faces: faces }).then(function (res) {
           setTana(site, Object.assign({}, tanaOf(site), { faces: res.faces || [] }));
-          toast(faces.length + '面を空にしました');
           resolve(true);
         }, function (err) {
           alert('空にできませんでした' + (err && err.network ? '（通信）' : '：' + (err && err.message || err)));
@@ -499,14 +489,13 @@ table.cal{width:calc(100% - 24px);margin:0 12px;border-collapse:collapse;table-l
     document.body.appendChild(dim);
     var o = { el: dim, q: function (s) { return dim.querySelector(s); }, close: function () { if (dim.parentNode) dim.parentNode.removeChild(dim); } };
     dim.addEventListener('click', function (e) { if (e.target === dim) o.close(); });
-    var x = dim.querySelector('.x'); if (x) x.onclick = o.close;
     return o;
   }
 
   /** 埋まっている面の内訳 */
   function openFace(room, name, recs) {
     var total = recs.reduce(function (s, x) { return s + (Number(x.count) || 0); }, 0);
-    var sh = sheet('<div class="ttl"><span>' + esc(name) + '　' + esc(room.room) + 'の部屋</span><button type="button" class="x">×</button></div>' +
+    var sh = sheet('<div class="ttl"><span>' + esc(name) + '　' + esc(room.room) + 'の部屋</span></div>' +
       '<div style="margin-top:8px">' + recs.map(function (x) {
         return '<div class="rec"><span><i style="background:' + colorOf(x.date) + '"></i>' + md(x.date) + ' に並べた</span><span><b>' + x.count + '個</b> <span class="who">' + esc(x.surname || '') + '</span></span></div>';
       }).join('') + '<div class="rec"><span>合計</span><b>' + total + '個</b></div></div>' +
@@ -523,8 +512,11 @@ table.cal{width:calc(100% - 24px);margin:0 12px;border-collapse:collapse;table-l
     var d = tanaOf(st.site), site = st.site;
     var base = (d && d.today) || today, fm = faceMap(d, room.room);
     var rec = { opId: newId(), date: base, dateMode: 'today', per: room.per, sel: {}, edit: '' };
-    (preset || []).forEach(function (f) { rec.sel[f] = room.per; });
-    var sh = sheet('<div class="ttl"><span>袋出しを記録　' + esc(room.room) + 'の部屋</span><button type="button" class="x">×</button></div>' +
+    var used = function (f) { return (fm[f] || []).reduce(function (t, x) { return t + (Number(x.count) || 0); }, 0); };
+    var canPick = {};   // 押して選べる面：空いている面と、追加から開いた面
+    var dflt = function (f) { return Math.max(1, rec.per - used(f)); };
+    (preset || []).forEach(function (f) { canPick[f] = true; rec.sel[f] = dflt(f); });
+    var sh = sheet('<div class="ttl"><span>袋出しを記録　' + esc(room.room) + 'の部屋</span></div>' +
       '<h3>① 並べた日</h3><div class="chips" data-el="dates"></div><input type="date" class="hidedate" data-el="pick">' +
       (room.choices.length > 1 ? '<h3>1面の個数</h3><div class="chips" data-el="per"></div>' : '') +
       '<h3>② 置いた面（押して選ぶ）</h3><div class="mini" data-el="mini"></div><div data-el="edit"></div>' +
@@ -559,7 +551,7 @@ table.cal{width:calc(100% - 24px);margin:0 12px;border-collapse:collapse;table-l
     if (sh.q('[data-el="per"]')) sh.q('[data-el="per"]').onclick = function (e) {
       var b = e.target.closest('button'); if (!b) return;
       rec.per = Number(b.dataset.n);
-      Object.keys(rec.sel).forEach(function (f) { rec.sel[f] = rec.per; });
+      Object.keys(rec.sel).forEach(function (f) { rec.sel[f] = dflt(f); });
       drawPer(); drawMini(); drawTot();
     };
     function drawMini() {
@@ -567,7 +559,7 @@ table.cal{width:calc(100% - 24px);margin:0 12px;border-collapse:collapse;table-l
         var h = '<div class="sh"><div class="t">' + s + '</div>';
         for (var k = room.depth; k >= 1; k--) {
           h += '<div class="p">' + ['左', '右'].map(function (side) {
-            var f = s + '-' + side + k, cls = rec.sel[f] ? 'sel' : (fm[f] && fm[f].length ? 'x' : '');
+            var f = s + '-' + side + k, cls = rec.sel[f] ? 'sel' : (fm[f] && fm[f].length && !canPick[f] ? 'x' : '');
             return '<button type="button" class="c ' + cls + '" data-f="' + f + '">' + (rec.sel[f] ? rec.sel[f] : '') + '</button>';
           }).join('') + '</div>';
         }
@@ -591,7 +583,8 @@ table.cal{width:calc(100% - 24px);margin:0 12px;border-collapse:collapse;table-l
     sh.q('[data-el="mini"]').onclick = function (e) {
       var b = e.target.closest('button[data-f]'); if (!b) return;
       var f = b.dataset.f;
-      if (!rec.sel[f]) { rec.sel[f] = rec.per; rec.edit = ''; }
+      if (fm[f] && fm[f].length && !canPick[f]) return;
+      if (!rec.sel[f]) { rec.sel[f] = dflt(f); rec.edit = ''; }
       else rec.edit = rec.edit === f ? '' : f;
       drawMini(); drawEdit(); drawTot();
     };
@@ -610,7 +603,6 @@ table.cal{width:calc(100% - 24px);margin:0 12px;border-collapse:collapse;table-l
                                    faces: fs.map(function (f) { return { face: f, count: rec.sel[f] }; }) }).then(function (res) {
           setTana(site, Object.assign({}, tanaOf(site), { faces: res.faces || [] }));
           sh.close();
-          toast(fs.length + '面を記録しました');
         }, function (err) {
           // 同じ opId で送り直せば二重にならない
           sh.q('[data-el="err"]').textContent = err && err.network ? '送れませんでした。もう一度押してください' : '記録できません：' + (err && err.message || err);
