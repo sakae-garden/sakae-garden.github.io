@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#2f5d3a">
+<link rel="manifest" href="manifest.webmanifest">
+<title>袋出し管理 | 栄ガーデン</title>
+<!--
+  袋出し管理（指示 20261117-0850。杉さん承認 2026-11-17 08:38）。中の従業員向け。
+  - 仕入れ：入荷予定（nyuka.list）を月のカレンダーで読むだけ。チャーター便＝青・引き取り（杉さん軽バン含む）＝橙・分からない値＝灰
+  - 棚：tana.list／tana.add／tana.clear（GAS Tana.gs）。面の名前は「C-左2」（棚 A〜・面 左／右・奥 1＝入口側）
+  - ログインは作業記録と同じ（名前を選ぶだけ。SgLogin.initWork）
+  - 作業記録の袋出し（生産記録）とはつながない（第1版）
+-->
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{max-width:480px;margin:0 auto;height:100dvh;display:flex;flex-direction:column;font-family:"Noto Sans JP","Hiragino Sans",sans-serif;background:#f6f3ec;color:#222;overflow:hidden;-webkit-tap-highlight-color:transparent;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
+button{font-family:inherit;color:inherit;background:none;border:0;cursor:pointer}
+.top{background:#2f5d3a;color:#fff;padding:calc(env(safe-area-inset-top) + 12px) 16px 12px;font-size:18px;font-weight:700;display:flex;justify-content:space-between;align-items:center}
+.top .site{color:#fff;font-size:14px;font-weight:700;background:rgba(255,255,255,.18);border-radius:14px;padding:5px 12px}
+.tabs{display:flex;background:#fff;border-bottom:1px solid #ddd}
+.tabs button{flex:1;text-align:center;padding:10px 0;font-size:15px;color:#777;border-bottom:3px solid transparent}
+.tabs .on{color:#2f5d3a;font-weight:700;border-bottom-color:#2f5d3a}
+.panel{flex:1;overflow-y:auto;overflow-x:hidden;position:relative}
+.panel[hidden]{display:none}
+.seg{display:flex;gap:6px;padding:10px 12px}
+.seg button{flex:1;text-align:center;padding:7px 0;border-radius:8px;background:#fff;font-size:14px;color:#666}
+.seg .on{background:#2f5d3a;color:#fff}
+.msg{font-size:14px;color:#b91c1c;padding:2px 16px}
+.msg:empty{display:none}
+/* 仕入れ */
+.mon{display:flex;justify-content:space-between;align-items:center;padding:0 8px 6px;font-size:18px;font-weight:700}
+.mon button{font-size:22px;width:44px;height:32px;color:#2f5d3a}
+table.cal{width:calc(100% - 24px);margin:0 12px;border-collapse:collapse;table-layout:fixed;background:#fff}
+.cal th{font-size:12px;color:#888;padding:4px 0;font-weight:400}
+.cal td{height:66px;vertical-align:top;border:1px solid #eee;padding:2px;overflow:hidden}
+.cal.six td{height:58px}
+.cal td.today{background:#fff7d6}
+.cal td.sel{outline:2px solid #2f5d3a;outline-offset:-2px}
+.cal .d{font-size:12px}
+.bar{font-size:10px;color:#fff;border-radius:4px;padding:1px 2px;margin-top:2px;white-space:nowrap;overflow:hidden;line-height:1.3}
+.bar.c{background:#2b6cb0}.bar.h{background:#dd7a1f}.bar.g{background:#9ca3af}
+.more{font-size:10px;color:#666;margin-top:1px}
+.leg{display:flex;gap:16px;padding:10px 16px;font-size:13px}
+.leg i{display:inline-block;width:14px;height:14px;border-radius:3px;vertical-align:-2px;margin-right:4px}
+.list{margin:0 12px 16px;background:#fff;border-radius:10px;padding:10px 12px;font-size:14px}
+.list b{font-size:15px}
+.list .row{display:flex;justify-content:space-between;padding:6px 0;border-top:1px solid #eee}
+.list .none{color:#888;padding-top:6px}
+/* 棚 */
+.sum{display:flex;justify-content:space-between;align-items:baseline;padding:2px 16px 8px;font-size:14px;color:#555}
+.sum b{font-size:22px;color:#222}
+.pager{display:flex;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+.pager::-webkit-scrollbar{display:none}
+.view{flex:0 0 100%;scroll-snap-align:start;scroll-snap-stop:always}
+.map{display:flex;gap:5px;padding:0 9px}
+.shelf{flex:1;min-width:0;background:#e9e4d8;border-radius:7px;padding:3px 2px}
+.sn{text-align:center;font-weight:700;font-size:14px}
+.sides{display:flex;gap:2px}.sl{flex:1;text-align:center;font-size:10px;color:#777}
+.pair{display:flex;gap:2px;margin-top:2px}
+.f{flex:1;min-width:0;border-radius:5px;display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative;overflow:hidden}
+.f b{font-size:17px;white-space:nowrap;line-height:1.15}.f b small{font-size:10px;font-weight:400}
+.f s{text-decoration:none;font-size:10px;color:#333;white-space:nowrap}
+.f.empty{background:#fff;border:1.5px dashed #bbb}.f.empty s{color:#aaa}
+.f.mix b{font-size:12px;line-height:1.1}.f.mix s{font-size:9px;letter-spacing:-.4px}
+.f .old{position:absolute;top:3px;right:3px;width:7px;height:7px;border-radius:50%;background:#c0392b}
+.f.pick{outline:3px solid #1f6fd1;outline-offset:-3px}
+.door{text-align:center;font-size:12px;color:#888;margin:6px 0 2px}
+.pg{text-align:center;font-size:18px;color:#ccc;letter-spacing:6px;height:20px}
+.pg b{color:#2f5d3a;font-weight:400}
+.tleg{display:flex;gap:10px;padding:4px 14px;font-size:13px;flex-wrap:wrap}
+.tleg i{display:inline-block;width:14px;height:14px;border-radius:3px;vertical-align:-2px;margin-right:3px}
+.tleg .old{display:inline-block;width:8px;height:8px;border-radius:50%;background:#c0392b;margin-right:3px;vertical-align:1px}
+.spacer{height:90px}
+.btn{display:block;width:100%;background:#1f6fd1;color:#fff;text-align:center;padding:15px;border-radius:12px;font-size:17px;font-weight:700}
+.btn:disabled{opacity:.45}
+.foot{position:fixed;left:0;right:0;bottom:0;max-width:480px;margin:0 auto;padding:10px 16px calc(14px + env(safe-area-inset-bottom));background:linear-gradient(rgba(246,243,236,0),#f6f3ec 30%)}
+.foot[hidden]{display:none}
+.multi{display:flex;gap:8px;align-items:center}
+.multi span{flex:1;font-size:15px;font-weight:700}
+.multi button{padding:13px 16px;border-radius:12px;font-size:16px;font-weight:700;background:#fff;border:1.5px solid #ccc}
+.multi .del{color:#b91c1c;border-color:#e5a3a3}
+/* 下から出る画面 */
+.dim{position:fixed;inset:0;background:rgba(0,0,0,.33);z-index:300;display:flex;align-items:flex-end;justify-content:center}
+.sheet{background:#fff;width:100%;max-width:480px;border-radius:16px 16px 0 0;padding:16px 16px calc(16px + env(safe-area-inset-bottom));max-height:96dvh;overflow-y:auto}
+.sheet .ttl{display:flex;justify-content:space-between;align-items:center;font-size:17px;font-weight:700}
+.sheet .x{font-size:22px;color:#888;width:36px;height:30px}
+.sheet h3{font-size:16px;margin:12px 0 8px}
+.chips{display:flex;gap:8px;flex-wrap:wrap}
+.chips button{padding:9px 12px;border-radius:20px;border:1.5px solid #ccc;font-size:15px}
+.chips .on{border-color:#2f5d3a;background:#e5f0e7;font-weight:700}
+.mini{display:flex;gap:4px}
+.mini .sh{flex:1;min-width:0;background:#eee;border-radius:6px;padding:3px 2px}
+.mini .t{font-size:11px;text-align:center;font-weight:700}
+.mini .p{display:flex;gap:2px;margin-top:2px}
+.mini .c{flex:1;min-width:0;height:30px;border-radius:3px;background:#fff;border:1px dashed #bbb;font-size:11px;display:flex;align-items:center;justify-content:center;padding:0}
+.mini .x{background:#ccc;border:none}
+.mini .sel{background:#f2c46d;border:2px solid #b07d10;font-weight:700}
+.tot{display:flex;justify-content:space-between;align-items:center;margin:14px 0;font-size:15px}
+.tot b{font-size:26px}
+.err{font-size:14px;color:#b91c1c;margin-bottom:8px}
+.err:empty{display:none}
+.rec{display:flex;justify-content:space-between;padding:8px 0;border-top:1px solid #eee;font-size:15px}
+.rec i{display:inline-block;width:14px;height:14px;border-radius:3px;vertical-align:-2px;margin-right:6px}
+.rec .who{color:#777;font-size:13px}
+.two{display:flex;gap:8px;margin-top:14px}
+.two button{flex:1}
+.wbtn{padding:15px;border-radius:12px;font-size:17px;font-weight:700;background:#fff;border:1.5px solid #ccc}
+.wbtn.del{color:#b91c1c;border-color:#e5a3a3}
+.edit{display:flex;gap:8px;align-items:center;margin-top:10px;padding:10px;background:#f3f4f6;border-radius:10px}
+.edit span{font-weight:700;font-size:15px;white-space:nowrap}
+.edit input{flex:1;min-width:0;height:44px;font-size:20px;font-weight:700;text-align:center;border:1px solid #9ca3af;border-radius:8px;font-family:inherit}
+.edit button{height:44px;padding:0 12px;border-radius:8px;font-size:15px;font-weight:700;background:#fff;border:1.5px solid #ccc}
+.edit .ok{background:#2f5d3a;color:#fff;border-color:#2f5d3a}
+.hidedate{position:absolute;opacity:0;width:1px;height:1px;pointer-events:none}
+.toast{position:fixed;left:50%;bottom:96px;transform:translateX(-50%);background:#1c1c1e;color:#fff;padding:10px 20px;border-radius:10px;font-size:14px;z-index:400;opacity:0;transition:opacity .2s;pointer-events:none}
+.toast.show{opacity:1}
+</style>
+</head>
+<body>
+<div class="top"><span>袋出し管理</span><button type="button" class="site" id="siteBtn">寄居</button></div>
+<div class="tabs" id="tabs"><button type="button" data-tab="shiire">仕入れ</button><button type="button" data-tab="tana">棚</button></div>
+
+<div class="panel" id="p_shiire" hidden>
+  <div class="seg" id="calSeg"><button type="button" data-f="all">全部</button><button type="button" data-f="yorii">寄居</button><button type="button" data-f="shinrin">森林公園</button></div>
+  <div class="mon"><button type="button" id="prevMon" aria-label="前の月">‹</button><span id="monTitle"></span><button type="button" id="nextMon" aria-label="次の月">›</button></div>
+  <div class="msg" id="calMsg"></div>
+  <table class="cal" id="cal"></table>
+  <div class="leg"><span><i style="background:#2b6cb0"></i>チャーター便</span><span><i style="background:#dd7a1f"></i>引き取り</span></div>
+  <div class="list" id="dayList"></div>
+</div>
+
+<div class="panel" id="p_tana" hidden>
+  <div class="seg" id="roomSeg"></div>
+  <div class="sum" id="tanaSum"></div>
+  <div class="msg" id="tanaMsg"></div>
+  <div class="pager" id="pager"></div>
+  <div class="pg" id="pg"></div>
+  <div class="tleg" id="tleg"></div>
+  <div class="spacer"></div>
+</div>
+<div class="foot" id="foot" hidden><button type="button" class="btn" id="recBtn">袋出しを記録</button></div>
+<div class="foot" id="multiFoot" hidden><div class="multi"><span id="multiN"></span><button type="button" id="multiNo">やめる</button><button type="button" class="del" id="multiDel">空にする</button></div></div>
+<div class="toast" id="toast"></div>
+
+<script src="js/common.js"></script>
+<script src="js/login.js"></script>
+<script>
+(function () {
+  'use strict';
+  var C = window.TougouCommon, L = window.SgLogin;
+  var SITES = { yorii: '寄居', shinrin: '森林公園' };
+  var SHORT = { yorii: '寄', shinrin: '森' };
+  var WEEK = ['日', '月', '火', '水', '木', '金', '土'];
+  var PAL = ['#7fb3e6', '#8fd19e', '#f2c46d', '#e9a0b8', '#b9a3e3', '#7fd3cf', '#f0a374', '#c5d86d', '#d9b38c', '#a7c7e7'];
+  var OLD_DAYS = 20;
+  var LS = { site: 'sg.fukuro.site', tab: 'sg.fukuro.tab', tana: 'sg.fukuro.tana.' };
+
+  function $(id) { return document.getElementById(id); }
+  function lsGet(k) { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) { return null; } }
+  function lsPut(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* 覚えられないだけ */ } }
+  function esc(s) { return C.esc(s); }
+  function num(n) { return Number(n).toLocaleString(); }
+  function pad(n) { return String(n).padStart(2, '0'); }
+  function ymdOf(y, m, d) { var t = new Date(y, m - 1, d); return t.getFullYear() + '-' + pad(t.getMonth() + 1) + '-' + pad(t.getDate()); }
+  function parts(ymd) { return String(ymd).split('-').map(Number); }
+  function addDays(ymd, n) { var p = parts(ymd); return ymdOf(p[0], p[1], p[2] + n); }
+  function md(ymd) { var p = parts(ymd); return p[1] + '/' + p[2]; }
+  function dayNo(ymd) { var p = parts(ymd); return Math.round(Date.UTC(p[0], p[1] - 1, p[2]) / 86400000); }
+  /** 並べた日の色。拠点の中で日付の順に振る（同じ拠点で10日分までは別の色） */
+  var colors = {};
+  function setColors(d) {
+    var ds = {}; colors = {};
+    (d && d.faces || []).forEach(function (x) { ds[x.date] = 1; });
+    Object.keys(ds).sort().forEach(function (x, i) { colors[x] = PAL[i % PAL.length]; });
+  }
+  function colorOf(ymd) { return colors[ymd] || '#ddd'; }
+  function newId() { return 'T' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
+  var toastTimer;
+  function toast(msg) {
+    var t = $('toast'); t.textContent = msg; t.classList.add('show');
+    clearTimeout(toastTimer); toastTimer = setTimeout(function () { t.classList.remove('show'); }, 2200);
+  }
+
+  var today = C.ymd(C.now());
+  var st = {
+    site: lsGet(LS.site) === 'shinrin' ? 'shinrin' : 'yorii',
+    tab: lsGet(LS.tab) === 'shiire' ? 'shiire' : 'tana',
+    calFilter: 'all', calYm: today.slice(0, 7), calSel: today, nyuka: {},
+    tana: {}, view: 0, multi: null
+  };
+
+  // ---------------------------------------------------------------- 画面の切り替え
+  function setTab(t) {
+    st.tab = t; lsPut(LS.tab, t);
+    Array.prototype.forEach.call($('tabs').children, function (b) { b.classList.toggle('on', b.dataset.tab === t); });
+    $('p_shiire').hidden = t !== 'shiire';
+    $('p_tana').hidden = t !== 'tana';
+    endMulti();
+    $('foot').hidden = t !== 'tana';
+    if (t === 'shiire') loadMonth(st.calYm); else { renderTana(); loadTana(st.site); }
+  }
+  $('tabs').onclick = function (e) { var b = e.target.closest('button'); if (b) setTab(b.dataset.tab); };
+  function setSite(s) {
+    st.site = s; lsPut(LS.site, s);
+    $('siteBtn').textContent = SITES[s];
+    st.view = 0;
+    endMulti();
+    if (st.tab === 'tana') { renderTana(); loadTana(s); }
+  }
+  $('siteBtn').onclick = function () { setSite(st.site === 'yorii' ? 'shinrin' : 'yorii'); };
+
+  // ---------------------------------------------------------------- 仕入れ（入荷予定のカレンダー）
+  /** 便の種類 → 色（c＝チャーター便・青／h＝引き取り・橙／g＝分からない・灰） */
+  function binClass(bin) {
+    var b = String(bin || '');
+    if (/チャーター|遠州/.test(b)) return 'c';
+    if (/引き?取|軽バン|トラック/.test(b)) return 'h';
+    return 'g';
+  }
+  function monthRange(ym) {
+    var p = ym.split('-').map(Number);
+    return { y: p[0], m: p[1], from: ymdOf(p[0], p[1], 1), to: ymdOf(p[0], p[1] + 1, 0) };
+  }
+  function shiftYm(ym, n) { var p = ym.split('-').map(Number); return ymdOf(p[0], p[1] + n, 1).slice(0, 7); }
+  function loadMonth(ym) {
+    renderCal();
+    var r = monthRange(ym);
+    C.api('nyuka.list', { from: r.from, to: r.to }).then(function (res) {
+      st.nyuka[ym] = res.rows || [];
+      $('calMsg').textContent = '';
+      if (st.calYm === ym) renderCal();
+    }, function (err) {
+      if (st.calYm === ym) $('calMsg').textContent = '読み込めません' + (err && err.network ? '' : '：' + (err && err.message || err));
+    });
+  }
+  function rowsOfDay(ymd) {
+    var rows = st.nyuka[ymd.slice(0, 7)] || [];
+    return rows.filter(function (x) { return x.date === ymd && (st.calFilter === 'all' || x.site === st.calFilter) && Number(x.count) > 0; });
+  }
+  function renderCal() {
+    var r = monthRange(st.calYm);
+    $('monTitle').textContent = r.y + '年' + r.m + '月';
+    Array.prototype.forEach.call($('calSeg').children, function (b) { b.classList.toggle('on', b.dataset.f === st.calFilter); });
+    var first = new Date(r.y, r.m - 1, 1).getDay(), last = new Date(r.y, r.m, 0).getDate();
+    var weeks = Math.ceil((first + last) / 7);
+    var h = '<tr>' + WEEK.map(function (w) { return '<th>' + w + '</th>'; }).join('') + '</tr>';
+    for (var w = 0; w < weeks; w++) {
+      h += '<tr>';
+      for (var k = 0; k < 7; k++) {
+        var d = w * 7 + k - first + 1;
+        if (d < 1 || d > last) { h += '<td></td>'; continue; }
+        var ymd = ymdOf(r.y, r.m, d), rows = rowsOfDay(ymd);
+        var col = k === 0 ? '#c03' : k === 6 ? '#14c' : '#333';
+        h += '<td data-d="' + ymd + '" class="' + (ymd === today ? 'today' : '') + (ymd === st.calSel ? ' sel' : '') + '">' +
+          '<div class="d" style="color:' + col + '">' + d + '</div>' +
+          rows.slice(0, 3).map(function (x) {
+            return '<div class="bar ' + binClass(x.bin) + '">' + esc((SHORT[x.site] || '?') + (x.kind === '未培養' ? '未' : '完') + x.count) + '</div>';
+          }).join('') + (rows.length > 3 ? '<div class="more">＋' + (rows.length - 3) + '</div>' : '') + '</td>';
+      }
+      h += '</tr>';
+    }
+    var t = $('cal'); t.innerHTML = h; t.classList.toggle('six', weeks > 5);
+    renderDay();
+  }
+  function renderDay() {
+    var el = $('dayList');
+    if (!st.calSel || st.calSel.slice(0, 7) !== st.calYm) { el.hidden = true; return; }
+    el.hidden = false;
+    var p = parts(st.calSel), rows = rowsOfDay(st.calSel);
+    el.innerHTML = '<b>' + p[1] + '/' + p[2] + '（' + WEEK[new Date(p[0], p[1] - 1, p[2]).getDay()] + '）</b>' +
+      (rows.length ? rows.map(function (x) {
+        return '<div class="row"><span>' + esc(x.bin + '・' + (SITES[x.site] || x.site)) + '</span><span>' + esc(x.kind) + ' ' + num(x.count) + '</span></div>';
+      }).join('') : '<div class="none">便なし</div>');
+  }
+  $('cal').onclick = function (e) { var td = e.target.closest('td[data-d]'); if (td) { st.calSel = td.dataset.d; renderCal(); } };
+  $('calSeg').onclick = function (e) { var b = e.target.closest('button'); if (b) { st.calFilter = b.dataset.f; renderCal(); } };
+  $('prevMon').onclick = function () { st.calYm = shiftYm(st.calYm, -1); loadMonth(st.calYm); };
+  $('nextMon').onclick = function () { st.calYm = shiftYm(st.calYm, 1); loadMonth(st.calYm); };
+
+  // ---------------------------------------------------------------- 棚（見取り図）
+  function tanaOf(site) { return st.tana[site] || lsGet(LS.tana + site); }
+  function loadTana(site) {
+    C.api('tana.list', { site: site }).then(function (res) {
+      setTana(site, res);
+      $('tanaMsg').textContent = '';
+    }, function (err) {
+      if (st.site === site) $('tanaMsg').textContent = '読み込めません' + (err && err.network ? '' : '：' + (err && err.message || err));
+    });
+  }
+  function setTana(site, res) {
+    var d = { rooms: res.rooms || [], faces: res.faces || [], today: res.today || today };
+    st.tana[site] = d;
+    lsPut(LS.tana + site, d);
+    if (st.site === site && st.tab === 'tana') renderTana();
+  }
+  /** 部屋ごとの画面（森林公園は4棚ずつ） */
+  function views(d) {
+    var out = [];
+    d.rooms.forEach(function (r) {
+      for (var i = 0; i < r.shelves.length; i += r.page) out.push({ room: r, shelves: r.shelves.slice(i, i + r.page), sub: i / r.page, subs: Math.ceil(r.shelves.length / r.page) });
+    });
+    return out;
+  }
+  /** 面 → その面の記録（並べた日の順） */
+  function faceMap(d, room) {
+    var m = {};
+    d.faces.forEach(function (x) { if (x.room === room) (m[x.face] = m[x.face] || []).push(x); });
+    Object.keys(m).forEach(function (k) { m[k].sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; }); });
+    return m;
+  }
+  /** 並べた日ごとにまとめる [{ date, count }] */
+  function byDate(recs) {
+    var o = [], at = {};
+    (recs || []).forEach(function (x) {
+      if (!(x.date in at)) { at[x.date] = o.length; o.push({ date: x.date, count: 0 }); }
+      o[at[x.date]].count += Number(x.count) || 0;
+    });
+    return o;
+  }
+  function faceHtml(room, name, recs, h, base) {
+    var g = byDate(recs), sel = st.multi && st.multi.room === room && st.multi.faces[name] ? ' pick' : '';
+    var attr = ' data-face="' + name + '" style="height:' + h + 'px;';
+    if (!g.length) return '<div class="f empty' + sel + '"' + attr + '"><s>空</s></div>';
+    var old = dayNo(base) - dayNo(g[0].date) > OLD_DAYS ? '<i class="old"></i>' : '';
+    if (g.length === 1) {
+      return '<div class="f' + sel + '"' + attr + 'background:' + colorOf(g[0].date) + '">' + old +
+        '<b>' + parts(g[0].date)[2] + '<small>日</small></b><s>' + g[0].count + '個</s></div>';
+    }
+    var bg = 'linear-gradient(135deg,' + colorOf(g[0].date) + ' 50%,' + colorOf(g[1].date) + ' 50%)';
+    var top = g.length === 2 ? '<b>' + parts(g[0].date)[2] + '</b><b>' + parts(g[1].date)[2] + '</b>' : '<b>' + parts(g[0].date)[2] + '他</b>';
+    var cnt = g.length === 2 ? g[0].count + '+' + g[1].count : String(g.reduce(function (s, x) { return s + x.count; }, 0));
+    return '<div class="f mix' + sel + '"' + attr + 'background:' + bg + '">' + old + top + '<s>' + cnt + '個</s></div>';
+  }
+  function shelfHtml(r, s, fm, base) {
+    var h = Math.min(92, Math.floor(400 / r.depth) - 2);
+    var html = '<div class="shelf"><div class="sn">' + s + '</div><div class="sides"><div class="sl">左</div><div class="sl">右</div></div>';
+    for (var k = r.depth; k >= 1; k--) {   // 奥が上・入口側（1）が下
+      html += '<div class="pair">' + faceHtml(r.room, s + '-左' + k, fm[s + '-左' + k], h, base) + faceHtml(r.room, s + '-右' + k, fm[s + '-右' + k], h, base) + '</div>';
+    }
+    return html + '</div>';
+  }
+  function roomStats(r, fm) {
+    var used = 0, empty = 0;
+    r.shelves.forEach(function (s) {
+      ['左', '右'].forEach(function (side) {
+        for (var k = 1; k <= r.depth; k++) {
+          var recs = fm[s + '-' + side + k];
+          if (!recs || !recs.length) empty++; else recs.forEach(function (x) { used += Number(x.count) || 0; });
+        }
+      });
+    });
+    return { free: Math.max(0, r.cap - used), cap: r.cap, empty: empty };
+  }
+  function renderTana() {
+    var d = tanaOf(st.site), pager = $('pager');
+    if (!d || !d.rooms || !d.rooms.length) {
+      $('roomSeg').innerHTML = ''; $('tanaSum').innerHTML = '<span>読み込み中…</span>'; pager.innerHTML = ''; $('pg').innerHTML = ''; $('tleg').innerHTML = '';
+      return;
+    }
+    var vs = views(d), base = d.today || today;
+    setColors(d);
+    if (st.view >= vs.length) st.view = 0;
+    $('roomSeg').innerHTML = d.rooms.map(function (r) { return '<button type="button" data-room="' + esc(r.room) + '">' + esc(r.room) + '</button>'; }).join('');
+    pager.innerHTML = vs.map(function (v) {
+      var fm = faceMap(d, v.room.room);
+      return '<div class="view"><div class="map">' + v.shelves.map(function (s) { return shelfHtml(v.room, s, fm, base); }).join('') +
+        '</div><div class="door">▲ 入口</div></div>';
+    }).join('');
+    pager.scrollLeft = st.view * pager.clientWidth;
+    viewChanged(true);
+  }
+  function curView() { var d = tanaOf(st.site); return d && d.rooms && d.rooms.length ? views(d)[st.view] : null; }
+  function viewChanged(force) {
+    var d = tanaOf(st.site), v = curView();
+    if (!v) return;
+    Array.prototype.forEach.call($('roomSeg').children, function (b) { b.classList.toggle('on', b.dataset.room === v.room.room); });
+    var fm = faceMap(d, v.room.room), s = roomStats(v.room, fm);
+    $('tanaSum').innerHTML = '<span>空き <b>' + num(s.free) + '</b> / ' + num(s.cap) + '</span><span>' + s.empty + '面空き</span>';
+    var dots = '';
+    if (v.subs > 1) for (var i = 0; i < v.subs; i++) dots += i === v.sub ? '<b>●</b>' : '●';
+    $('pg').innerHTML = dots;
+    var dates = {}, anyOld = false, base = d.today || today;
+    d.faces.forEach(function (x) {
+      if (x.room !== v.room.room) return;
+      dates[x.date] = 1;
+      if (dayNo(base) - dayNo(x.date) > OLD_DAYS) anyOld = true;
+    });
+    $('tleg').innerHTML = Object.keys(dates).sort().map(function (x) { return '<span><i style="background:' + colorOf(x) + '"></i>' + md(x) + '</span>'; }).join('') +
+      (anyOld ? '<span><span class="old"></span>' + OLD_DAYS + '日超</span>' : '');
+    if (force !== true && st.multi && st.multi.room !== v.room.room) endMulti();
+  }
+  var scrollT;
+  $('pager').addEventListener('scroll', function () {
+    var p = $('pager'), w = p.clientWidth || 1, i = Math.round(p.scrollLeft / w);
+    if (i !== st.view) { st.view = i; viewChanged(); }
+    clearTimeout(scrollT);
+  }, { passive: true });
+  $('roomSeg').onclick = function (e) {
+    var b = e.target.closest('button'); if (!b) return;
+    var d = tanaOf(st.site), vs = views(d);
+    for (var i = 0; i < vs.length; i++) if (vs[i].room.room === b.dataset.room) { st.view = i; break; }
+    $('pager').scrollTo({ left: st.view * $('pager').clientWidth, behavior: 'smooth' });
+    viewChanged();
+  };
+
+  // 面を押す（空き＝記録、埋まり＝内訳）・長押し（埋まりの面を複数選んで空にする）
+  var press = null;
+  $('pager').addEventListener('pointerdown', function (e) {
+    var f = e.target.closest('.f'); if (!f) return;
+    press = { face: f.dataset.face, x: e.clientX, y: e.clientY, long: false };
+    press.timer = setTimeout(function () {
+      if (!press || f.classList.contains('empty')) return;
+      press.long = true;
+      startMulti(press.face);
+    }, 550);
+  });
+  function cancelPress(e) {
+    if (!press) return;
+    if (e && e.type === 'pointermove' && Math.abs(e.clientX - press.x) < 10 && Math.abs(e.clientY - press.y) < 10) return;
+    clearTimeout(press.timer); press = null;
+  }
+  $('pager').addEventListener('pointermove', cancelPress, { passive: true });
+  $('pager').addEventListener('pointercancel', cancelPress);
+  $('pager').addEventListener('contextmenu', function (e) { e.preventDefault(); });
+  $('pager').addEventListener('click', function (e) {
+    var f = e.target.closest('.f');
+    var p = press; if (press) { clearTimeout(press.timer); press = null; }
+    if (!f || (p && p.long)) return;
+    var name = f.dataset.face, v = curView(); if (!v) return;
+    var recs = faceMap(tanaOf(st.site), v.room.room)[name] || [];
+    if (st.multi) {
+      if (!recs.length) return;
+      if (st.multi.faces[name]) delete st.multi.faces[name]; else st.multi.faces[name] = true;
+      f.classList.toggle('pick', !!st.multi.faces[name]);
+      multiCount();
+      return;
+    }
+    if (recs.length) openFace(v.room, name, recs); else openRecord(v.room, [name]);
+  });
+
+  function startMulti(face) {
+    var v = curView(); if (!v) return;
+    st.multi = { room: v.room.room, faces: {} };
+    st.multi.faces[face] = true;
+    var el = $('pager').querySelector('.f[data-face="' + face + '"]');
+    Array.prototype.forEach.call($('pager').querySelectorAll('.view'), function (vw, i) {
+      if (i === st.view) { var x = vw.querySelector('.f[data-face="' + face + '"]'); if (x) x.classList.add('pick'); }
+    });
+    if (!el) return;
+    $('foot').hidden = true; $('multiFoot').hidden = false;
+    multiCount();
+  }
+  function multiCount() {
+    var n = st.multi ? Object.keys(st.multi.faces).length : 0;
+    $('multiN').textContent = n + '面を選択';
+    $('multiDel').disabled = !n;
+  }
+  function endMulti() {
+    if (!st.multi) return;
+    st.multi = null;
+    Array.prototype.forEach.call($('pager').querySelectorAll('.f.pick'), function (x) { x.classList.remove('pick'); });
+    $('multiFoot').hidden = true; $('foot').hidden = st.tab !== 'tana';
+  }
+  $('multiNo').onclick = endMulti;
+  $('multiDel').onclick = function () {
+    var v = curView(); if (!v || !st.multi) return;
+    var faces = Object.keys(st.multi.faces);
+    if (!faces.length || !confirm(faces.length + '面を空にしますか')) return;
+    clearFaces(v.room, faces, $('multiDel')).then(function (ok) { if (ok) endMulti(); });
+  };
+
+  function clearFaces(room, faces, btn) {
+    var site = st.site;
+    if (C.isRunning('tana')) return Promise.resolve(false);
+    return new Promise(function (resolve) {
+      C.runOnce('tana', btn, '送信中…', function () {
+        return C.api('tana.clear', { site: site, room: room.room, faces: faces }).then(function (res) {
+          setTana(site, Object.assign({}, tanaOf(site), { faces: res.faces || [] }));
+          toast(faces.length + '面を空にしました');
+          resolve(true);
+        }, function (err) {
+          alert('空にできませんでした' + (err && err.network ? '（通信）' : '：' + (err && err.message || err)));
+          resolve(false);
+        });
+      });
+    });
+  }
+
+  // ---------------------------------------------------------------- 下から出る画面
+  function sheet(html) {
+    var dim = document.createElement('div');
+    dim.className = 'dim';
+    dim.innerHTML = '<div class="sheet">' + html + '</div>';
+    document.body.appendChild(dim);
+    var o = { el: dim, q: function (s) { return dim.querySelector(s); }, close: function () { if (dim.parentNode) dim.parentNode.removeChild(dim); } };
+    dim.addEventListener('click', function (e) { if (e.target === dim) o.close(); });
+    var x = dim.querySelector('.x'); if (x) x.onclick = o.close;
+    return o;
+  }
+
+  /** 埋まっている面の内訳 */
+  function openFace(room, name, recs) {
+    var total = recs.reduce(function (s, x) { return s + (Number(x.count) || 0); }, 0);
+    var sh = sheet('<div class="ttl"><span>' + esc(name) + '　' + esc(room.room) + 'の部屋</span><button type="button" class="x">×</button></div>' +
+      '<div style="margin-top:8px">' + recs.map(function (x) {
+        return '<div class="rec"><span><i style="background:' + colorOf(x.date) + '"></i>' + md(x.date) + ' に並べた</span><span><b>' + x.count + '個</b> <span class="who">' + esc(x.surname || '') + '</span></span></div>';
+      }).join('') + '<div class="rec"><span>合計</span><b>' + total + '個</b></div></div>' +
+      '<div class="two"><button type="button" class="wbtn del" data-el="clear">空にする</button><button type="button" class="btn" data-el="add">追加</button></div>');
+    sh.q('[data-el="add"]').onclick = function () { sh.close(); openRecord(room, [name]); };
+    sh.q('[data-el="clear"]').onclick = function () {
+      if (!confirm(name + ' を空にしますか')) return;
+      clearFaces(room, [name], this).then(function (ok) { if (ok) sh.close(); });
+    };
+  }
+
+  /** 袋出しを記録（並べた日・面・個数） */
+  function openRecord(room, preset) {
+    var d = tanaOf(st.site), site = st.site;
+    var base = (d && d.today) || today, fm = faceMap(d, room.room);
+    var rec = { opId: newId(), date: base, dateMode: 'today', per: room.per, sel: {}, edit: '' };
+    (preset || []).forEach(function (f) { rec.sel[f] = room.per; });
+    var sh = sheet('<div class="ttl"><span>袋出しを記録　' + esc(room.room) + 'の部屋</span><button type="button" class="x">×</button></div>' +
+      '<h3>① 並べた日</h3><div class="chips" data-el="dates"></div><input type="date" class="hidedate" data-el="pick">' +
+      (room.choices.length > 1 ? '<h3>1面の個数</h3><div class="chips" data-el="per"></div>' : '') +
+      '<h3>② 置いた面（押して選ぶ）</h3><div class="mini" data-el="mini"></div><div data-el="edit"></div>' +
+      '<div class="tot" data-el="tot"></div><div class="err" data-el="err"></div><button type="button" class="btn" data-el="go">記録する</button>');
+    var pick = sh.q('[data-el="pick"]');
+    pick.max = base; pick.min = addDays(base, -120);
+    function drawDates() {
+      var y = addDays(base, -1);
+      var other = rec.dateMode === 'pick' ? md(rec.date) : '日付を選ぶ';
+      sh.q('[data-el="dates"]').innerHTML =
+        '<button type="button" data-m="today" class="' + (rec.dateMode === 'today' ? 'on' : '') + '">今日 ' + md(base) + '</button>' +
+        '<button type="button" data-m="yday" class="' + (rec.dateMode === 'yday' ? 'on' : '') + '">昨日 ' + md(y) + '</button>' +
+        '<button type="button" data-m="pick" class="' + (rec.dateMode === 'pick' ? 'on' : '') + '">' + other + '</button>';
+    }
+    sh.q('[data-el="dates"]').onclick = function (e) {
+      var b = e.target.closest('button'); if (!b) return;
+      if (b.dataset.m === 'today') { rec.dateMode = 'today'; rec.date = base; }
+      else if (b.dataset.m === 'yday') { rec.dateMode = 'yday'; rec.date = addDays(base, -1); }
+      else { pick.value = rec.date; try { pick.showPicker(); } catch (er) { pick.focus(); pick.click(); } return; }
+      drawDates();
+    };
+    pick.onchange = function () {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(pick.value) || pick.value > base) return;
+      rec.date = pick.value;
+      rec.dateMode = rec.date === base ? 'today' : rec.date === addDays(base, -1) ? 'yday' : 'pick';
+      drawDates();
+    };
+    function drawPer() {
+      var el = sh.q('[data-el="per"]'); if (!el) return;
+      el.innerHTML = room.choices.map(function (n) { return '<button type="button" data-n="' + n + '" class="' + (n === rec.per ? 'on' : '') + '">' + n + '個</button>'; }).join('');
+    }
+    if (sh.q('[data-el="per"]')) sh.q('[data-el="per"]').onclick = function (e) {
+      var b = e.target.closest('button'); if (!b) return;
+      rec.per = Number(b.dataset.n);
+      Object.keys(rec.sel).forEach(function (f) { rec.sel[f] = rec.per; });
+      drawPer(); drawMini(); drawTot();
+    };
+    function drawMini() {
+      sh.q('[data-el="mini"]').innerHTML = room.shelves.map(function (s) {
+        var h = '<div class="sh"><div class="t">' + s + '</div>';
+        for (var k = room.depth; k >= 1; k--) {
+          h += '<div class="p">' + ['左', '右'].map(function (side) {
+            var f = s + '-' + side + k, cls = rec.sel[f] ? 'sel' : (fm[f] && fm[f].length ? 'x' : '');
+            return '<button type="button" class="c ' + cls + '" data-f="' + f + '">' + (rec.sel[f] ? rec.sel[f] : '') + '</button>';
+          }).join('') + '</div>';
+        }
+        return h + '</div>';
+      }).join('');
+    }
+    function drawEdit() {
+      var el = sh.q('[data-el="edit"]');
+      if (!rec.edit) { el.innerHTML = ''; return; }
+      el.innerHTML = '<div class="edit"><span>' + esc(rec.edit) + '</span><input type="text" inputmode="numeric" value="' + rec.sel[rec.edit] + '" autocomplete="off">' +
+        '<button type="button" data-a="off">外す</button><button type="button" class="ok" data-a="ok">決める</button></div>';
+      var inp = el.querySelector('input');
+      try { inp.focus(); inp.select(); } catch (er) { /* 無視 */ }
+      el.querySelector('[data-a="off"]').onclick = function () { delete rec.sel[rec.edit]; rec.edit = ''; drawEdit(); drawMini(); drawTot(); };
+      el.querySelector('[data-a="ok"]').onclick = function () {
+        var n = C.readNum(inp.value);
+        if (n === null || isNaN(n) || n < 1 || n > 200 || n !== Math.floor(n)) { inp.style.borderColor = '#b91c1c'; return; }
+        rec.sel[rec.edit] = n; rec.edit = ''; drawEdit(); drawMini(); drawTot();
+      };
+    }
+    sh.q('[data-el="mini"]').onclick = function (e) {
+      var b = e.target.closest('button[data-f]'); if (!b) return;
+      var f = b.dataset.f;
+      if (!rec.sel[f]) { rec.sel[f] = rec.per; rec.edit = ''; }
+      else rec.edit = rec.edit === f ? '' : f;
+      drawMini(); drawEdit(); drawTot();
+    };
+    function drawTot() {
+      var fs = Object.keys(rec.sel), total = 0, same = true;
+      fs.forEach(function (f) { total += rec.sel[f]; if (rec.sel[f] !== rec.sel[fs[0]]) same = false; });
+      sh.q('[data-el="tot"]').innerHTML = '<span>' + fs.length + '面' + (fs.length && same ? ' × ' + rec.sel[fs[0]] + '個' : '') + '</span><span>合計 <b>' + num(total) + '</b> 個</span>';
+      sh.q('[data-el="go"]').disabled = !fs.length;
+    }
+    sh.q('[data-el="go"]').onclick = function () {
+      var fs = Object.keys(rec.sel); if (!fs.length) return;
+      var btn = this;
+      sh.q('[data-el="err"]').textContent = '';
+      C.runOnce('tana', btn, '送信中…', function () {
+        return C.api('tana.add', { opId: rec.opId, site: site, room: room.room, date: rec.date,
+                                   faces: fs.map(function (f) { return { face: f, count: rec.sel[f] }; }) }).then(function (res) {
+          setTana(site, Object.assign({}, tanaOf(site), { faces: res.faces || [] }));
+          sh.close();
+          toast(fs.length + '面を記録しました');
+        }, function (err) {
+          // 同じ opId で送り直せば二重にならない
+          sh.q('[data-el="err"]').textContent = err && err.network ? '送れませんでした。もう一度押してください' : '記録できません：' + (err && err.message || err);
+        });
+      });
+    };
+    drawDates(); drawPer(); drawMini(); drawTot();
+  }
+  $('recBtn').onclick = function () { var v = curView(); if (v) openRecord(v.room, []); };
+
+  // ---------------------------------------------------------------- 始める
+  $('siteBtn').textContent = SITES[st.site];
+  L.initWork({ lazy: true }).then(function () { setTab(st.tab); }, function () { setTab(st.tab); });
+})();
+</script>
+</body>
+</html>
