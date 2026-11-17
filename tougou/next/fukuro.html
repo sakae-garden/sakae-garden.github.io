@@ -7,7 +7,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#2f5d3a">
 <link rel="manifest" href="manifest.webmanifest">
-<meta name="sg-build" content="fukuro-20261117-6">
+<meta name="sg-build" content="fukuro-20261117-7">
 <title>袋出し管理 | 栄ガーデン</title>
 <!--
   袋出し管理（指示 20261117-0850。杉さん承認 2026-11-17 08:38）。中の従業員向け。
@@ -35,6 +35,8 @@
     （順番待ちはスマホに覚えて次に開いたときも続ける。送り終えていない面には左上に ⟳。通信の失敗は3回まで送り直し、だめなら元に戻す）。
     送っている途中の面は送り終えるまで開かない。直す画面の「入れ間違いを消す」をなくし「空にする」（面ごと）・「この日の分を空にする」（行ごと）に。
     記録してから24時間以内なら tana.void（数えない）、過ぎたら tana.clear を画面が選ぶ
+  - 直し7（指示 20261117-2302）：iPhone で「日付を選ぶ」が開かなかった（隠した input を showPicker()／click() で開く作りは iOS では開かない）。
+    ボタンの上に透明な本物の input type=date を重ね、指が直接触れるようにした（記録の画面・予約の日・直す画面の並べた日）。範囲外は理由を出す
 -->
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -167,14 +169,17 @@ table.cal{width:calc(100% - 24px);margin:0 12px;border-collapse:collapse;table-l
 .eh .who{color:#777;font-size:13px}
 .ein{display:flex;gap:8px;align-items:center;margin-top:6px;font-size:15px}
 .ein input{height:46px;font-size:18px;font-weight:700;text-align:center;border:1.5px solid #9ca3af;border-radius:8px;font-family:inherit;color:#222;background:#fff}
-.ein input[type=date]{flex:1;min-width:0}
 .ein input[data-k=count]{width:84px;margin-right:4px}
 .wbtn.sm{padding:9px 12px;font-size:14px;margin-top:8px}
 .calwrap,.pwrap{position:relative}
 .loading{position:absolute;left:50%;top:84px;transform:translateX(-50%);z-index:5;pointer-events:none;white-space:nowrap;background:rgba(255,255,255,.96);border:1px solid #ddd;border-radius:18px;padding:7px 16px;font-size:14px;color:#555;box-shadow:0 1px 5px rgba(0,0,0,.14)}
 .loading[hidden]{display:none}
 #tanaLoad{top:-36px}
-.hidedate{position:absolute;opacity:0;width:1px;height:1px;pointer-events:none}
+/* 日付を選ぶ（直し7）：見えているのはボタン、指が触れるのはその上に重ねた透明な本物の input type=date（iPhone は JS からは開けない） */
+.dpick{position:relative;flex:1;display:flex;min-width:0}
+.dpick>button{flex:1;min-width:0}
+.dpick input{position:absolute;inset:0;width:100%;height:100%;margin:0;padding:0;border:0;opacity:0;font-size:16px;-webkit-appearance:none;appearance:none;-webkit-user-select:text;user-select:text;z-index:1;cursor:pointer}
+.ein .dbox{height:46px;font-size:18px;font-weight:700;text-align:center;border:1.5px solid #9ca3af;border-radius:8px;color:#222;background:#fff}
 </style>
 </head>
 <body>
@@ -828,7 +833,8 @@ table.cal{width:calc(100% - 24px);margin:0 12px;border-collapse:collapse;table-l
     var sh = sheet(esc(siteRoom(room)) + '　' + esc(name),
       '<div style="margin-top:4px">' + recs.map(function (x, i) {
         return '<div class="erow" data-i="' + i + '"><div class="eh"><span><i style="background:' + colorOf(x.date) + '"></i>並べた日</span><span class="who">' + esc(x.surname || '') + '</span></div>' +
-          '<div class="ein"><input type="date" data-k="date" value="' + esc(x.date) + '" min="' + addDays(base, -120) + '" max="' + base + '">' +
+          '<div class="ein"><span class="dpick"><button type="button" class="dbox" tabindex="-1" data-el="dl">' + md(x.date) + '</button>' +
+          '<input type="date" data-k="date" aria-label="並べた日" value="' + esc(x.date) + '" min="' + addDays(base, -120) + '" max="' + base + '"></span>' +
           '<span><input type="text" inputmode="numeric" autocomplete="off" data-k="count" value="' + x.count + '">個</span></div>' +
           (recs.length > 1 ? '<button type="button" class="wbtn del sm" data-el="clr1">この日の分を空にする</button>' : '') + '</div>';
       }).join('') + '<div class="rec"><span>合計</span><b data-el="sum"></b></div></div>' +
@@ -852,6 +858,7 @@ table.cal{width:calc(100% - 24px);margin:0 12px;border-collapse:collapse;table-l
     }
     function draw() {
       var c = changes();
+      rows.forEach(function (r, i) { var v = val(i).date; r.querySelector('[data-el="dl"]').textContent = /^\d{4}-\d{2}-\d{2}$/.test(v) ? md(v) : '日付を選ぶ'; });
       sh.q('[data-el="sum"]').textContent = recs.reduce(function (s, x, i) { return s + (Number(val(i).count) || 0); }, 0) + '個';
       sh.q('[data-el="err"]').textContent = c.bad;
       sh.q('[data-el="save"]').disabled = !!c.bad || !c.list.length;
@@ -922,7 +929,8 @@ table.cal{width:calc(100% - 24px);margin:0 12px;border-collapse:collapse;table-l
       // 1面の個数を選ぶ部屋（寄居の真ん中）だけ、上の方に「1面 42｜68」
       (room.choices.length > 1 ? '<div class="perrow"><span>1面</span><div class="pills" data-el="per"></div></div>' : '') +
       '<div class="pills" data-el="mode" style="margin-top:12px"><button type="button" data-m="done">袋出し済み</button><button type="button" data-m="resv">袋出し予約</button></div>' +
-      '<h3 data-el="dh"></h3><div class="pills" data-el="dates"></div><input type="date" class="hidedate" data-el="pick">' +
+      '<h3 data-el="dh"></h3><div class="pills" data-el="dates"><button type="button" data-m="first"></button>' +
+      '<span class="dpick"><button type="button" data-m="pick" tabindex="-1"></button><input type="date" data-el="pick" aria-label="日付を選ぶ"></span></div>' +
       '<h3>② 置いた面（タップで選ぶ・もう一度で外す）</h3><div class="mini" data-el="mini"></div>' +
       '<div class="tot"><span data-el="n"></span><span>合計<input type="text" inputmode="numeric" autocomplete="off" data-el="total">個</span></div>' +
       '<div class="err" data-el="err"></div><button type="button" class="btn" data-el="go">記録する</button>');
@@ -934,14 +942,18 @@ table.cal{width:calc(100% - 24px);margin:0 12px;border-collapse:collapse;table-l
         b.classList.toggle('on', on); b.classList.toggle('rv', on && rec.resv);
       });
       sh.q('[data-el="dh"]').textContent = rec.resv ? '① 袋出しする日' : '① 並べた日';
+    }
+    // 「日付を選ぶ」は上に重ねた透明な input に指が直接触れて開く（直し7）。iPhone の Safari は JS の showPicker()／click() では
+    // 開かないため。描き直しは中身だけ変える（開いているカレンダーの下の input を作り直さない）
+    function drawDates() {
+      var f = firstDay(), first = sh.q('[data-m="first"]'), lb = sh.q('[data-m="pick"]');
+      first.className = rec.picked ? '' : 'on';
+      first.textContent = (rec.resv ? '明日 ' : '今日 ') + md(f);
+      lb.className = rec.picked ? 'on' : '';
+      lb.textContent = rec.picked ? md(rec.date) : '日付を選ぶ';
       pick.min = rec.resv ? base : addDays(base, -120);
       pick.max = rec.resv ? addDays(base, 60) : base;
-    }
-    function drawDates() {
-      var f = firstDay();
-      sh.q('[data-el="dates"]').innerHTML =
-        '<button type="button" data-m="first" class="' + (!rec.picked ? 'on' : '') + '">' + (rec.resv ? '明日 ' : '今日 ') + md(f) + '</button>' +
-        '<button type="button" data-m="pick" class="' + (rec.picked ? 'on' : '') + '">' + (rec.picked ? md(rec.date) : '日付を選ぶ') + '</button>';
+      pick.value = rec.date;
     }
     sh.q('[data-el="mode"]').onclick = function (e) {
       var b = e.target.closest('button'); if (!b || (b.dataset.m === 'resv') === rec.resv) return;
@@ -950,17 +962,18 @@ table.cal{width:calc(100% - 24px);margin:0 12px;border-collapse:collapse;table-l
       rec.order = rec.order.filter(canPick);   // 予約にすると「追加」の埋まっている面は外れる
       drawMode(); drawDates(); drawMini(); resetTotal();
     };
-    sh.q('[data-el="dates"]').onclick = function (e) {
-      var b = e.target.closest('button'); if (!b) return;
-      if (b.dataset.m === 'first') { rec.date = firstDay(); rec.picked = false; drawDates(); return; }
-      pick.value = rec.date;
-      try { pick.showPicker(); } catch (er) { pick.focus(); pick.click(); }
-    };
+    sh.q('[data-m="first"]').onclick = function () { rec.date = firstDay(); rec.picked = false; drawDates(); drawTot(); };
+    // iPhone のカレンダーは min／max の外も選べてしまうので、外なら理由を出して元の日に戻す。「消去」で空になったら元の日のまま
     pick.onchange = function () {
       var v = pick.value;
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(v) || v < pick.min || v > pick.max) return;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) { drawDates(); return; }
+      if (v < pick.min || v > pick.max) {
+        drawDates();
+        sh.q('[data-el="err"]').textContent = rec.resv ? '袋出しする日は今日から60日先までにしてください' : '並べた日は今日から120日前までにしてください';
+        return;
+      }
       rec.date = v; rec.picked = v !== firstDay();
-      drawDates();
+      drawDates(); drawTot();
     };
     function drawPer() {
       var el = sh.q('[data-el="per"]'); if (!el) return;
