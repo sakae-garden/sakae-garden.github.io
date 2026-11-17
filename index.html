@@ -7,6 +7,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="theme-color" content="#f4f1ea">
 <link rel="manifest" href="manifest.json">
+<meta name="sg-build" content="portal-3pages-20261117-3">
 <title>栄ガーデン</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@200;300;600&family=Noto+Sans+JP:wght@400;500;700;900&display=swap" rel="stylesheet">
@@ -14,7 +15,8 @@
 <style>
 /* 【2026-11-10 杉さん承認 23:53】ホームのデザイン刷新（案B ライト）。配達／ハウス作業は左右のスワイプで切り替え。
    旧 /kanri.html は /index.html#house へ転送。PORTAL_BUILD = 'portal-light-swipe-20261110'
-   【2026-11-17 杉さん承認 08:38】配達｜中の作業｜その他 の3ページ。中の作業＝袋出し管理だけ。その他＝前のハウス作業（id は house のまま＝旧 kanri.html の転送先）。PORTAL_BUILD = 'portal-3pages-20261117' */
+   【2026-11-17 杉さん承認 08:38】配達｜中の作業｜その他 の3ページ。中の作業＝袋出し管理だけ。その他＝前のハウス作業（id は house のまま＝旧 kanri.html の転送先）。PORTAL_BUILD = 'portal-3pages-20261117'
+   【2026-11-17 杉さん承認 12:51】直し3：新しい版が出ていたら開いたとき・戻ったときに読み直す（下の sg-build。版を変えたら sg-build も変える）。PORTAL_BUILD = 'portal-3pages-20261117-3' */
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{height:100%}
 body{
@@ -164,6 +166,27 @@ function showToast(msg) {
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => t.classList.remove('show'), 2500);
 }
+</script>
+<script>
+// 新しい版が出ていたら読み直す（2026-11-17 直し3）。ホーム画面のアプリは開き直しても前の画面がそのまま続くことがあり、
+// Pages の HTML は10分キャッシュされるため。開いたとき・アプリに戻ったときに、この HTML をキャッシュなしで読んで sg-build を比べる。
+// 電波が無ければ今の画面のまま
+(function () {
+  var BUILD = document.querySelector('meta[name="sg-build"]').content, KEY = 'sg.build.reloaded.' + location.pathname, last = 0;
+  function check() {
+    if (!window.fetch || Date.now() - last < 30000) return;
+    last = Date.now();
+    fetch(location.pathname, { cache: 'no-store' }).then(function (r) { return r.ok ? r.text() : ''; }).then(function (t) {
+      var m = /<meta name="sg-build" content="([^"]+)"/.exec(t);
+      if (!m || m[1] === BUILD) return;
+      try { if (sessionStorage.getItem(KEY) === m[1]) return; sessionStorage.setItem(KEY, m[1]); } catch (e) { return; }   // 読み直しても古いままなら繰り返さない
+      fetch(location.pathname, { cache: 'reload' }).catch(function () {}).then(function () { location.reload(); });
+    }).catch(function () { /* 電波が無いときは今の画面のまま */ });
+  }
+  check();
+  document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') check(); });
+  window.addEventListener('pageshow', function (e) { if (e.persisted) check(); });
+})();
 </script>
 </body>
 </html>
