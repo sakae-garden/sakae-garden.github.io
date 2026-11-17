@@ -14,14 +14,18 @@
   - 棚：tana.list／tana.add／tana.clear（GAS Tana.gs）。面の名前は「C-左2」（棚 A〜・面 左／右・奥 1＝入口側）
   - ログインは作業記録と同じ（名前を選ぶだけ。SgLogin.initWork）
   - 作業記録の袋出し（生産記録）とはつながない（第1版）
+  - 直し1（指示 20261117-1050）：棚の拠点は見出しの下の2ボタン（棚のときだけ）。仕入れは拠点を分けない
 -->
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%}
 body{max-width:480px;margin:0 auto;height:100dvh;display:flex;flex-direction:column;font-family:"Noto Sans JP","Hiragino Sans",sans-serif;background:#f6f3ec;color:#222;overflow:hidden;-webkit-tap-highlight-color:transparent;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
 button{font-family:inherit;color:inherit;background:none;border:0;cursor:pointer}
-.top{background:#2f5d3a;color:#fff;padding:calc(env(safe-area-inset-top) + 12px) 16px 12px;font-size:18px;font-weight:700;display:flex;justify-content:space-between;align-items:center}
-.top .site{color:#fff;font-size:14px;font-weight:700;background:rgba(255,255,255,.18);border-radius:14px;padding:5px 12px}
+.top{background:#2f5d3a;color:#fff;padding:calc(env(safe-area-inset-top) + 12px) 16px 12px;font-size:18px;font-weight:700}
+.sites{display:flex;gap:8px;background:#2f5d3a;padding:0 12px 10px}
+.sites[hidden]{display:none}
+.sites button{flex:1;height:44px;border-radius:10px;font-size:16px;font-weight:700;color:rgba(255,255,255,.75);border:1.5px solid rgba(255,255,255,.35)}
+.sites .on{background:#fff;color:#2f5d3a;border-color:#fff}
 .tabs{display:flex;background:#fff;border-bottom:1px solid #ddd}
 .tabs button{flex:1;text-align:center;padding:10px 0;font-size:15px;color:#777;border-bottom:3px solid transparent}
 .tabs .on{color:#2f5d3a;font-weight:700;border-bottom-color:#2f5d3a}
@@ -33,7 +37,7 @@ button{font-family:inherit;color:inherit;background:none;border:0;cursor:pointer
 .msg{font-size:14px;color:#b91c1c;padding:2px 16px}
 .msg:empty{display:none}
 /* 仕入れ */
-.mon{display:flex;justify-content:space-between;align-items:center;padding:0 8px 6px;font-size:18px;font-weight:700}
+.mon{display:flex;justify-content:space-between;align-items:center;padding:8px 8px 6px;font-size:18px;font-weight:700}
 .mon button{font-size:22px;width:44px;height:32px;color:#2f5d3a}
 table.cal{width:calc(100% - 24px);margin:0 12px;border-collapse:collapse;table-layout:fixed;background:#fff}
 .cal th{font-size:12px;color:#888;padding:4px 0;font-weight:400}
@@ -119,11 +123,11 @@ table.cal{width:calc(100% - 24px);margin:0 12px;border-collapse:collapse;table-l
 </style>
 </head>
 <body>
-<div class="top"><span>袋出し管理</span><button type="button" class="site" id="siteBtn">寄居</button></div>
+<div class="top">袋出し管理</div>
+<div class="sites" id="siteSeg" hidden><button type="button" data-s="yorii">寄居</button><button type="button" data-s="shinrin">森林公園</button></div>
 <div class="tabs" id="tabs"><button type="button" data-tab="shiire">仕入れ</button><button type="button" data-tab="tana">棚</button></div>
 
 <div class="panel" id="p_shiire" hidden>
-  <div class="seg" id="calSeg"><button type="button" data-f="all">全部</button><button type="button" data-f="yorii">寄居</button><button type="button" data-f="shinrin">森林公園</button></div>
   <div class="mon"><button type="button" id="prevMon" aria-label="前の月">‹</button><span id="monTitle"></span><button type="button" id="nextMon" aria-label="次の月">›</button></div>
   <div class="msg" id="calMsg"></div>
   <table class="cal" id="cal"></table>
@@ -150,7 +154,6 @@ table.cal{width:calc(100% - 24px);margin:0 12px;border-collapse:collapse;table-l
   'use strict';
   var C = window.TougouCommon, L = window.SgLogin;
   var SITES = { yorii: '寄居', shinrin: '森林公園' };
-  var SHORT = { yorii: '寄', shinrin: '森' };
   var WEEK = ['日', '月', '火', '水', '木', '金', '土'];
   var PAL = ['#7fb3e6', '#8fd19e', '#f2c46d', '#e9a0b8', '#b9a3e3', '#7fd3cf', '#f0a374', '#c5d86d', '#d9b38c', '#a7c7e7'];
   var OLD_DAYS = 20;
@@ -181,7 +184,7 @@ table.cal{width:calc(100% - 24px);margin:0 12px;border-collapse:collapse;table-l
   var st = {
     site: lsGet(LS.site) === 'shinrin' ? 'shinrin' : 'yorii',
     tab: lsGet(LS.tab) === 'shiire' ? 'shiire' : 'tana',
-    calFilter: 'all', calYm: today.slice(0, 7), calSel: today, nyuka: {},
+    calYm: today.slice(0, 7), calSel: today, nyuka: {},
     tana: {}, view: 0, multi: null
   };
 
@@ -191,19 +194,23 @@ table.cal{width:calc(100% - 24px);margin:0 12px;border-collapse:collapse;table-l
     Array.prototype.forEach.call($('tabs').children, function (b) { b.classList.toggle('on', b.dataset.tab === t); });
     $('p_shiire').hidden = t !== 'shiire';
     $('p_tana').hidden = t !== 'tana';
+    $('siteSeg').hidden = t !== 'tana';
     endMulti();
     $('foot').hidden = t !== 'tana';
     if (t === 'shiire') loadMonth(st.calYm); else { renderTana(); loadTana(st.site); }
   }
   $('tabs').onclick = function (e) { var b = e.target.closest('button'); if (b) setTab(b.dataset.tab); };
+  function drawSites() {
+    Array.prototype.forEach.call($('siteSeg').children, function (b) { b.classList.toggle('on', b.dataset.s === st.site); });
+  }
   function setSite(s) {
     st.site = s; lsPut(LS.site, s);
-    $('siteBtn').textContent = SITES[s];
-    st.view = 0;
+    drawSites();
+    st.view = 0;   // 部屋は「左」に戻す
     endMulti();
     if (st.tab === 'tana') { renderTana(); loadTana(s); }
   }
-  $('siteBtn').onclick = function () { setSite(st.site === 'yorii' ? 'shinrin' : 'yorii'); };
+  $('siteSeg').onclick = function (e) { var b = e.target.closest('button'); if (b && b.dataset.s !== st.site) setSite(b.dataset.s); };
 
   // ---------------------------------------------------------------- 仕入れ（入荷予定のカレンダー）
   /** 便の種類 → 色（c＝チャーター便・青／h＝引き取り・橙／g＝分からない・灰） */
@@ -231,12 +238,11 @@ table.cal{width:calc(100% - 24px);margin:0 12px;border-collapse:collapse;table-l
   }
   function rowsOfDay(ymd) {
     var rows = st.nyuka[ymd.slice(0, 7)] || [];
-    return rows.filter(function (x) { return x.date === ymd && (st.calFilter === 'all' || x.site === st.calFilter) && Number(x.count) > 0; });
+    return rows.filter(function (x) { return x.date === ymd && Number(x.count) > 0; });
   }
   function renderCal() {
     var r = monthRange(st.calYm);
     $('monTitle').textContent = r.y + '年' + r.m + '月';
-    Array.prototype.forEach.call($('calSeg').children, function (b) { b.classList.toggle('on', b.dataset.f === st.calFilter); });
     var first = new Date(r.y, r.m - 1, 1).getDay(), last = new Date(r.y, r.m, 0).getDate();
     var weeks = Math.ceil((first + last) / 7);
     var h = '<tr>' + WEEK.map(function (w) { return '<th>' + w + '</th>'; }).join('') + '</tr>';
@@ -250,7 +256,7 @@ table.cal{width:calc(100% - 24px);margin:0 12px;border-collapse:collapse;table-l
         h += '<td data-d="' + ymd + '" class="' + (ymd === today ? 'today' : '') + (ymd === st.calSel ? ' sel' : '') + '">' +
           '<div class="d" style="color:' + col + '">' + d + '</div>' +
           rows.slice(0, 3).map(function (x) {
-            return '<div class="bar ' + binClass(x.bin) + '">' + esc((SHORT[x.site] || '?') + (x.kind === '未培養' ? '未' : '完') + x.count) + '</div>';
+            return '<div class="bar ' + binClass(x.bin) + '">' + esc((x.kind === '未培養' ? '未' : '完') + x.count) + '</div>';
           }).join('') + (rows.length > 3 ? '<div class="more">＋' + (rows.length - 3) + '</div>' : '') + '</td>';
       }
       h += '</tr>';
@@ -265,11 +271,10 @@ table.cal{width:calc(100% - 24px);margin:0 12px;border-collapse:collapse;table-l
     var p = parts(st.calSel), rows = rowsOfDay(st.calSel);
     el.innerHTML = '<b>' + p[1] + '/' + p[2] + '（' + WEEK[new Date(p[0], p[1] - 1, p[2]).getDay()] + '）</b>' +
       (rows.length ? rows.map(function (x) {
-        return '<div class="row"><span>' + esc(x.bin + '・' + (SITES[x.site] || x.site)) + '</span><span>' + esc(x.kind) + ' ' + num(x.count) + '</span></div>';
+        return '<div class="row"><span>' + esc(x.bin) + '</span><span>' + esc(x.kind) + ' ' + num(x.count) + '</span></div>';
       }).join('') : '<div class="none">便なし</div>');
   }
   $('cal').onclick = function (e) { var td = e.target.closest('td[data-d]'); if (td) { st.calSel = td.dataset.d; renderCal(); } };
-  $('calSeg').onclick = function (e) { var b = e.target.closest('button'); if (b) { st.calFilter = b.dataset.f; renderCal(); } };
   $('prevMon').onclick = function () { st.calYm = shiftYm(st.calYm, -1); loadMonth(st.calYm); };
   $('nextMon').onclick = function () { st.calYm = shiftYm(st.calYm, 1); loadMonth(st.calYm); };
 
@@ -614,7 +619,7 @@ table.cal{width:calc(100% - 24px);margin:0 12px;border-collapse:collapse;table-l
   $('recBtn').onclick = function () { var v = curView(); if (v) openRecord(v.room, []); };
 
   // ---------------------------------------------------------------- 始める
-  $('siteBtn').textContent = SITES[st.site];
+  drawSites();
   L.initWork({ lazy: true }).then(function () { setTab(st.tab); }, function () { setTab(st.tab); });
 })();
 </script>
