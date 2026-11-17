@@ -13,7 +13,8 @@
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.34.0/dist/tabler-icons.min.css">
 <style>
 /* 【2026-11-10 杉さん承認 23:53】ホームのデザイン刷新（案B ライト）。配達／ハウス作業は左右のスワイプで切り替え。
-   旧 /kanri.html は /index.html#house へ転送。PORTAL_BUILD = 'portal-light-swipe-20261110' */
+   旧 /kanri.html は /index.html#house へ転送。PORTAL_BUILD = 'portal-light-swipe-20261110'
+   【2026-11-17 杉さん承認 08:38】配達｜中の作業｜その他 の3ページ。中の作業＝袋出し管理だけ。その他＝前のハウス作業（id は house のまま＝旧 kanri.html の転送先）。PORTAL_BUILD = 'portal-3pages-20261117' */
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{height:100%}
 body{
@@ -89,7 +90,11 @@ const PAGES = [
     // 店舗依頼ボード（2026-10-03 杉さん了承）
     { icon:'ti-clipboard-text',  name:'店舗依頼',   url:'https://sakae-garden.github.io/nippo/irai.html',        color:'teal'   },
   ]},
-  { id:'house', label:'ハウス作業', apps:[
+  // 中の従業員が開く場所（2026-11-17）
+  { id:'naka', label:'中の作業', apps:[
+    { icon:'ti-layout-grid', name:'袋出し管理', url:'https://sakae-garden.github.io/tougou/next/fukuro.html', color:'orange' },
+  ]},
+  { id:'house', label:'その他', apps:[
     // 袋出し記録・栽培シフトは別リポジトリの Project Pages のため絶対URL
     { icon:'ti-mushroom',   name:'袋出し記録',   url:'https://sakae-garden.github.io/nippo/fukurodashi.html',         color:'teal'   },
     { icon:'ti-droplet',    name:'浸水記録',     url:'#',                                                             color:'blue',   wip:true },
