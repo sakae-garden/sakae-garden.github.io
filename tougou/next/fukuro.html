@@ -7,6 +7,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#2f5d3a">
 <link rel="manifest" href="manifest.webmanifest">
+<meta name="sg-build" content="fukuro-20261117-3">
 <title>袋出し管理 | 栄ガーデン</title>
 <!--
   袋出し管理（指示 20261117-0850。杉さん承認 2026-11-17 08:38）。中の従業員向け。
@@ -22,6 +23,8 @@
     面は押して選ぶ／長押しでなぞって続けて選ぶ・合計の個数（選んだ順に1面の個数ずつ、端数は最後の面）。
     予約の面は赤（tana.add reserve）。押すと「袋出し済みにする」（tana.done）か「予約をやめる」（tana.cancel）。
     面を押したかどうかは指を離したとき（pointerup）に、押し始めた面で決める（押している間に棚が描き直されても取りこぼさない）
+  - 直し3（指示 20261117-1255）：記録の画面で、空きが残っている面（置いている個数＜1面の個数）も選べる（個数は残りの数。2つ目の日付になる）。
+    見出しの右上に ↻（棚と仕入れを読み直す）。新しい版が出ていたら開いたとき・戻ったときに読み直す（下の sg-build）
 -->
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -33,6 +36,9 @@ button{font-family:inherit;color:inherit;background:none;border:0;cursor:pointer
 .sites.off{visibility:hidden}
 .sites button{height:30px;padding:0 10px;border-radius:7px;font-size:13px;font-weight:700;color:rgba(255,255,255,.7)}
 .sites .on{background:#fff;color:#2f5d3a}
+.tr{display:flex;gap:6px;align-items:center}
+.rl{width:36px;height:36px;border-radius:9px;background:rgba(0,0,0,.2);color:#fff;font-size:20px;line-height:36px}
+.rl.busy{opacity:.45}
 .tabs{display:flex;background:#fff;border-bottom:1px solid #ddd}
 .tabs button{flex:1;text-align:center;padding:10px 0;font-size:15px;color:#777;border-bottom:3px solid transparent}
 .tabs .on{color:#2f5d3a;font-weight:700;border-bottom-color:#2f5d3a}
@@ -115,6 +121,7 @@ table.cal{width:calc(100% - 24px);margin:0 12px;border-collapse:collapse;table-l
 .mini .c{flex:1;min-width:0;height:30px;border-radius:3px;background:#fff;border:1px dashed #bbb;font-size:11px;display:flex;align-items:center;justify-content:center;padding:0}
 .mini .x{background:#ccc;border:none}
 .mini .r{background:#f1b5b2;border:none}
+.mini .h{background:linear-gradient(135deg,#ccc 50%,#fff 50%);border:1px dashed #bbb;color:#444}
 .mini .sel{background:#f2c46d;border:2px solid #b07d10;font-weight:700}
 .tot{display:flex;justify-content:space-between;align-items:center;margin:12px 0;font-size:15px}
 .tot input{width:104px;height:50px;margin:0 6px;font-size:26px;font-weight:700;text-align:center;border:2px solid #1f6fd1;border-radius:10px;font-family:inherit;color:#222;outline:none}
@@ -140,7 +147,7 @@ table.cal{width:calc(100% - 24px);margin:0 12px;border-collapse:collapse;table-l
 </style>
 </head>
 <body>
-<div class="top"><span>袋出し管理</span><div class="sites off" id="siteSeg"><button type="button" data-s="yorii">寄居</button><button type="button" data-s="shinrin">森林公園</button></div></div>
+<div class="top"><span>袋出し管理</span><div class="tr"><div class="sites off" id="siteSeg"><button type="button" data-s="yorii">寄居</button><button type="button" data-s="shinrin">森林公園</button></div><button type="button" class="rl" id="reload" aria-label="読み直す">↻</button></div></div>
 <div class="tabs" id="tabs"><button type="button" data-tab="shiire">仕入れ</button><button type="button" data-tab="tana">棚</button></div>
 
 <div class="panel" id="p_shiire" hidden>
@@ -234,6 +241,12 @@ table.cal{width:calc(100% - 24px);margin:0 12px;border-collapse:collapse;table-l
     if (st.tab === 'tana') { renderTana(); loadTana(s); }
   }
   $('siteSeg').onclick = function (e) { var b = e.target.closest('button'); if (b && b.dataset.s !== st.site) setSite(b.dataset.s); };
+  /** ↻：棚（GAS）と仕入れ（Cloud Run）をその場で読み直す。読んでいる間は ↻ を薄くし、カレンダー・棚の上に「読み込み中…」 */
+  function drawReload() { $('reload').classList.toggle('busy', !!(st.calBusy[st.calYm] || st.tanaBusy[st.site])); }
+  $('reload').onclick = function () {
+    st.nyukaAt[st.calYm] = 0; loadMonth(st.calYm);
+    if (st.tab === 'tana' && !st.tanaBusy[st.site]) loadTana(st.site);
+  };
 
   // ---------------------------------------------------------------- 仕入れ（入荷予定のカレンダー）
   /** 便の種類 → 色（c＝チャーター便・青／h＝引き取り・橙／g＝分からない・灰） */
@@ -276,7 +289,7 @@ table.cal{width:calc(100% - 24px);margin:0 12px;border-collapse:collapse;table-l
       .then(function (res) { if (!res || !res.ok) throw new Error((res && res.error) || '読めません'); return res; })
       .catch(function () { return gas('nyuka.list', { from: r.from, to: r.to }); });
   }
-  function drawCalLoad() { $('calLoad').hidden = !st.calBusy[st.calYm]; }
+  function drawCalLoad() { $('calLoad').hidden = !st.calBusy[st.calYm]; drawReload(); }
   function loadMonth(ym) {
     renderCal();
     if (st.calBusy[ym] || Date.now() - (st.nyukaAt[ym] || 0) < 60000) return;   // 1分以内に読んだ月は読み直さない
@@ -336,7 +349,7 @@ table.cal{width:calc(100% - 24px);margin:0 12px;border-collapse:collapse;table-l
 
   // ---------------------------------------------------------------- 棚（見取り図）
   function tanaOf(site) { return st.tana[site] || lsGet(LS.tana + site); }
-  function drawTanaLoad() { var d = tanaOf(st.site); $('tanaLoad').hidden = !(st.tanaBusy[st.site] && d && d.rooms && d.rooms.length); }
+  function drawTanaLoad() { var d = tanaOf(st.site); $('tanaLoad').hidden = !(st.tanaBusy[st.site] && d && d.rooms && d.rooms.length); drawReload(); }
   /**
    * 開いたときにログインが切れていそうなら、始めるときにセッションを外してログインを先に走らせ（initWork の lazy）、
    * その間に前のトークンで tana.list を呼ぶ。通ればそれを使い、切れていれば（AUTH）ログインを待って呼び直す
@@ -636,9 +649,10 @@ table.cal{width:calc(100% - 24px);margin:0 12px;border-collapse:collapse;table-l
 
   /**
    * 袋出しを記録（済み／予約・並べた日・面・合計の個数）。
-   * 面は押して選ぶ／もう一度押すと外す。長押しするとそのままなぞって続けて選べる。埋まっている面・予約の面は選べない
-   * （埋まっている面の「追加」から開いたときだけ、その面を済みで選べる）。
-   * 合計は選んだ面の数×1面の個数から始まり、直すと選んだ順に1面の個数ずつ埋め、端数は最後の面に入れる
+   * 面は押して選ぶ／もう一度押すと外す。長押しするとそのままなぞって続けて選べる。満杯の面・予約の面は選べない
+   * （満杯の面は「追加」から開いたときだけ済みで選べる）。空きが残っている面（置いている個数＜1面の個数）は済みなら選べて、
+   * 個数は残りの数（直し3。斜めの2色になる）。予約で選べるのは空の面だけ。
+   * 合計は選んだ面の空きの合計から始まり、直すと選んだ順に空きの数ずつ埋め、端数は最後の面に入れる
    */
   function openRecord(room, preset) {
     var d = tanaOf(st.site), site = st.site;
@@ -648,7 +662,7 @@ table.cal{width:calc(100% - 24px);margin:0 12px;border-collapse:collapse;table-l
     var full = function (f) { return !!(fm[f] && fm[f].length); };
     var extra = {};   // 追加から開いた面
     (preset || []).forEach(function (f) { if (full(f) && !isResv(fm[f])) extra[f] = true; });
-    function canPick(f) { return !isResv(fm[f]) && (!full(f) || (extra[f] && !rec.resv)); }
+    function canPick(f) { return !isResv(fm[f]) && (!full(f) || !rec.resv && (extra[f] || used(f) < rec.per)); }
     function capOf(f) { return full(f) ? Math.max(1, rec.per - used(f)) : rec.per; }
     function firstDay() { return rec.resv ? addDays(base, 1) : base; }
     (preset || []).forEach(function (f) { if (canPick(f) && rec.order.indexOf(f) < 0) rec.order.push(f); });
@@ -702,6 +716,7 @@ table.cal{width:calc(100% - 24px);margin:0 12px;border-collapse:collapse;table-l
     if (sh.q('[data-el="per"]')) sh.q('[data-el="per"]').onclick = function (e) {
       var b = e.target.closest('button'); if (!b) return;
       rec.per = Number(b.dataset.n);
+      rec.order = rec.order.filter(canPick);   // 1面の個数を減らすと満杯になる面は外れる
       drawPer(); resetTotal();
     };
     /** 面ごとの個数：選んだ順に1面の個数ずつ埋め、端数（足りない分・余る分）は最後の面 */
@@ -726,8 +741,9 @@ table.cal{width:calc(100% - 24px);margin:0 12px;border-collapse:collapse;table-l
       var cnt = split();
       Array.prototype.forEach.call(mini.querySelectorAll('button[data-f]'), function (b) {
         var f = b.dataset.f, on = rec.order.indexOf(f) >= 0;
-        b.className = 'c ' + (on ? 'sel' : isResv(fm[f]) ? 'r' : canPick(f) ? '' : 'x');
-        b.textContent = on && cnt[f] !== capOf(f) ? String(cnt[f]) : '';   // 1面の個数と違う面（端数）だけ数字を出す
+        var part = !on && full(f) && canPick(f) && used(f) < rec.per;   // 空きが残っている面（斜めの灰。数字は空きの数）
+        b.className = 'c ' + (on ? 'sel' : isResv(fm[f]) ? 'r' : !canPick(f) ? 'x' : part ? 'h' : '');
+        b.textContent = on ? (cnt[f] !== capOf(f) ? String(cnt[f]) : '') : part ? String(capOf(f)) : '';   // 選んだ面は空きと違う数（端数）だけ出す
       });
     }
     function resetTotal() {
@@ -821,6 +837,32 @@ table.cal{width:calc(100% - 24px);margin:0 12px;border-collapse:collapse;table-l
   // 仕入れはログインが要らないので、ログインを待たずに読み始める（棚で開いたときも先に読んでおく）
   loadMonth(st.calYm);
   ready.then(function () { setTab(st.tab); }, function () { setTab(st.tab); });
+})();
+</script>
+<script>
+// 新しい版が出ていたら読み直す（直し3）。ホーム画面のアプリは開き直しても前の画面がそのまま続くことがあり、
+// Pages の HTML は10分キャッシュされるため。開いたとき・アプリに戻ったときに、この HTML をキャッシュなしで読んで sg-build を比べる。
+// 記録・予約の画面を開いている間や送信中は読み直さない（次に戻ったときにまた見る）。電波が無ければ今の画面のまま
+(function () {
+  var BUILD = document.querySelector('meta[name="sg-build"]').content, KEY = 'sg.build.reloaded.' + location.pathname, last = 0;
+  function busy() {
+    var C = window.TougouCommon;
+    return !!(document.querySelector('.dim') || !document.getElementById('multiFoot').hidden || (C && C.isRunning && C.isRunning('tana')));
+  }
+  function check() {
+    if (!window.fetch || Date.now() - last < 30000) return;
+    last = Date.now();
+    fetch(location.pathname, { cache: 'no-store' }).then(function (r) { return r.ok ? r.text() : ''; }).then(function (t) {
+      var m = /<meta name="sg-build" content="([^"]+)"/.exec(t);
+      if (!m || m[1] === BUILD || busy()) return;
+      try { if (sessionStorage.getItem(KEY) === m[1]) return; sessionStorage.setItem(KEY, m[1]); } catch (e) { return; }   // 読み直しても古いままなら繰り返さない
+      var urls = [location.pathname].concat(Array.prototype.map.call(document.scripts, function (s) { return s.src; }).filter(function (u) { return u && u.indexOf(location.origin + '/') === 0; }));
+      Promise.all(urls.map(function (u) { return fetch(u, { cache: 'reload' }).catch(function () {}); })).then(function () { location.reload(); });
+    }).catch(function () { /* 電波が無いときは今の画面のまま */ });
+  }
+  check();
+  document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') check(); });
+  window.addEventListener('pageshow', function (e) { if (e.persisted) check(); });
 })();
 </script>
 </body>
