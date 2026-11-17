@@ -15,17 +15,24 @@
   - ログインは作業記録と同じ（名前を選ぶだけ。SgLogin.initWork）
   - 作業記録の袋出し（生産記録）とはつながない（第1版）
   - 直し1（指示 20261117-1050）：棚の拠点は見出しの下の2ボタン（棚のときだけ）。仕入れは拠点を分けない
+  - 直し2（指示 20261117-1102）：仕入れは Cloud Run nippo-api の nyukaList（ログイン不要・入荷一覧と同じ）から読み、
+    月ごとにスマホに覚えて開いたらまずそれを出す（読めなければ GAS の nyuka.list）。読み込み中はカレンダー・棚の上に「読み込み中…」。
+    棚は GAS のまま。前の GAS の通信から5.5時間たっていたら（ログインは6時間で切れる）ログインと tana.list を並べて呼ぶ
+  - 直し2（指示 20261117-1120）：拠点は見出しの右上に小さく。記録の画面は「袋出し済み｜袋出し予約」・並べた日（今日｜日付を選ぶ）・
+    面は押して選ぶ／長押しでなぞって続けて選ぶ・合計の個数（選んだ順に1面の個数ずつ、端数は最後の面）。
+    予約の面は赤（tana.add reserve）。押すと「袋出し済みにする」（tana.done）か「予約をやめる」（tana.cancel）。
+    面を押したかどうかは指を離したとき（pointerup）に、押し始めた面で決める（押している間に棚が描き直されても取りこぼさない）
 -->
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%}
 body{max-width:480px;margin:0 auto;height:100dvh;display:flex;flex-direction:column;font-family:"Noto Sans JP","Hiragino Sans",sans-serif;background:#f6f3ec;color:#222;overflow:hidden;-webkit-tap-highlight-color:transparent;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
 button{font-family:inherit;color:inherit;background:none;border:0;cursor:pointer}
-.top{background:#2f5d3a;color:#fff;padding:calc(env(safe-area-inset-top) + 12px) 16px 12px;font-size:18px;font-weight:700}
-.sites{display:flex;gap:8px;background:#2f5d3a;padding:0 12px 10px}
-.sites[hidden]{display:none}
-.sites button{flex:1;height:44px;border-radius:10px;font-size:16px;font-weight:700;color:rgba(255,255,255,.75);border:1.5px solid rgba(255,255,255,.35)}
-.sites .on{background:#fff;color:#2f5d3a;border-color:#fff}
+.top{display:flex;justify-content:space-between;align-items:center;background:#2f5d3a;color:#fff;padding:calc(env(safe-area-inset-top) + 9px) 12px 9px 16px;font-size:18px;font-weight:700}
+.sites{display:flex;gap:2px;background:rgba(0,0,0,.2);border-radius:9px;padding:3px}
+.sites.off{visibility:hidden}
+.sites button{height:30px;padding:0 10px;border-radius:7px;font-size:13px;font-weight:700;color:rgba(255,255,255,.7)}
+.sites .on{background:#fff;color:#2f5d3a}
 .tabs{display:flex;background:#fff;border-bottom:1px solid #ddd}
 .tabs button{flex:1;text-align:center;padding:10px 0;font-size:15px;color:#777;border-bottom:3px solid transparent}
 .tabs .on{color:#2f5d3a;font-weight:700;border-bottom-color:#2f5d3a}
@@ -73,6 +80,7 @@ table.cal{width:calc(100% - 24px);margin:0 12px;border-collapse:collapse;table-l
 .f.mix b{font-size:12px;line-height:1.1}.f.mix s{font-size:9px;letter-spacing:-.4px}
 .f .old{position:absolute;top:3px;right:3px;width:7px;height:7px;border-radius:50%;background:#c0392b}
 .f.pick{outline:3px solid #1f6fd1;outline-offset:-3px}
+.f.resv{background:#d9443f}.f.resv b,.f.resv s{color:#fff}
 .door{text-align:center;font-size:12px;color:#888;margin:6px 0 2px}
 .pg{text-align:center;font-size:18px;color:#ccc;letter-spacing:6px;height:20px}
 .pg b{color:#2f5d3a;font-weight:400}
@@ -96,15 +104,20 @@ table.cal{width:calc(100% - 24px);margin:0 12px;border-collapse:collapse;table-l
 .chips{display:flex;gap:8px;flex-wrap:wrap}
 .chips button{padding:9px 12px;border-radius:20px;border:1.5px solid #ccc;font-size:15px}
 .chips .on{border-color:#2f5d3a;background:#e5f0e7;font-weight:700}
+.pills{display:flex;gap:8px}
+.pills button{flex:1;height:44px;border-radius:22px;border:1.5px solid #ccc;font-size:16px}
+.pills .on{border-color:#2f5d3a;background:#e5f0e7;font-weight:700}
+.pills .on.rv{border-color:#d9443f;background:#fdecec;color:#b42318}
 .mini{display:flex;gap:4px}
 .mini .sh{flex:1;min-width:0;background:#eee;border-radius:6px;padding:3px 2px}
 .mini .t{font-size:11px;text-align:center;font-weight:700}
 .mini .p{display:flex;gap:2px;margin-top:2px}
 .mini .c{flex:1;min-width:0;height:30px;border-radius:3px;background:#fff;border:1px dashed #bbb;font-size:11px;display:flex;align-items:center;justify-content:center;padding:0}
 .mini .x{background:#ccc;border:none}
+.mini .r{background:#f1b5b2;border:none}
 .mini .sel{background:#f2c46d;border:2px solid #b07d10;font-weight:700}
-.tot{display:flex;justify-content:space-between;align-items:center;margin:14px 0;font-size:15px}
-.tot b{font-size:26px}
+.tot{display:flex;justify-content:space-between;align-items:center;margin:12px 0;font-size:15px}
+.tot input{width:104px;height:50px;margin:0 6px;font-size:26px;font-weight:700;text-align:center;border:2px solid #1f6fd1;border-radius:10px;font-family:inherit;color:#222;outline:none}
 .err{font-size:14px;color:#b91c1c;margin-bottom:8px}
 .err:empty{display:none}
 .rec{display:flex;justify-content:space-between;padding:8px 0;border-top:1px solid #eee;font-size:15px}
@@ -119,18 +132,21 @@ table.cal{width:calc(100% - 24px);margin:0 12px;border-collapse:collapse;table-l
 .edit input{flex:1;min-width:0;height:44px;font-size:20px;font-weight:700;text-align:center;border:1px solid #9ca3af;border-radius:8px;font-family:inherit}
 .edit button{height:44px;padding:0 12px;border-radius:8px;font-size:15px;font-weight:700;background:#fff;border:1.5px solid #ccc}
 .edit .ok{border-color:#2f5d3a;color:#2f5d3a}
+.calwrap,.pwrap{position:relative}
+.loading{position:absolute;left:50%;top:84px;transform:translateX(-50%);z-index:5;pointer-events:none;white-space:nowrap;background:rgba(255,255,255,.96);border:1px solid #ddd;border-radius:18px;padding:7px 16px;font-size:14px;color:#555;box-shadow:0 1px 5px rgba(0,0,0,.14)}
+.loading[hidden]{display:none}
+#tanaLoad{top:-36px}
 .hidedate{position:absolute;opacity:0;width:1px;height:1px;pointer-events:none}
 </style>
 </head>
 <body>
-<div class="top">袋出し管理</div>
-<div class="sites" id="siteSeg" hidden><button type="button" data-s="yorii">寄居</button><button type="button" data-s="shinrin">森林公園</button></div>
+<div class="top"><span>袋出し管理</span><div class="sites off" id="siteSeg"><button type="button" data-s="yorii">寄居</button><button type="button" data-s="shinrin">森林公園</button></div></div>
 <div class="tabs" id="tabs"><button type="button" data-tab="shiire">仕入れ</button><button type="button" data-tab="tana">棚</button></div>
 
 <div class="panel" id="p_shiire" hidden>
   <div class="mon"><button type="button" id="prevMon" aria-label="前の月">‹</button><span id="monTitle"></span><button type="button" id="nextMon" aria-label="次の月">›</button></div>
   <div class="msg" id="calMsg"></div>
-  <table class="cal" id="cal"></table>
+  <div class="calwrap"><table class="cal" id="cal"></table><div class="loading" id="calLoad" hidden>読み込み中…</div></div>
   <div class="leg"><span><i style="background:#2b6cb0"></i>チャーター便</span><span><i style="background:#dd7a1f"></i>引き取り</span></div>
   <div class="list" id="dayList"></div>
 </div>
@@ -139,7 +155,7 @@ table.cal{width:calc(100% - 24px);margin:0 12px;border-collapse:collapse;table-l
   <div class="seg" id="roomSeg"></div>
   <div class="sum" id="tanaSum"></div>
   <div class="msg" id="tanaMsg"></div>
-  <div class="pager" id="pager"></div>
+  <div class="pwrap"><div class="pager" id="pager"></div><div class="loading" id="tanaLoad" hidden>読み込み中…</div></div>
   <div class="pg" id="pg"></div>
   <div class="tleg" id="tleg"></div>
   <div class="spacer"></div>
@@ -157,7 +173,10 @@ table.cal{width:calc(100% - 24px);margin:0 12px;border-collapse:collapse;table-l
   var WEEK = ['日', '月', '火', '水', '木', '金', '土'];
   var PAL = ['#7fb3e6', '#8fd19e', '#f2c46d', '#e9a0b8', '#b9a3e3', '#7fd3cf', '#f0a374', '#c5d86d', '#d9b38c', '#a7c7e7'];
   var OLD_DAYS = 20;
-  var LS = { site: 'sg.fukuro.site', tab: 'sg.fukuro.tab', tana: 'sg.fukuro.tana.' };
+  var LS = { site: 'sg.fukuro.site', tab: 'sg.fukuro.tab', tana: 'sg.fukuro.tana.', nyuka: 'sg.fukuro.nyuka.', okAt: 'sg.fukuro.okAt' };
+  var BOARD_API = 'https://nippo-api-7lc5gs4g6q-an.a.run.app/api';
+  var STALE_MS = 5.5 * 3600 * 1000;   // GAS のログインは最後に使ってから6時間で切れる
+  var NYUKA_KEEP_MONTHS = 3;          // 覚えた仕入れは今月の3か月前より古い月を消す
 
   function $(id) { return document.getElementById(id); }
   function lsGet(k) { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) { return null; } }
@@ -174,7 +193,7 @@ table.cal{width:calc(100% - 24px);margin:0 12px;border-collapse:collapse;table-l
   var colors = {};
   function setColors(d) {
     var ds = {}; colors = {};
-    (d && d.faces || []).forEach(function (x) { ds[x.date] = 1; });
+    (d && d.faces || []).forEach(function (x) { if (!x.reserve) ds[x.date] = 1; });
     Object.keys(ds).sort().forEach(function (x, i) { colors[x] = PAL[i % PAL.length]; });
   }
   function colorOf(ymd) { return colors[ymd] || '#ddd'; }
@@ -184,9 +203,13 @@ table.cal{width:calc(100% - 24px);margin:0 12px;border-collapse:collapse;table-l
   var st = {
     site: lsGet(LS.site) === 'shinrin' ? 'shinrin' : 'yorii',
     tab: lsGet(LS.tab) === 'shiire' ? 'shiire' : 'tana',
-    calYm: today.slice(0, 7), calSel: today, nyuka: {},
-    tana: {}, view: 0, multi: null
+    calYm: today.slice(0, 7), calSel: today, nyuka: {}, nyukaAt: {}, calBusy: {},
+    tana: {}, tanaBusy: {}, view: 0, multi: null
   };
+  /** GAS を呼ぶ（成功した時刻を覚え、ログインが切れていそうかの目安にする） */
+  function gas(action, params) {
+    return C.api(action, params).then(function (res) { lsPut(LS.okAt, Date.now()); return res; });
+  }
 
   // ---------------------------------------------------------------- 画面の切り替え
   function setTab(t) {
@@ -194,7 +217,7 @@ table.cal{width:calc(100% - 24px);margin:0 12px;border-collapse:collapse;table-l
     Array.prototype.forEach.call($('tabs').children, function (b) { b.classList.toggle('on', b.dataset.tab === t); });
     $('p_shiire').hidden = t !== 'shiire';
     $('p_tana').hidden = t !== 'tana';
-    $('siteSeg').hidden = t !== 'tana';
+    $('siteSeg').classList.toggle('off', t !== 'tana');
     endMulti();
     $('foot').hidden = t !== 'tana';
     if (t === 'shiire') loadMonth(st.calYm); else { renderTana(); loadTana(st.site); }
@@ -225,19 +248,51 @@ table.cal{width:calc(100% - 24px);margin:0 12px;border-collapse:collapse;table-l
     return { y: p[0], m: p[1], from: ymdOf(p[0], p[1], 1), to: ymdOf(p[0], p[1] + 1, 0) };
   }
   function shiftYm(ym, n) { var p = ym.split('-').map(Number); return ymdOf(p[0], p[1] + n, 1).slice(0, 7); }
+  /** その月の仕入れ（読んだもの → スマホに覚えたもの） */
+  function nyukaOf(ym) {
+    if (st.nyuka[ym]) return st.nyuka[ym];
+    var c = lsGet(LS.nyuka + ym);
+    return c && c.rows || null;
+  }
+  function putNyuka(ym, rows) {
+    st.nyuka[ym] = rows; st.nyukaAt[ym] = Date.now();
+    lsPut(LS.nyuka + ym, { rows: rows, at: Date.now() });
+    var oldest = shiftYm(today.slice(0, 7), -NYUKA_KEEP_MONTHS);
+    try {
+      for (var i = localStorage.length - 1; i >= 0; i--) {
+        var k = localStorage.key(i);
+        if (k && k.indexOf(LS.nyuka) === 0 && k.slice(LS.nyuka.length) < oldest) localStorage.removeItem(k);
+      }
+    } catch (e) { /* 消せないだけ */ }
+  }
+  /** Cloud Run（15分おきに読み直して覚えた値。ログイン不要）。読めなければ GAS に聞く */
+  function fetchNyuka(r) {
+    if (C.DEMO) return gas('nyuka.list', { from: r.from, to: r.to });   // デモ表示は今までどおり GAS の仮の数字
+    var ac = window.AbortController ? new AbortController() : null;
+    var timer = ac && setTimeout(function () { ac.abort(); }, 8000);   // Cloud Run が起きたてで GAS を待っているときは見切る
+    return fetch(BOARD_API, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, signal: ac ? ac.signal : undefined,
+                              body: JSON.stringify({ action: 'nyukaList', params: { from: r.from, to: r.to } }) })
+      .then(function (x) { clearTimeout(timer); return x.json(); })
+      .then(function (res) { if (!res || !res.ok) throw new Error((res && res.error) || '読めません'); return res; })
+      .catch(function () { return gas('nyuka.list', { from: r.from, to: r.to }); });
+  }
+  function drawCalLoad() { $('calLoad').hidden = !st.calBusy[st.calYm]; }
   function loadMonth(ym) {
     renderCal();
-    var r = monthRange(ym);
-    C.api('nyuka.list', { from: r.from, to: r.to }).then(function (res) {
-      st.nyuka[ym] = res.rows || [];
-      $('calMsg').textContent = '';
-      if (st.calYm === ym) renderCal();
+    if (st.calBusy[ym] || Date.now() - (st.nyukaAt[ym] || 0) < 60000) return;   // 1分以内に読んだ月は読み直さない
+    st.calBusy[ym] = true; drawCalLoad(); renderDay(); $('calMsg').textContent = '';
+    fetchNyuka(monthRange(ym)).then(function (res) {
+      putNyuka(ym, res.rows || []);
+      if (st.calYm === ym) $('calMsg').textContent = '';
     }, function (err) {
-      if (st.calYm === ym) $('calMsg').textContent = '読み込めません' + (err && err.network ? '' : '：' + (err && err.message || err));
+      if (st.calYm === ym) $('calMsg').textContent = '読み込めません' + (nyukaOf(ym) ? '（前に読んだ予定を表示しています）' : err && err.network ? '' : '：' + (err && err.message || err));
+    }).then(function () {
+      st.calBusy[ym] = false;
+      if (st.calYm === ym) renderCal();
     });
   }
   function rowsOfDay(ymd) {
-    var rows = st.nyuka[ymd.slice(0, 7)] || [];
+    var rows = nyukaOf(ymd.slice(0, 7)) || [];
     return rows.filter(function (x) { return x.date === ymd && Number(x.count) > 0; });
   }
   function renderCal() {
@@ -262,6 +317,7 @@ table.cal{width:calc(100% - 24px);margin:0 12px;border-collapse:collapse;table-l
       h += '</tr>';
     }
     var t = $('cal'); t.innerHTML = h; t.classList.toggle('six', weeks > 5);
+    drawCalLoad();
     renderDay();
   }
   function renderDay() {
@@ -272,7 +328,7 @@ table.cal{width:calc(100% - 24px);margin:0 12px;border-collapse:collapse;table-l
     el.innerHTML = '<b>' + p[1] + '/' + p[2] + '（' + WEEK[new Date(p[0], p[1] - 1, p[2]).getDay()] + '）</b>' +
       (rows.length ? rows.map(function (x) {
         return '<div class="row"><span>' + esc(x.bin) + '</span><span>' + esc(x.kind) + ' ' + num(x.count) + '</span></div>';
-      }).join('') : '<div class="none">便なし</div>');
+      }).join('') : '<div class="none">' + (nyukaOf(st.calYm) ? '便なし' : st.calBusy[st.calYm] ? '読み込み中…' : '読み込めません') + '</div>');
   }
   $('cal').onclick = function (e) { var td = e.target.closest('td[data-d]'); if (td) { st.calSel = td.dataset.d; renderCal(); } };
   $('prevMon').onclick = function () { st.calYm = shiftYm(st.calYm, -1); loadMonth(st.calYm); };
@@ -280,13 +336,29 @@ table.cal{width:calc(100% - 24px);margin:0 12px;border-collapse:collapse;table-l
 
   // ---------------------------------------------------------------- 棚（見取り図）
   function tanaOf(site) { return st.tana[site] || lsGet(LS.tana + site); }
+  function drawTanaLoad() { var d = tanaOf(st.site); $('tanaLoad').hidden = !(st.tanaBusy[st.site] && d && d.rooms && d.rooms.length); }
+  /**
+   * 開いたときにログインが切れていそうなら、始めるときにセッションを外してログインを先に走らせ（initWork の lazy）、
+   * その間に前のトークンで tana.list を呼ぶ。通ればそれを使い、切れていれば（AUTH）ログインを待って呼び直す
+   */
+  var oldToken = null;
+  function listTana(site) {
+    var tok = oldToken; oldToken = null;
+    if (!tok) return gas('tana.list', { site: site });
+    return C.callApi({ action: 'tana.list', token: tok, site: site }).then(function (res) {
+      if (res && res.ok) { lsPut(LS.okAt, Date.now()); return res; }
+      if (res && res.code === 'AUTH') return gas('tana.list', { site: site });
+      var e = new Error((res && res.error) || 'サーバがエラーを返しました。'); e.code = res && res.code; throw e;
+    }, function () { return gas('tana.list', { site: site }); });
+  }
   function loadTana(site) {
-    C.api('tana.list', { site: site }).then(function (res) {
+    st.tanaBusy[site] = (st.tanaBusy[site] || 0) + 1; drawTanaLoad();
+    listTana(site).then(function (res) {
       setTana(site, res);
       $('tanaMsg').textContent = '';
     }, function (err) {
       if (st.site === site) $('tanaMsg').textContent = '読み込めません' + (err && err.network ? '' : '：' + (err && err.message || err));
-    });
+    }).then(function () { st.tanaBusy[site]--; drawTanaLoad(); });
   }
   function setTana(site, res) {
     var d = { rooms: res.rooms || [], faces: res.faces || [], today: res.today || today };
@@ -318,10 +390,14 @@ table.cal{width:calc(100% - 24px);margin:0 12px;border-collapse:collapse;table-l
     });
     return o;
   }
+  function isResv(recs) { return (recs || []).some(function (x) { return x.reserve; }); }
   function faceHtml(room, name, recs, h, base) {
     var g = byDate(recs), sel = st.multi && st.multi.room === room && st.multi.faces[name] ? ' pick' : '';
     var attr = ' data-face="' + name + '" style="height:' + h + 'px;';
     if (!g.length) return '<div class="f empty' + sel + '"' + attr + '"><s>空</s></div>';
+    if (isResv(recs)) {   // 袋出し予約（予約の面にはほかの記録を足せない）
+      return '<div class="f resv"' + attr + '"><b>' + parts(g[0].date)[2] + '<small>日</small></b><s>' + g.reduce(function (s, x) { return s + x.count; }, 0) + '個</s></div>';
+    }
     var old = dayNo(base) - dayNo(g[0].date) > OLD_DAYS ? '<i class="old"></i>' : '';
     if (g.length === 1) {
       return '<div class="f' + sel + '"' + attr + 'background:' + colorOf(g[0].date) + '">' + old +
@@ -380,13 +456,15 @@ table.cal{width:calc(100% - 24px);margin:0 12px;border-collapse:collapse;table-l
     var dots = '';
     if (v.subs > 1) for (var i = 0; i < v.subs; i++) dots += i === v.sub ? '<b>●</b>' : '●';
     $('pg').innerHTML = dots;
-    var dates = {}, anyOld = false, base = d.today || today;
+    var dates = {}, anyOld = false, anyResv = false, base = d.today || today;
     d.faces.forEach(function (x) {
       if (x.room !== v.room.room) return;
+      if (x.reserve) { anyResv = true; return; }
       dates[x.date] = 1;
       if (dayNo(base) - dayNo(x.date) > OLD_DAYS) anyOld = true;
     });
     $('tleg').innerHTML = Object.keys(dates).sort().map(function (x) { return '<span><i style="background:' + colorOf(x) + '"></i>' + md(x) + '</span>'; }).join('') +
+      (anyResv ? '<span><i style="background:#d9443f"></i>予約</span>' : '') +
       (anyOld ? '<span><span class="old"></span>' + OLD_DAYS + '日超</span>' : '');
     if (force !== true && st.multi && st.multi.room !== v.room.room) endMulti();
   }
@@ -404,40 +482,55 @@ table.cal{width:calc(100% - 24px);margin:0 12px;border-collapse:collapse;table-l
     viewChanged();
   };
 
-  // 面を押す（空き＝記録、埋まり＝内訳）・長押し（埋まりの面を複数選んで空にする）
+  // 面を押す（空き＝記録、埋まり＝内訳、予約＝済みにする／やめる）・長押し（埋まりの面を複数選んで空にする）。
+  // 押したかどうかは指を離したときに、押し始めた面で決める。click だと、押している間に棚が描き直されると
+  // （開いてすぐ新しい棚が届いたとき）押した面が消えて click が来ず、記録の画面が出なかった
   var press = null;
+  function recsOf(name) { var v = curView(); return v ? faceMap(tanaOf(st.site), v.room.room)[name] || [] : []; }
   $('pager').addEventListener('pointerdown', function (e) {
-    var f = e.target.closest('.f'); if (!f) return;
-    press = { face: f.dataset.face, x: e.clientX, y: e.clientY, long: false };
+    var f = e.target.closest('.f'); if (!f || (e.button && e.button !== 0)) return;
+    press = { face: f.dataset.face, id: e.pointerId, x: e.clientX, y: e.clientY, long: false };
     press.timer = setTimeout(function () {
-      if (!press || f.classList.contains('empty')) return;
+      if (!press || st.multi) return;
+      var recs = recsOf(press.face);
+      if (!recs.length || isResv(recs)) return;   // 長押しで選べるのは埋まっている面だけ
       press.long = true;
       startMulti(press.face);
     }, 550);
   });
   function cancelPress(e) {
-    if (!press) return;
+    if (!press || e && e.pointerId !== undefined && e.pointerId !== press.id) return;
     if (e && e.type === 'pointermove' && Math.abs(e.clientX - press.x) < 10 && Math.abs(e.clientY - press.y) < 10) return;
     clearTimeout(press.timer); press = null;
   }
-  $('pager').addEventListener('pointermove', cancelPress, { passive: true });
-  $('pager').addEventListener('pointercancel', cancelPress);
+  document.addEventListener('pointermove', cancelPress, { passive: true });
+  document.addEventListener('pointercancel', cancelPress);
+  document.addEventListener('pointerup', function (e) {
+    if (!press || e.pointerId !== press.id) return;
+    var p = press; press = null; clearTimeout(p.timer);
+    if (!p.long) tapFace(p.face);
+  });
   $('pager').addEventListener('contextmenu', function (e) { e.preventDefault(); });
-  $('pager').addEventListener('click', function (e) {
-    var f = e.target.closest('.f');
-    var p = press; if (press) { clearTimeout(press.timer); press = null; }
-    if (!f || (p && p.long)) return;
-    var name = f.dataset.face, v = curView(); if (!v) return;
-    var recs = faceMap(tanaOf(st.site), v.room.room)[name] || [];
+  function tapFace(name) {
+    var v = curView(); if (!v) return;
+    var recs = recsOf(name);
     if (st.multi) {
-      if (!recs.length) return;
+      if (!recs.length || isResv(recs)) {   // 空にする選択の最中は、空の面・予約の面は選べない
+        $('multiN').textContent = '空・予約の面は選べません';
+        clearTimeout(multiT); multiT = setTimeout(multiCount, 1600);
+        return;
+      }
       if (st.multi.faces[name]) delete st.multi.faces[name]; else st.multi.faces[name] = true;
-      f.classList.toggle('pick', !!st.multi.faces[name]);
+      var vw = $('pager').querySelectorAll('.view')[st.view], el = vw && vw.querySelector('.f[data-face="' + name + '"]');
+      if (el) el.classList.toggle('pick', !!st.multi.faces[name]);
       multiCount();
       return;
     }
-    if (recs.length) openFace(v.room, name, recs); else openRecord(v.room, [name]);
-  });
+    if (isResv(recs)) openResv(v.room, name, recs);
+    else if (recs.length) openFace(v.room, name, recs);
+    else openRecord(v.room, [name]);
+  }
+  var multiT;
 
   function startMulti(face) {
     var v = curView(); if (!v) return;
@@ -475,7 +568,7 @@ table.cal{width:calc(100% - 24px);margin:0 12px;border-collapse:collapse;table-l
     if (C.isRunning('tana')) return Promise.resolve(false);
     return new Promise(function (resolve) {
       C.runOnce('tana', btn, '送信中…', function () {
-        return C.api('tana.clear', { site: site, room: room.room, faces: faces }).then(function (res) {
+        return gas('tana.clear', { site: site, room: room.room, faces: faces }).then(function (res) {
           setTana(site, Object.assign({}, tanaOf(site), { faces: res.faces || [] }));
           resolve(true);
         }, function (err) {
@@ -512,41 +605,94 @@ table.cal{width:calc(100% - 24px);margin:0 12px;border-collapse:collapse;table-l
     };
   }
 
-  /** 袋出しを記録（並べた日・面・個数） */
+  /** 袋出し予約の面：袋出し済みにする（並べた日＝今日）か、予約をやめる */
+  function openResv(room, name, recs) {
+    var site = st.site;
+    var total = recs.reduce(function (s, x) { return s + (Number(x.count) || 0); }, 0);
+    var sh = sheet('<div class="ttl"><span>' + esc(name) + '　' + esc(room.room) + 'の部屋</span></div>' +
+      '<div style="margin-top:8px">' + recs.map(function (x) {
+        return '<div class="rec"><span><i style="background:#d9443f"></i>' + md(x.date) + ' に袋出し予約</span><span><b>' + x.count + '個</b> <span class="who">' + esc(x.surname || '') + '</span></span></div>';
+      }).join('') + '</div>' +
+      '<div class="err" data-el="err" style="margin-top:8px"></div>' +
+      '<button type="button" class="btn" data-el="done" style="margin-top:8px">袋出し済みにする（並べた日＝今日）</button>' +
+      '<button type="button" class="wbtn del" data-el="cancel" style="width:100%;margin-top:10px">予約をやめる</button>');
+    function send(action, btn) {
+      sh.q('[data-el="err"]').textContent = '';
+      C.runOnce('tana', btn, '送信中…', function () {
+        return gas(action, { site: site, room: room.room, faces: [name] }).then(function (res) {
+          setTana(site, Object.assign({}, tanaOf(site), { faces: res.faces || [] }));
+          sh.close();
+        }, function (err) {
+          sh.q('[data-el="err"]').textContent = err && err.network ? '送れませんでした。もう一度押してください' : 'できませんでした：' + (err && err.message || err);
+        });
+      });
+    }
+    sh.q('[data-el="done"]').onclick = function () { send('tana.done', this); };
+    sh.q('[data-el="cancel"]').onclick = function () {
+      if (!confirm(name + '（' + total + '個）の予約をやめますか')) return;
+      send('tana.cancel', this);
+    };
+  }
+
+  /**
+   * 袋出しを記録（済み／予約・並べた日・面・合計の個数）。
+   * 面は押して選ぶ／もう一度押すと外す。長押しするとそのままなぞって続けて選べる。埋まっている面・予約の面は選べない
+   * （埋まっている面の「追加」から開いたときだけ、その面を済みで選べる）。
+   * 合計は選んだ面の数×1面の個数から始まり、直すと選んだ順に1面の個数ずつ埋め、端数は最後の面に入れる
+   */
   function openRecord(room, preset) {
     var d = tanaOf(st.site), site = st.site;
     var base = (d && d.today) || today, fm = faceMap(d, room.room);
-    var rec = { opId: newId(), date: base, dateMode: 'today', per: room.per, sel: {}, edit: '' };
+    var rec = { opId: newId(), resv: false, date: base, picked: false, per: room.per, order: [], total: 0 };
     var used = function (f) { return (fm[f] || []).reduce(function (t, x) { return t + (Number(x.count) || 0); }, 0); };
-    var canPick = {};   // 押して選べる面：空いている面と、追加から開いた面
-    var dflt = function (f) { return Math.max(1, rec.per - used(f)); };
-    (preset || []).forEach(function (f) { canPick[f] = true; rec.sel[f] = dflt(f); });
-    var sh = sheet('<div class="ttl"><span>袋出しを記録　' + esc(room.room) + 'の部屋</span></div>' +
-      '<h3>① 並べた日</h3><div class="chips" data-el="dates"></div><input type="date" class="hidedate" data-el="pick">' +
+    var full = function (f) { return !!(fm[f] && fm[f].length); };
+    var extra = {};   // 追加から開いた面
+    (preset || []).forEach(function (f) { if (full(f) && !isResv(fm[f])) extra[f] = true; });
+    function canPick(f) { return !isResv(fm[f]) && (!full(f) || (extra[f] && !rec.resv)); }
+    function capOf(f) { return full(f) ? Math.max(1, rec.per - used(f)) : rec.per; }
+    function firstDay() { return rec.resv ? addDays(base, 1) : base; }
+    (preset || []).forEach(function (f) { if (canPick(f) && rec.order.indexOf(f) < 0) rec.order.push(f); });
+    var sh = sheet('<div class="ttl"><span data-el="ttl"></span></div>' +
+      '<div class="pills" data-el="mode" style="margin-top:12px"><button type="button" data-m="done">袋出し済み</button><button type="button" data-m="resv">袋出し予約</button></div>' +
+      '<h3 data-el="dh"></h3><div class="pills" data-el="dates"></div><input type="date" class="hidedate" data-el="pick">' +
       (room.choices.length > 1 ? '<h3>1面の個数</h3><div class="chips" data-el="per"></div>' : '') +
-      '<h3>② 置いた面（押して選ぶ）</h3><div class="mini" data-el="mini"></div><div data-el="edit"></div>' +
-      '<div class="tot" data-el="tot"></div><div class="err" data-el="err"></div><button type="button" class="btn" data-el="go">記録する</button>');
-    var pick = sh.q('[data-el="pick"]');
-    pick.max = base; pick.min = addDays(base, -120);
-    function drawDates() {
-      var y = addDays(base, -1);
-      var other = rec.dateMode === 'pick' ? md(rec.date) : '日付を選ぶ';
-      sh.q('[data-el="dates"]').innerHTML =
-        '<button type="button" data-m="today" class="' + (rec.dateMode === 'today' ? 'on' : '') + '">今日 ' + md(base) + '</button>' +
-        '<button type="button" data-m="yday" class="' + (rec.dateMode === 'yday' ? 'on' : '') + '">昨日 ' + md(y) + '</button>' +
-        '<button type="button" data-m="pick" class="' + (rec.dateMode === 'pick' ? 'on' : '') + '">' + other + '</button>';
+      '<h3>② 置いた面</h3><div class="mini" data-el="mini"></div>' +
+      '<div class="tot"><span data-el="n"></span><span>合計<input type="text" inputmode="numeric" autocomplete="off" data-el="total">個</span></div>' +
+      '<div class="err" data-el="err"></div><button type="button" class="btn" data-el="go">記録する</button>');
+    var pick = sh.q('[data-el="pick"]'), mini = sh.q('[data-el="mini"]'), totIn = sh.q('[data-el="total"]');
+    function drawMode() {
+      sh.q('[data-el="ttl"]').textContent = (rec.resv ? '袋出しを予約' : '袋出しを記録') + '　' + room.room + 'の部屋';
+      Array.prototype.forEach.call(sh.q('[data-el="mode"]').children, function (b) {
+        var on = (b.dataset.m === 'resv') === rec.resv;
+        b.classList.toggle('on', on); b.classList.toggle('rv', on && rec.resv);
+      });
+      sh.q('[data-el="dh"]').textContent = rec.resv ? '① 袋出しする日' : '① 並べた日';
+      pick.min = rec.resv ? base : addDays(base, -120);
+      pick.max = rec.resv ? addDays(base, 60) : base;
     }
+    function drawDates() {
+      var f = firstDay();
+      sh.q('[data-el="dates"]').innerHTML =
+        '<button type="button" data-m="first" class="' + (!rec.picked ? 'on' : '') + '">' + (rec.resv ? '明日 ' : '今日 ') + md(f) + '</button>' +
+        '<button type="button" data-m="pick" class="' + (rec.picked ? 'on' : '') + '">' + (rec.picked ? md(rec.date) : '日付を選ぶ') + '</button>';
+    }
+    sh.q('[data-el="mode"]').onclick = function (e) {
+      var b = e.target.closest('button'); if (!b || (b.dataset.m === 'resv') === rec.resv) return;
+      rec.resv = b.dataset.m === 'resv';
+      rec.date = firstDay(); rec.picked = false;
+      rec.order = rec.order.filter(canPick);   // 予約にすると「追加」の埋まっている面は外れる
+      drawMode(); drawDates(); drawMini(); resetTotal();
+    };
     sh.q('[data-el="dates"]').onclick = function (e) {
       var b = e.target.closest('button'); if (!b) return;
-      if (b.dataset.m === 'today') { rec.dateMode = 'today'; rec.date = base; }
-      else if (b.dataset.m === 'yday') { rec.dateMode = 'yday'; rec.date = addDays(base, -1); }
-      else { pick.value = rec.date; try { pick.showPicker(); } catch (er) { pick.focus(); pick.click(); } return; }
-      drawDates();
+      if (b.dataset.m === 'first') { rec.date = firstDay(); rec.picked = false; drawDates(); return; }
+      pick.value = rec.date;
+      try { pick.showPicker(); } catch (er) { pick.focus(); pick.click(); }
     };
     pick.onchange = function () {
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(pick.value) || pick.value > base) return;
-      rec.date = pick.value;
-      rec.dateMode = rec.date === base ? 'today' : rec.date === addDays(base, -1) ? 'yday' : 'pick';
+      var v = pick.value;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(v) || v < pick.min || v > pick.max) return;
+      rec.date = v; rec.picked = v !== firstDay();
       drawDates();
     };
     function drawPer() {
@@ -556,56 +702,102 @@ table.cal{width:calc(100% - 24px);margin:0 12px;border-collapse:collapse;table-l
     if (sh.q('[data-el="per"]')) sh.q('[data-el="per"]').onclick = function (e) {
       var b = e.target.closest('button'); if (!b) return;
       rec.per = Number(b.dataset.n);
-      Object.keys(rec.sel).forEach(function (f) { rec.sel[f] = dflt(f); });
-      drawPer(); drawMini(); drawTot();
+      drawPer(); resetTotal();
     };
-    function drawMini() {
-      sh.q('[data-el="mini"]').innerHTML = room.shelves.map(function (s) {
-        var h = '<div class="sh"><div class="t">' + s + '</div>';
-        for (var k = room.depth; k >= 1; k--) {
-          h += '<div class="p">' + ['左', '右'].map(function (side) {
-            var f = s + '-' + side + k, cls = rec.sel[f] ? 'sel' : (fm[f] && fm[f].length && !canPick[f] ? 'x' : '');
-            return '<button type="button" class="c ' + cls + '" data-f="' + f + '">' + (rec.sel[f] ? rec.sel[f] : '') + '</button>';
-          }).join('') + '</div>';
-        }
-        return h + '</div>';
-      }).join('');
+    /** 面ごとの個数：選んだ順に1面の個数ずつ埋め、端数（足りない分・余る分）は最後の面 */
+    function split() {
+      var left = rec.total, out = {};
+      rec.order.forEach(function (f, i) {
+        var n = i === rec.order.length - 1 ? left : Math.min(capOf(f), Math.max(0, left));
+        out[f] = n; left -= n;
+      });
+      return out;
     }
-    function drawEdit() {
-      var el = sh.q('[data-el="edit"]');
-      if (!rec.edit) { el.innerHTML = ''; return; }
-      el.innerHTML = '<div class="edit"><span>' + esc(rec.edit) + '</span><input type="text" inputmode="numeric" value="' + rec.sel[rec.edit] + '" autocomplete="off">' +
-        '<button type="button" data-a="off">外す</button><button type="button" class="ok" data-a="ok">決める</button></div>';
-      var inp = el.querySelector('input');
-      try { inp.focus(); inp.select(); } catch (er) { /* 無視 */ }
-      el.querySelector('[data-a="off"]').onclick = function () { delete rec.sel[rec.edit]; rec.edit = ''; drawEdit(); drawMini(); drawTot(); };
-      el.querySelector('[data-a="ok"]').onclick = function () {
-        var n = C.readNum(inp.value);
-        if (n === null || isNaN(n) || n < 1 || n > 200 || n !== Math.floor(n)) { inp.style.borderColor = '#b91c1c'; return; }
-        rec.sel[rec.edit] = n; rec.edit = ''; drawEdit(); drawMini(); drawTot();
-      };
+    function drawMini() {   // 枠は1度だけ作り、選び直しでは色と数字だけ変える（なぞっている間に指の下の面を消さない）
+      if (!mini.firstChild) {
+        mini.innerHTML = room.shelves.map(function (s) {
+          var h = '<div class="sh"><div class="t">' + s + '</div>';
+          for (var k = room.depth; k >= 1; k--) {
+            h += '<div class="p">' + ['左', '右'].map(function (side) { return '<button type="button" class="c" data-f="' + s + '-' + side + k + '"></button>'; }).join('') + '</div>';
+          }
+          return h + '</div>';
+        }).join('');
+      }
+      var cnt = split();
+      Array.prototype.forEach.call(mini.querySelectorAll('button[data-f]'), function (b) {
+        var f = b.dataset.f, on = rec.order.indexOf(f) >= 0;
+        b.className = 'c ' + (on ? 'sel' : isResv(fm[f]) ? 'r' : canPick(f) ? '' : 'x');
+        b.textContent = on && cnt[f] !== capOf(f) ? String(cnt[f]) : '';   // 1面の個数と違う面（端数）だけ数字を出す
+      });
     }
-    sh.q('[data-el="mini"]').onclick = function (e) {
-      var b = e.target.closest('button[data-f]'); if (!b) return;
-      var f = b.dataset.f;
-      if (fm[f] && fm[f].length && !canPick[f]) return;
-      if (!rec.sel[f]) { rec.sel[f] = dflt(f); rec.edit = ''; }
-      else rec.edit = rec.edit === f ? '' : f;
-      drawMini(); drawEdit(); drawTot();
-    };
+    function resetTotal() {
+      rec.total = rec.order.reduce(function (s, f) { return s + capOf(f); }, 0);
+      totIn.value = rec.order.length ? String(rec.total) : '';
+      drawMini(); drawTot();
+    }
     function drawTot() {
-      var fs = Object.keys(rec.sel), total = 0, same = true;
-      fs.forEach(function (f) { total += rec.sel[f]; if (rec.sel[f] !== rec.sel[fs[0]]) same = false; });
-      sh.q('[data-el="tot"]').innerHTML = '<span>' + fs.length + '面' + (fs.length && same ? ' × ' + rec.sel[fs[0]] + '個' : '') + '</span><span>合計 <b>' + num(total) + '</b> 個</span>';
-      sh.q('[data-el="go"]').disabled = !fs.length;
+      var n = rec.order.length, cnt = split(), bad = '';
+      sh.q('[data-el="n"]').textContent = n + '面';
+      if (n) {
+        if (!(rec.total >= 1) || rec.total !== Math.floor(rec.total)) bad = '合計は個数（整数）で入れてください';
+        else if (rec.order.some(function (f) { return cnt[f] < 1; })) bad = '合計が面の数より少なすぎます（' + rec.order.filter(function (f) { return cnt[f] < 1; }).length + '面が0個になります）';
+        else if (rec.order.some(function (f) { return cnt[f] > 200; })) bad = '1面に200個より多くは入れられません';
+      }
+      sh.q('[data-el="err"]').textContent = bad;
+      sh.q('[data-el="go"]').disabled = !n || !!bad;
     }
+    totIn.addEventListener('input', function () {
+      var v = C.readNum(totIn.value);
+      rec.total = v === null ? NaN : v;
+      drawMini(); drawTot();
+    });
+    totIn.addEventListener('focus', function () { try { totIn.select(); } catch (er) { /* 無視 */ } });
+    // 面を選ぶ：押す＝選ぶ／外す、長押し＝そのままなぞって続けて選ぶ
+    var pr = null;
+    function cellAt(x, y) {
+      var el = document.elementFromPoint(x, y); el = el && el.closest ? el.closest('button[data-f]') : null;
+      return el && mini.contains(el) ? el.dataset.f : null;
+    }
+    function addFace(f) {
+      if (!f || !canPick(f) || rec.order.indexOf(f) >= 0) return false;
+      rec.order.push(f); return true;
+    }
+    mini.addEventListener('pointerdown', function (e) {
+      var f = cellAt(e.clientX, e.clientY); if (!f || (e.button && e.button !== 0)) return;
+      pr = { f: f, id: e.pointerId, x: e.clientX, y: e.clientY, paint: false };
+      try { mini.setPointerCapture(e.pointerId); } catch (er) { /* 無視 */ }
+      pr.timer = setTimeout(function () {
+        if (!pr) return;
+        pr.paint = true;
+        if (addFace(pr.f)) resetTotal();
+        try { if (navigator.vibrate) navigator.vibrate(15); } catch (er) { /* 無視 */ }
+      }, 400);
+    });
+    mini.addEventListener('pointermove', function (e) {
+      if (!pr || e.pointerId !== pr.id) return;
+      if (pr.paint) { if (addFace(cellAt(e.clientX, e.clientY))) resetTotal(); return; }
+      if (Math.abs(e.clientX - pr.x) > 10 || Math.abs(e.clientY - pr.y) > 10) { clearTimeout(pr.timer); pr = null; }
+    });
+    mini.addEventListener('touchmove', function (e) { if (pr && pr.paint) e.preventDefault(); }, { passive: false });   // なぞる間は画面を動かさない
+    mini.addEventListener('pointerup', function (e) {
+      if (!pr || e.pointerId !== pr.id) return;
+      var p = pr; pr = null; clearTimeout(p.timer);
+      if (p.paint) return;
+      var i = rec.order.indexOf(p.f);
+      if (i >= 0) rec.order.splice(i, 1); else if (!addFace(p.f)) return;
+      resetTotal();
+    });
+    mini.addEventListener('pointercancel', function () { if (pr) { clearTimeout(pr.timer); pr = null; } });
+    mini.addEventListener('contextmenu', function (e) { e.preventDefault(); });
     sh.q('[data-el="go"]').onclick = function () {
-      var fs = Object.keys(rec.sel); if (!fs.length) return;
-      var btn = this;
+      if (!rec.order.length || this.disabled) return;
+      var btn = this, cnt = split(), resv = rec.resv;
       sh.q('[data-el="err"]').textContent = '';
       C.runOnce('tana', btn, '送信中…', function () {
-        return C.api('tana.add', { opId: rec.opId, site: site, room: room.room, date: rec.date,
-                                   faces: fs.map(function (f) { return { face: f, count: rec.sel[f] }; }) }).then(function (res) {
+        var q = { opId: rec.opId, site: site, room: room.room, date: rec.date,
+                  faces: rec.order.map(function (f) { return { face: f, count: cnt[f] }; }) };
+        if (resv) q.reserve = true;
+        return gas('tana.add', q).then(function (res) {
           setTana(site, Object.assign({}, tanaOf(site), { faces: res.faces || [] }));
           sh.close();
         }, function (err) {
@@ -614,13 +806,21 @@ table.cal{width:calc(100% - 24px);margin:0 12px;border-collapse:collapse;table-l
         });
       });
     };
-    drawDates(); drawPer(); drawMini(); drawTot();
+    drawMode(); drawDates(); drawPer(); resetTotal();
   }
   $('recBtn').onclick = function () { var v = curView(); if (v) openRecord(v.room, []); };
 
   // ---------------------------------------------------------------- 始める
   drawSites();
-  L.initWork({ lazy: true }).then(function () { setTab(st.tab); }, function () { setTab(st.tab); });
+  var sess = lsGet(L.KEYS.work);
+  if (!C.DEMO && L.person() && sess && sess.token && !(Number(lsGet(LS.okAt)) > Date.now() - STALE_MS)) {
+    oldToken = sess.token;
+    lsPut(L.KEYS.work, null);   // initWork（lazy）がすぐログインを始める
+  }
+  var ready = L.initWork({ lazy: true });   // セッションの置き場の設定はここで済む（デモの GAS もこの後に呼ぶ）
+  // 仕入れはログインが要らないので、ログインを待たずに読み始める（棚で開いたときも先に読んでおく）
+  loadMonth(st.calYm);
+  ready.then(function () { setTab(st.tab); }, function () { setTab(st.tab); });
 })();
 </script>
 </body>
