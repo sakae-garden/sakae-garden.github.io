@@ -7,7 +7,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#2f5d3a">
 <link rel="manifest" href="manifest.webmanifest">
-<meta name="sg-build" content="fukuro-20261117-3">
+<meta name="sg-build" content="fukuro-20261117-4">
 <title>袋出し管理 | 栄ガーデン</title>
 <!--
   袋出し管理（指示 20261117-0850。杉さん承認 2026-11-17 08:38）。中の従業員向け。
@@ -25,6 +25,8 @@
     面を押したかどうかは指を離したとき（pointerup）に、押し始めた面で決める（押している間に棚が描き直されても取りこぼさない）
   - 直し3（指示 20261117-1255）：記録の画面で、空きが残っている面（置いている個数＜1面の個数）も選べる（個数は残りの数。2つ目の日付になる）。
     見出しの右上に ↻（棚と仕入れを読み直す）。新しい版が出ていたら開いたとき・戻ったときに読み直す（下の sg-build）
+  - 直し4（指示 20261117-1315）：埋まっている面を押すと「直す」画面。並べた日ごとに並べた日・個数を直して保存（tana.edit）、
+    「入れ間違いを消す」（tana.void。行は消さず 取り消し）。空の面を押すとその面を選んだ記録の画面（今までどおり）
 -->
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -139,6 +141,15 @@ table.cal{width:calc(100% - 24px);margin:0 12px;border-collapse:collapse;table-l
 .edit input{flex:1;min-width:0;height:44px;font-size:20px;font-weight:700;text-align:center;border:1px solid #9ca3af;border-radius:8px;font-family:inherit}
 .edit button{height:44px;padding:0 12px;border-radius:8px;font-size:15px;font-weight:700;background:#fff;border:1.5px solid #ccc}
 .edit .ok{border-color:#2f5d3a;color:#2f5d3a}
+.erow{border-top:1px solid #eee;padding:10px 0}
+.eh{display:flex;justify-content:space-between;align-items:center;font-size:15px}
+.eh i{display:inline-block;width:14px;height:14px;border-radius:3px;vertical-align:-2px;margin-right:6px}
+.eh .who{color:#777;font-size:13px}
+.ein{display:flex;gap:8px;align-items:center;margin-top:6px;font-size:15px}
+.ein input{height:46px;font-size:18px;font-weight:700;text-align:center;border:1.5px solid #9ca3af;border-radius:8px;font-family:inherit;color:#222;background:#fff}
+.ein input[type=date]{flex:1;min-width:0}
+.ein input[data-k=count]{width:84px;margin-right:4px}
+.wbtn.sm{padding:9px 12px;font-size:14px;margin-top:8px}
 .calwrap,.pwrap{position:relative}
 .loading{position:absolute;left:50%;top:84px;transform:translateX(-50%);z-index:5;pointer-events:none;white-space:nowrap;background:rgba(255,255,255,.96);border:1px solid #ddd;border-radius:18px;padding:7px 16px;font-size:14px;color:#555;box-shadow:0 1px 5px rgba(0,0,0,.14)}
 .loading[hidden]{display:none}
@@ -603,19 +614,82 @@ table.cal{width:calc(100% - 24px);margin:0 12px;border-collapse:collapse;table-l
     return o;
   }
 
-  /** 埋まっている面の内訳 */
+  /**
+   * 埋まっている面を直す（直し4）。並べた日ごとに1行：並べた日・個数を直して「保存する」（tana.edit）、
+   * 「入れ間違いを消す」はその行を取り消し（tana.void）。「空にする」「追加」は今までどおり
+   */
   function openFace(room, name, recs) {
-    var total = recs.reduce(function (s, x) { return s + (Number(x.count) || 0); }, 0);
-    var sh = sheet('<div class="ttl"><span>' + esc(name) + '　' + esc(room.room) + 'の部屋</span></div>' +
-      '<div style="margin-top:8px">' + recs.map(function (x) {
-        return '<div class="rec"><span><i style="background:' + colorOf(x.date) + '"></i>' + md(x.date) + ' に並べた</span><span><b>' + x.count + '個</b> <span class="who">' + esc(x.surname || '') + '</span></span></div>';
-      }).join('') + '<div class="rec"><span>合計</span><b>' + total + '個</b></div></div>' +
-      '<div class="two"><button type="button" class="wbtn del" data-el="clear">空にする</button><button type="button" class="btn" data-el="add">追加</button></div>');
+    var d = tanaOf(st.site), site = st.site, base = (d && d.today) || today;
+    var sh = sheet('<div class="ttl"><span>' + esc(name) + '　' + esc(room.room) + 'の部屋を直す</span></div>' +
+      '<div style="margin-top:8px">' + recs.map(function (x, i) {
+        return '<div class="erow" data-i="' + i + '"><div class="eh"><span><i style="background:' + colorOf(x.date) + '"></i>並べた日</span><span class="who">' + esc(x.surname || '') + '</span></div>' +
+          '<div class="ein"><input type="date" data-k="date" value="' + esc(x.date) + '" min="' + addDays(base, -120) + '" max="' + base + '">' +
+          '<span><input type="text" inputmode="numeric" autocomplete="off" data-k="count" value="' + x.count + '">個</span></div>' +
+          '<button type="button" class="wbtn del sm" data-el="void">入れ間違いを消す</button></div>';
+      }).join('') + '<div class="rec"><span>合計</span><b data-el="sum"></b></div></div>' +
+      '<div class="err" data-el="err" style="margin-top:8px"></div>' +
+      '<button type="button" class="btn" data-el="save" style="margin-top:8px">保存する</button>' +
+      '<div class="two"><button type="button" class="wbtn del" data-el="clear">空にする</button><button type="button" class="wbtn" data-el="add">追加</button></div>');
+    var rows = Array.prototype.slice.call(sh.el.querySelectorAll('.erow'));
+    function val(i) {
+      var r = rows[i];
+      return { date: r.querySelector('[data-k="date"]').value, count: C.readNum(r.querySelector('[data-k="count"]').value) };
+    }
+    function changes() {
+      var out = [], bad = '';
+      recs.forEach(function (x, i) {
+        var v = val(i);
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(v.date) || v.date > base || v.date < addDays(base, -120)) bad = '並べた日は今日から120日前までにしてください';
+        else if (!(v.count >= 1 && v.count <= 200 && v.count === Math.floor(v.count))) bad = '個数は1〜200の整数で入れてください';
+        else if (v.date !== x.date || v.count !== Number(x.count)) out.push({ id: x.id, date: v.date, count: v.count });
+      });
+      return { list: out, bad: bad };
+    }
+    function draw() {
+      var c = changes();
+      sh.q('[data-el="sum"]').textContent = recs.reduce(function (s, x, i) { return s + (Number(val(i).count) || 0); }, 0) + '個';
+      sh.q('[data-el="err"]').textContent = c.bad;
+      sh.q('[data-el="save"]').disabled = !!c.bad || !c.list.length;
+    }
+    rows.forEach(function (r) {
+      Array.prototype.forEach.call(r.querySelectorAll('input'), function (el) { el.addEventListener('input', draw); el.addEventListener('change', draw); });
+      r.querySelector('[data-k="count"]').addEventListener('focus', function () { try { this.select(); } catch (er) { /* 無視 */ } });
+    });
+    function fail(err, what) {
+      sh.q('[data-el="err"]').textContent = err && err.network ? '送れませんでした。もう一度押してください' : what + '：' + (err && err.message || err);
+    }
+    sh.q('[data-el="save"]').onclick = function () {
+      var c = changes(); if (c.bad || !c.list.length) return;
+      sh.q('[data-el="err"]').textContent = '';
+      C.runOnce('tana', this, '送信中…', function () {
+        // 1行ずつ送る（同じ値で送り直しても二重にならない）
+        return c.list.reduce(function (p, x) {
+          return p.then(function () { return gas('tana.edit', { id: x.id, date: x.date, count: x.count }); });
+        }, Promise.resolve()).then(function (res) {
+          setTana(site, Object.assign({}, tanaOf(site), { faces: res.faces || [] }));
+          sh.close();
+        }, function (err) { fail(err, '保存できませんでした'); });
+      });
+    };
+    rows.forEach(function (r, i) {
+      r.querySelector('[data-el="void"]').onclick = function () {
+        var x = recs[i];
+        if (!confirm(md(x.date) + ' に並べた ' + x.count + '個（' + name + '）を入れ間違いとして消しますか')) return;
+        sh.q('[data-el="err"]').textContent = '';
+        C.runOnce('tana', this, '送信中…', function () {
+          return gas('tana.void', { id: x.id }).then(function (res) {
+            setTana(site, Object.assign({}, tanaOf(site), { faces: res.faces || [] }));
+            sh.close();
+          }, function (err) { fail(err, '消せませんでした'); });
+        });
+      };
+    });
     sh.q('[data-el="add"]').onclick = function () { sh.close(); openRecord(room, [name]); };
     sh.q('[data-el="clear"]').onclick = function () {
       if (!confirm(name + ' を空にしますか')) return;
       clearFaces(room, [name], this).then(function (ok) { if (ok) sh.close(); });
     };
+    draw();
   }
 
   /** 袋出し予約の面：袋出し済みにする（並べた日＝今日）か、予約をやめる */
