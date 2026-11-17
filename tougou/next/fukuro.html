@@ -7,7 +7,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#2f5d3a">
 <link rel="manifest" href="manifest.webmanifest">
-<meta name="sg-build" content="fukuro-20261117-4">
+<meta name="sg-build" content="fukuro-20261117-5">
 <title>袋出し管理 | 栄ガーデン</title>
 <!--
   袋出し管理（指示 20261117-0850。杉さん承認 2026-11-17 08:38）。中の従業員向け。
@@ -27,6 +27,10 @@
     見出しの右上に ↻（棚と仕入れを読み直す）。新しい版が出ていたら開いたとき・戻ったときに読み直す（下の sg-build）
   - 直し4（指示 20261117-1315）：埋まっている面を押すと「直す」画面。並べた日ごとに並べた日・個数を直して保存（tana.edit）、
     「入れ間違いを消す」（tana.void。行は消さず 取り消し）。空の面を押すとその面を選んだ記録の画面（今までどおり）
+  - 直し5（指示 20261117-1340）：長押しをすべてなくした（棚の複数選択・記録の画面のなぞる）。面はタップだけ（空＝記録／置いている＝直す／予約＝済み・やめる）。
+    下から出る画面はスマホの「戻る」・左上の ×・暗い所で閉じて棚に戻る（history.pushState／popstate）。
+    空にする・入れ間違いを消す・予約をやめるは確認を出さず、下に5秒「元に戻す」（同じ面・日・個数で tana.add し直す。GAS は変えない）。
+    記録・保存の後は面を光らせて「記録しました」等を1秒。20日超の点は黒（予約の赤と分ける）。読み込み中は面を押せない
 -->
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -86,28 +90,38 @@ table.cal{width:calc(100% - 24px);margin:0 12px;border-collapse:collapse;table-l
 .f s{text-decoration:none;font-size:10px;color:#333;white-space:nowrap}
 .f.empty{background:#fff;border:1.5px dashed #bbb}.f.empty s{color:#aaa}
 .f.mix b{font-size:12px;line-height:1.1}.f.mix s{font-size:9px;letter-spacing:-.4px}
-.f .old{position:absolute;top:3px;right:3px;width:7px;height:7px;border-radius:50%;background:#c0392b}
-.f.pick{outline:3px solid #1f6fd1;outline-offset:-3px}
+.f .old{position:absolute;top:3px;right:3px;width:8px;height:8px;border-radius:50%;background:#222;box-shadow:0 0 0 1.5px #fff}
 .f.resv{background:#d9443f}.f.resv b,.f.resv s{color:#fff}
+.f.flash{animation:flash .9s ease-out}
+@keyframes flash{0%,40%{box-shadow:inset 0 0 0 4px #1f6fd1;filter:brightness(1.25)}100%{box-shadow:inset 0 0 0 0 #1f6fd1;filter:none}}
+.pager.wait{opacity:.5}.pager.wait .f{pointer-events:none}
 .door{text-align:center;font-size:12px;color:#888;margin:6px 0 2px}
-.pg{text-align:center;font-size:18px;color:#ccc;letter-spacing:6px;height:20px}
-.pg b{color:#2f5d3a;font-weight:400}
+.pg{display:flex;justify-content:space-between;align-items:center;height:30px;padding:0 10px}
+.pg .dots{font-size:18px;color:#ccc;letter-spacing:6px}
+.pg .dots b{color:#2f5d3a;font-weight:400}
+.pg button{min-width:72px;height:30px;font-size:14px;font-weight:700;color:#2f5d3a}
+.pg button.r{text-align:right}.pg button.l{text-align:left}
 .tleg{display:flex;gap:10px;padding:4px 14px;font-size:13px;flex-wrap:wrap}
 .tleg i{display:inline-block;width:14px;height:14px;border-radius:3px;vertical-align:-2px;margin-right:3px}
-.tleg .old{display:inline-block;width:8px;height:8px;border-radius:50%;background:#c0392b;margin-right:3px;vertical-align:1px}
+.tleg .old{display:inline-block;width:9px;height:9px;border-radius:50%;background:#222;margin-right:3px;vertical-align:1px}
+.toast{position:fixed;left:50%;bottom:calc(84px + env(safe-area-inset-bottom));transform:translateX(-50%);z-index:400;display:flex;gap:14px;align-items:center;max-width:calc(100% - 24px);background:#333;color:#fff;border-radius:12px;padding:12px 16px;font-size:15px;box-shadow:0 2px 10px rgba(0,0,0,.3)}
+.toast[hidden]{display:none}
+.toast span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.toast button{color:#ffd166;font-size:15px;font-weight:700;padding:4px 2px;white-space:nowrap}
+.toast button[hidden]{display:none}
 .spacer{height:90px}
 .btn{display:block;width:100%;background:#1f6fd1;color:#fff;text-align:center;padding:15px;border-radius:12px;font-size:17px;font-weight:700}
 .btn:disabled{opacity:.45}
 .foot{position:fixed;left:0;right:0;bottom:0;max-width:480px;margin:0 auto;padding:10px 16px calc(14px + env(safe-area-inset-bottom));background:linear-gradient(rgba(246,243,236,0),#f6f3ec 30%)}
 .foot[hidden]{display:none}
-.multi{display:flex;gap:8px;align-items:center}
-.multi span{flex:1;font-size:15px;font-weight:700}
-.multi button{padding:13px 16px;border-radius:12px;font-size:16px;font-weight:700;background:#fff;border:1.5px solid #ccc}
-.multi .del{color:#b91c1c;border-color:#e5a3a3}
 /* 下から出る画面 */
 .dim{position:fixed;inset:0;background:rgba(0,0,0,.33);z-index:300;display:flex;align-items:flex-end;justify-content:center}
-.sheet{background:#fff;width:100%;max-width:480px;border-radius:16px 16px 0 0;padding:16px 16px calc(16px + env(safe-area-inset-bottom));max-height:96dvh;overflow-y:auto}
-.sheet .ttl{display:flex;justify-content:space-between;align-items:center;font-size:17px;font-weight:700}
+.sheet{background:#fff;width:100%;max-width:480px;border-radius:16px 16px 0 0;padding:12px 16px calc(16px + env(safe-area-inset-bottom));max-height:96dvh;overflow-y:auto}
+.sheet .ttl{display:flex;gap:6px;align-items:center;font-size:17px;font-weight:700}
+.sheet .ttl .x{flex:0 0 40px;width:40px;height:40px;margin-left:-8px;font-size:26px;line-height:40px;color:#555;border-radius:20px}
+.dim.busy .sheet button:not(:disabled):not(.x){pointer-events:none;opacity:.45}
+.perrow{display:flex;align-items:center;gap:10px;margin-top:10px;font-size:15px;font-weight:700}
+.perrow .pills{flex:1}
 .sheet h3{font-size:16px;margin:12px 0 8px}
 .chips{display:flex;gap:8px;flex-wrap:wrap}
 .chips button{padding:9px 12px;border-radius:20px;border:1.5px solid #ccc;font-size:15px}
@@ -179,7 +193,7 @@ table.cal{width:calc(100% - 24px);margin:0 12px;border-collapse:collapse;table-l
   <div class="spacer"></div>
 </div>
 <div class="foot" id="foot" hidden><button type="button" class="btn" id="recBtn">袋出しを記録</button></div>
-<div class="foot" id="multiFoot" hidden><div class="multi"><span id="multiN"></span><button type="button" id="multiNo">やめる</button><button type="button" class="del" id="multiDel">空にする</button></div></div>
+<div class="toast" id="toast" hidden><span id="toastMsg"></span><button type="button" id="toastUndo" hidden>元に戻す</button></div>
 
 <script src="js/common.js"></script>
 <script src="js/login.js"></script>
@@ -222,7 +236,7 @@ table.cal{width:calc(100% - 24px);margin:0 12px;border-collapse:collapse;table-l
     site: lsGet(LS.site) === 'shinrin' ? 'shinrin' : 'yorii',
     tab: lsGet(LS.tab) === 'shiire' ? 'shiire' : 'tana',
     calYm: today.slice(0, 7), calSel: today, nyuka: {}, nyukaAt: {}, calBusy: {},
-    tana: {}, tanaBusy: {}, view: 0, multi: null
+    tana: {}, tanaBusy: {}, view: 0
   };
   /** GAS を呼ぶ（成功した時刻を覚え、ログインが切れていそうかの目安にする） */
   function gas(action, params) {
@@ -236,7 +250,6 @@ table.cal{width:calc(100% - 24px);margin:0 12px;border-collapse:collapse;table-l
     $('p_shiire').hidden = t !== 'shiire';
     $('p_tana').hidden = t !== 'tana';
     $('siteSeg').classList.toggle('off', t !== 'tana');
-    endMulti();
     $('foot').hidden = t !== 'tana';
     if (t === 'shiire') loadMonth(st.calYm); else { renderTana(); loadTana(st.site); }
   }
@@ -248,15 +261,14 @@ table.cal{width:calc(100% - 24px);margin:0 12px;border-collapse:collapse;table-l
     st.site = s; lsPut(LS.site, s);
     drawSites();
     st.view = 0;   // 部屋は「左」に戻す
-    endMulti();
     if (st.tab === 'tana') { renderTana(); loadTana(s); }
   }
   $('siteSeg').onclick = function (e) { var b = e.target.closest('button'); if (b && b.dataset.s !== st.site) setSite(b.dataset.s); };
   /** ↻：棚（GAS）と仕入れ（Cloud Run）をその場で読み直す。読んでいる間は ↻ を薄くし、カレンダー・棚の上に「読み込み中…」 */
   function drawReload() { $('reload').classList.toggle('busy', !!(st.calBusy[st.calYm] || st.tanaBusy[st.site])); }
   $('reload').onclick = function () {
-    st.nyukaAt[st.calYm] = 0; loadMonth(st.calYm);
-    if (st.tab === 'tana' && !st.tanaBusy[st.site]) loadTana(st.site);
+    st.nyukaAt[st.calYm] = 0; loadMonth(st.calYm, st.tab === 'shiire');
+    if (st.tab === 'tana' && !st.tanaBusy[st.site]) loadTana(st.site, true);
   };
 
   // ---------------------------------------------------------------- 仕入れ（入荷予定のカレンダー）
@@ -301,13 +313,14 @@ table.cal{width:calc(100% - 24px);margin:0 12px;border-collapse:collapse;table-l
       .catch(function () { return gas('nyuka.list', { from: r.from, to: r.to }); });
   }
   function drawCalLoad() { $('calLoad').hidden = !st.calBusy[st.calYm]; drawReload(); }
-  function loadMonth(ym) {
+  function loadMonth(ym, manual) {
     renderCal();
     if (st.calBusy[ym] || Date.now() - (st.nyukaAt[ym] || 0) < 60000) return;   // 1分以内に読んだ月は読み直さない
     st.calBusy[ym] = true; drawCalLoad(); renderDay(); $('calMsg').textContent = '';
     fetchNyuka(monthRange(ym)).then(function (res) {
       putNyuka(ym, res.rows || []);
       if (st.calYm === ym) $('calMsg').textContent = '';
+      if (manual && st.tab === 'shiire') toast('最新にしました');
     }, function (err) {
       if (st.calYm === ym) $('calMsg').textContent = '読み込めません' + (nyukaOf(ym) ? '（前に読んだ予定を表示しています）' : err && err.network ? '' : '：' + (err && err.message || err));
     }).then(function () {
@@ -360,7 +373,15 @@ table.cal{width:calc(100% - 24px);margin:0 12px;border-collapse:collapse;table-l
 
   // ---------------------------------------------------------------- 棚（見取り図）
   function tanaOf(site) { return st.tana[site] || lsGet(LS.tana + site); }
-  function drawTanaLoad() { var d = tanaOf(st.site); $('tanaLoad').hidden = !(st.tanaBusy[st.site] && d && d.rooms && d.rooms.length); drawReload(); }
+  /** 読み込み中（前に覚えた棚を出している間）は面を押せなくし、薄く出す */
+  function tanaWait() { return !!st.tanaBusy[st.site]; }
+  function drawTanaLoad() {
+    var d = tanaOf(st.site);
+    $('tanaLoad').hidden = !(st.tanaBusy[st.site] && d && d.rooms && d.rooms.length);
+    $('pager').classList.toggle('wait', tanaWait());
+    $('recBtn').disabled = tanaWait();
+    drawReload();
+  }
   /**
    * 開いたときにログインが切れていそうなら、始めるときにセッションを外してログインを先に走らせ（initWork の lazy）、
    * その間に前のトークンで tana.list を呼ぶ。通ればそれを使い、切れていれば（AUTH）ログインを待って呼び直す
@@ -375,11 +396,12 @@ table.cal{width:calc(100% - 24px);margin:0 12px;border-collapse:collapse;table-l
       var e = new Error((res && res.error) || 'サーバがエラーを返しました。'); e.code = res && res.code; throw e;
     }, function () { return gas('tana.list', { site: site }); });
   }
-  function loadTana(site) {
+  function loadTana(site, manual) {
     st.tanaBusy[site] = (st.tanaBusy[site] || 0) + 1; drawTanaLoad();
     listTana(site).then(function (res) {
       setTana(site, res);
       $('tanaMsg').textContent = '';
+      if (manual && st.site === site && st.tab === 'tana') toast('最新にしました');
     }, function (err) {
       if (st.site === site) $('tanaMsg').textContent = '読み込めません' + (err && err.network ? '' : '：' + (err && err.message || err));
     }).then(function () { st.tanaBusy[site]--; drawTanaLoad(); });
@@ -416,7 +438,7 @@ table.cal{width:calc(100% - 24px);margin:0 12px;border-collapse:collapse;table-l
   }
   function isResv(recs) { return (recs || []).some(function (x) { return x.reserve; }); }
   function faceHtml(room, name, recs, h, base) {
-    var g = byDate(recs), sel = st.multi && st.multi.room === room && st.multi.faces[name] ? ' pick' : '';
+    var g = byDate(recs), sel = '';
     var attr = ' data-face="' + name + '" style="height:' + h + 'px;';
     if (!g.length) return '<div class="f empty' + sel + '"' + attr + '"><s>空</s></div>';
     if (isResv(recs)) {   // 袋出し予約（予約の面にはほかの記録を足せない）
@@ -477,9 +499,14 @@ table.cal{width:calc(100% - 24px);margin:0 12px;border-collapse:collapse;table-l
     Array.prototype.forEach.call($('roomSeg').children, function (b) { b.classList.toggle('on', b.dataset.room === v.room.room); });
     var fm = faceMap(d, v.room.room), s = roomStats(v.room, fm);
     $('tanaSum').innerHTML = '<span>空き <b>' + num(s.free) + '</b> / ' + num(s.cap) + '</span><span>' + s.empty + '面空き</span>';
-    var dots = '';
+    // 森林公園の4棚ずつ：続きがある側に「‹ A〜D」「E〜H ›」（押しても移れる。スワイプは今までどおり）
+    var dots = '', vs = views(d);
     if (v.subs > 1) for (var i = 0; i < v.subs; i++) dots += i === v.sub ? '<b>●</b>' : '●';
-    $('pg').innerHTML = dots;
+    var span = function (w) { return w.shelves[0] + (w.shelves.length > 1 ? '〜' + w.shelves[w.shelves.length - 1] : ''); };
+    $('pg').innerHTML = v.subs > 1 ?
+      (v.sub > 0 ? '<button type="button" class="l" data-go="-1">‹ ' + esc(span(vs[st.view - 1])) + '</button>' : '<span style="min-width:72px"></span>') +
+      '<span class="dots">' + dots + '</span>' +
+      (v.sub < v.subs - 1 ? '<button type="button" class="r" data-go="1">' + esc(span(vs[st.view + 1])) + ' ›</button>' : '<span style="min-width:72px"></span>') : '';
     var dates = {}, anyOld = false, anyResv = false, base = d.today || today;
     d.faces.forEach(function (x) {
       if (x.room !== v.room.room) return;
@@ -490,8 +517,14 @@ table.cal{width:calc(100% - 24px);margin:0 12px;border-collapse:collapse;table-l
     $('tleg').innerHTML = Object.keys(dates).sort().map(function (x) { return '<span><i style="background:' + colorOf(x) + '"></i>' + md(x) + '</span>'; }).join('') +
       (anyResv ? '<span><i style="background:#d9443f"></i>予約</span>' : '') +
       (anyOld ? '<span><span class="old"></span>' + OLD_DAYS + '日超</span>' : '');
-    if (force !== true && st.multi && st.multi.room !== v.room.room) endMulti();
   }
+  function goView(i) {
+    var n = views(tanaOf(st.site)).length; if (i < 0 || i >= n) return;
+    st.view = i;
+    $('pager').scrollTo({ left: st.view * $('pager').clientWidth, behavior: 'smooth' });
+    viewChanged();
+  }
+  $('pg').onclick = function (e) { var b = e.target.closest('button[data-go]'); if (b) goView(st.view + Number(b.dataset.go)); };
   var scrollT;
   $('pager').addEventListener('scroll', function () {
     var p = $('pager'), w = p.clientWidth || 1, i = Math.round(p.scrollLeft / w);
@@ -506,112 +539,135 @@ table.cal{width:calc(100% - 24px);margin:0 12px;border-collapse:collapse;table-l
     viewChanged();
   };
 
-  // 面を押す（空き＝記録、埋まり＝内訳、予約＝済みにする／やめる）・長押し（埋まりの面を複数選んで空にする）。
+  // 面をタップ（空＝記録、置いている＝直す、予約＝済みにする／やめる）。長押しは無い（直し5）。
   // 押したかどうかは指を離したときに、押し始めた面で決める。click だと、押している間に棚が描き直されると
   // （開いてすぐ新しい棚が届いたとき）押した面が消えて click が来ず、記録の画面が出なかった
   var press = null;
   function recsOf(name) { var v = curView(); return v ? faceMap(tanaOf(st.site), v.room.room)[name] || [] : []; }
   $('pager').addEventListener('pointerdown', function (e) {
     var f = e.target.closest('.f'); if (!f || (e.button && e.button !== 0)) return;
-    press = { face: f.dataset.face, id: e.pointerId, x: e.clientX, y: e.clientY, long: false };
-    press.timer = setTimeout(function () {
-      if (!press || st.multi) return;
-      var recs = recsOf(press.face);
-      if (!recs.length || isResv(recs)) return;   // 長押しで選べるのは埋まっている面だけ
-      press.long = true;
-      startMulti(press.face);
-    }, 550);
+    press = { face: f.dataset.face, id: e.pointerId, x: e.clientX, y: e.clientY };
   });
   function cancelPress(e) {
     if (!press || e && e.pointerId !== undefined && e.pointerId !== press.id) return;
     if (e && e.type === 'pointermove' && Math.abs(e.clientX - press.x) < 10 && Math.abs(e.clientY - press.y) < 10) return;
-    clearTimeout(press.timer); press = null;
+    press = null;
   }
   document.addEventListener('pointermove', cancelPress, { passive: true });
   document.addEventListener('pointercancel', cancelPress);
+  // 指を離した後に来る click は、開いたばかりの画面（同じ位置のボタン）に当たるので1回だけ捨てる
+  var swallowUntil = 0;
+  document.addEventListener('click', function (e) {
+    if (Date.now() < swallowUntil) { swallowUntil = 0; e.stopPropagation(); e.preventDefault(); }
+  }, true);
   document.addEventListener('pointerup', function (e) {
     if (!press || e.pointerId !== press.id) return;
-    var p = press; press = null; clearTimeout(p.timer);
-    if (!p.long) tapFace(p.face);
+    var p = press; press = null;
+    tapFace(p.face);
+    if (sheets.length) swallowUntil = Date.now() + 600;
   });
   $('pager').addEventListener('contextmenu', function (e) { e.preventDefault(); });
   function tapFace(name) {
-    var v = curView(); if (!v) return;
+    var v = curView(); if (!v || tanaWait() || sheets.length) return;
     var recs = recsOf(name);
-    if (st.multi) {
-      if (!recs.length || isResv(recs)) {   // 空にする選択の最中は、空の面・予約の面は選べない
-        $('multiN').textContent = '空・予約の面は選べません';
-        clearTimeout(multiT); multiT = setTimeout(multiCount, 1600);
-        return;
-      }
-      if (st.multi.faces[name]) delete st.multi.faces[name]; else st.multi.faces[name] = true;
-      var vw = $('pager').querySelectorAll('.view')[st.view], el = vw && vw.querySelector('.f[data-face="' + name + '"]');
-      if (el) el.classList.toggle('pick', !!st.multi.faces[name]);
-      multiCount();
-      return;
-    }
     if (isResv(recs)) openResv(v.room, name, recs);
     else if (recs.length) openFace(v.room, name, recs);
     else openRecord(v.room, [name]);
   }
-  var multiT;
 
-  function startMulti(face) {
-    var v = curView(); if (!v) return;
-    st.multi = { room: v.room.room, faces: {} };
-    st.multi.faces[face] = true;
-    var el = $('pager').querySelector('.f[data-face="' + face + '"]');
-    Array.prototype.forEach.call($('pager').querySelectorAll('.view'), function (vw, i) {
-      if (i === st.view) { var x = vw.querySelector('.f[data-face="' + face + '"]'); if (x) x.classList.add('pick'); }
+  // ---------------------------------------------------------------- 合図・元に戻す
+  /** 面を一瞬光らせる（記録・保存・空にした後） */
+  function flash(faces) {
+    var vw = $('pager').querySelectorAll('.view')[st.view]; if (!vw) return;
+    (faces || []).forEach(function (f) {
+      var el = vw.querySelector('.f[data-face="' + f + '"]');
+      if (el) { el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash'); }
     });
-    if (!el) return;
-    $('foot').hidden = true; $('multiFoot').hidden = false;
-    multiCount();
   }
-  function multiCount() {
-    var n = st.multi ? Object.keys(st.multi.faces).length : 0;
-    $('multiN').textContent = n + '面を選択';
-    $('multiDel').disabled = !n;
+  /** 下に短い知らせ。undo があれば「元に戻す」を5秒、なければ1秒 */
+  var toastT;
+  function toast(msg, undo, ms) {
+    $('toastMsg').textContent = msg;
+    var b = $('toastUndo');
+    b.hidden = !undo;
+    b.onclick = undo ? function () { hideToast(); undo(); } : null;
+    $('toast').hidden = false;
+    clearTimeout(toastT);
+    if (ms !== 0) toastT = setTimeout(hideToast, ms || (undo ? 5000 : 1000));
   }
-  function endMulti() {
-    if (!st.multi) return;
-    st.multi = null;
-    Array.prototype.forEach.call($('pager').querySelectorAll('.f.pick'), function (x) { x.classList.remove('pick'); });
-    $('multiFoot').hidden = true; $('foot').hidden = st.tab !== 'tana';
+  function hideToast() { clearTimeout(toastT); $('toast').hidden = true; $('toastUndo').onclick = null; }
+  /** 記録 → 並べた日（予約は袋出しする日）ごとの tana.add の中身。opId は作ったときに決める（送り直しても二重にならない） */
+  function addBack(recs, resv) {
+    var by = {};
+    recs.forEach(function (x) {
+      var g = by[x.date] = by[x.date] || { opId: newId(), date: x.date, faces: {} };
+      g.faces[x.face] = (g.faces[x.face] || 0) + (Number(x.count) || 0);
+    });
+    return Object.keys(by).sort().map(function (k) {
+      var g = by[k], q = { opId: g.opId, date: g.date, faces: Object.keys(g.faces).map(function (f) { return { face: f, count: g.faces[f] }; }) };
+      if (resv) q.reserve = true;
+      return q;
+    });
   }
-  $('multiNo').onclick = endMulti;
-  $('multiDel').onclick = function () {
-    var v = curView(); if (!v || !st.multi) return;
-    var faces = Object.keys(st.multi.faces);
-    if (!faces.length || !confirm(faces.length + '面を空にしますか')) return;
-    clearFaces(v.room, faces, $('multiDel')).then(function (ok) { if (ok) endMulti(); });
-  };
-
-  function clearFaces(room, faces, btn) {
-    var site = st.site;
-    if (C.isRunning('tana')) return Promise.resolve(false);
-    return new Promise(function (resolve) {
-      C.runOnce('tana', btn, '送信中…', function () {
-        return gas('tana.clear', { site: site, room: room.room, faces: faces }).then(function (res) {
+  /** 元に戻す：消した記録を同じ面・日・個数で足し直す（GAS の tana.add。記録した人は戻した人になる） */
+  function undoer(site, room, recs, resv) {
+    var qs = addBack(recs, resv), faces = recs.map(function (x) { return x.face; });
+    return function again() {
+      if (C.isRunning('tana')) { toast('ほかの送信が終わってから押してください', again); return; }
+      toast('元に戻しています…', null, 0);
+      C.runOnce('tana', null, '', function () {
+        return qs.reduce(function (p, q) {
+          return p.then(function () { return gas('tana.add', Object.assign({ site: site, room: room }, q)); });
+        }, Promise.resolve()).then(function (res) {
           setTana(site, Object.assign({}, tanaOf(site), { faces: res.faces || [] }));
-          resolve(true);
+          flash(faces); toast('元に戻しました');
         }, function (err) {
-          alert('空にできませんでした' + (err && err.network ? '（通信）' : '：' + (err && err.message || err)));
-          resolve(false);
+          toast((err && err.network ? '戻せませんでした（通信）' : '戻せませんでした：' + (err && err.message || err)), again, 8000);
         });
       });
-    });
+    };
   }
 
   // ---------------------------------------------------------------- 下から出る画面
-  function sheet(html) {
+  // スマホの「戻る」で画面だけ閉じる：開いたら履歴を1つ足し、戻る（popstate）で閉じる。×・暗い所・送り終わりで閉じたら足した履歴を戻す
+  var sheets = [], histOn = false, skipPop = 0;
+  window.addEventListener('popstate', function () {
+    if (skipPop) { skipPop--; return; }
+    if (!histOn) return;
+    histOn = false;
+    sheets.slice().forEach(function (o) { o.close(true); });
+  });
+  function sheet(title, html) {
     var dim = document.createElement('div');
     dim.className = 'dim';
-    dim.innerHTML = '<div class="sheet">' + html + '</div>';
+    dim.innerHTML = '<div class="sheet"><div class="ttl"><button type="button" class="x" data-el="x" aria-label="閉じる">×</button><span data-el="ttl">' + title + '</span></div>' + html + '</div>';
     document.body.appendChild(dim);
-    var o = { el: dim, q: function (s) { return dim.querySelector(s); }, close: function () { if (dim.parentNode) dim.parentNode.removeChild(dim); } };
+    var o = { el: dim, q: function (s) { return dim.querySelector(s); } };
+    o.close = function (fromPop) {
+      if (!dim.parentNode) return;
+      dim.parentNode.removeChild(dim);
+      sheets.splice(sheets.indexOf(o), 1);
+      // 続けて別の画面を開く（追加 → 記録）ときは履歴をそのまま使う
+      if (fromPop !== true) setTimeout(function () { if (!sheets.length && histOn) { histOn = false; skipPop++; history.back(); } }, 0);
+    };
+    sheets.push(o);
+    if (!histOn) { try { history.pushState({ sgSheet: 1 }, ''); histOn = true; } catch (e) { /* 戻るで閉じられないだけ */ } }
     dim.addEventListener('click', function (e) { if (e.target === dim) o.close(); });
+    o.q('[data-el="x"]').onclick = function () { o.close(); };
     return o;
+  }
+  /** 画面の中のボタンで送る：送っている間は押したボタンを「〜中…」にし、ほかのボタンも押せなくする */
+  function send(sh, btn, busyText, fn) {
+    if (C.isRunning('tana')) return;
+    sh.el.classList.add('busy');
+    C.runOnce('tana', btn, busyText, function () {
+      return Promise.resolve().then(fn).then(function () { sh.el.classList.remove('busy'); }, function () { sh.el.classList.remove('busy'); });
+    });
+  }
+  function siteRoom(room) { return SITES[st.site] + ' ' + room.room + 'の部屋'; }
+  function done(site, res, faces, msg, undo) {
+    setTana(site, Object.assign({}, tanaOf(site), { faces: res.faces || [] }));
+    flash(faces); toast(msg, undo);
   }
 
   /**
@@ -620,8 +676,8 @@ table.cal{width:calc(100% - 24px);margin:0 12px;border-collapse:collapse;table-l
    */
   function openFace(room, name, recs) {
     var d = tanaOf(st.site), site = st.site, base = (d && d.today) || today;
-    var sh = sheet('<div class="ttl"><span>' + esc(name) + '　' + esc(room.room) + 'の部屋を直す</span></div>' +
-      '<div style="margin-top:8px">' + recs.map(function (x, i) {
+    var sh = sheet(esc(siteRoom(room)) + '　' + esc(name),
+      '<div style="margin-top:4px">' + recs.map(function (x, i) {
         return '<div class="erow" data-i="' + i + '"><div class="eh"><span><i style="background:' + colorOf(x.date) + '"></i>並べた日</span><span class="who">' + esc(x.surname || '') + '</span></div>' +
           '<div class="ein"><input type="date" data-k="date" value="' + esc(x.date) + '" min="' + addDays(base, -120) + '" max="' + base + '">' +
           '<span><input type="text" inputmode="numeric" autocomplete="off" data-k="count" value="' + x.count + '">個</span></div>' +
@@ -661,33 +717,35 @@ table.cal{width:calc(100% - 24px);margin:0 12px;border-collapse:collapse;table-l
     sh.q('[data-el="save"]').onclick = function () {
       var c = changes(); if (c.bad || !c.list.length) return;
       sh.q('[data-el="err"]').textContent = '';
-      C.runOnce('tana', this, '送信中…', function () {
+      send(sh, this, '保存中…', function () {
         // 1行ずつ送る（同じ値で送り直しても二重にならない）
         return c.list.reduce(function (p, x) {
           return p.then(function () { return gas('tana.edit', { id: x.id, date: x.date, count: x.count }); });
         }, Promise.resolve()).then(function (res) {
-          setTana(site, Object.assign({}, tanaOf(site), { faces: res.faces || [] }));
-          sh.close();
-        }, function (err) { fail(err, '保存できませんでした'); });
+          sh.close(); done(site, res, [name], '保存しました');
+        }, function (err) { fail(err, '保存できませんでした'); draw(); });
       });
     };
+    // 入れ間違いを消す・空にするは確認を出さず、下に5秒「元に戻す」を出す
     rows.forEach(function (r, i) {
       r.querySelector('[data-el="void"]').onclick = function () {
         var x = recs[i];
-        if (!confirm(md(x.date) + ' に並べた ' + x.count + '個（' + name + '）を入れ間違いとして消しますか')) return;
         sh.q('[data-el="err"]').textContent = '';
-        C.runOnce('tana', this, '送信中…', function () {
+        send(sh, this, '消しています…', function () {
           return gas('tana.void', { id: x.id }).then(function (res) {
-            setTana(site, Object.assign({}, tanaOf(site), { faces: res.faces || [] }));
-            sh.close();
+            sh.close(); done(site, res, [name], md(x.date) + ' の ' + x.count + '個を消しました', undoer(site, room.room, [x], false));
           }, function (err) { fail(err, '消せませんでした'); });
         });
       };
     });
     sh.q('[data-el="add"]').onclick = function () { sh.close(); openRecord(room, [name]); };
     sh.q('[data-el="clear"]').onclick = function () {
-      if (!confirm(name + ' を空にしますか')) return;
-      clearFaces(room, [name], this).then(function (ok) { if (ok) sh.close(); });
+      sh.q('[data-el="err"]').textContent = '';
+      send(sh, this, '空にしています…', function () {
+        return gas('tana.clear', { site: site, room: room.room, faces: [name] }).then(function (res) {
+          sh.close(); done(site, res, [name], name + ' を空にしました', undoer(site, room.room, recs, false));
+        }, function (err) { fail(err, '空にできませんでした'); });
+      });
     };
     draw();
   }
@@ -696,34 +754,33 @@ table.cal{width:calc(100% - 24px);margin:0 12px;border-collapse:collapse;table-l
   function openResv(room, name, recs) {
     var site = st.site;
     var total = recs.reduce(function (s, x) { return s + (Number(x.count) || 0); }, 0);
-    var sh = sheet('<div class="ttl"><span>' + esc(name) + '　' + esc(room.room) + 'の部屋</span></div>' +
-      '<div style="margin-top:8px">' + recs.map(function (x) {
+    var sh = sheet(esc(siteRoom(room)) + '　' + esc(name),
+      '<div style="margin-top:4px">' + recs.map(function (x) {
         return '<div class="rec"><span><i style="background:#d9443f"></i>' + md(x.date) + ' に袋出し予約</span><span><b>' + x.count + '個</b> <span class="who">' + esc(x.surname || '') + '</span></span></div>';
       }).join('') + '</div>' +
       '<div class="err" data-el="err" style="margin-top:8px"></div>' +
       '<button type="button" class="btn" data-el="done" style="margin-top:8px">袋出し済みにする（並べた日＝今日）</button>' +
       '<button type="button" class="wbtn del" data-el="cancel" style="width:100%;margin-top:10px">予約をやめる</button>');
-    function send(action, btn) {
+    function go(action, btn, busyText, msg, undo) {
       sh.q('[data-el="err"]').textContent = '';
-      C.runOnce('tana', btn, '送信中…', function () {
+      send(sh, btn, busyText, function () {
         return gas(action, { site: site, room: room.room, faces: [name] }).then(function (res) {
-          setTana(site, Object.assign({}, tanaOf(site), { faces: res.faces || [] }));
-          sh.close();
+          sh.close(); done(site, res, [name], msg, undo);
         }, function (err) {
           sh.q('[data-el="err"]').textContent = err && err.network ? '送れませんでした。もう一度押してください' : 'できませんでした：' + (err && err.message || err);
         });
       });
     }
-    sh.q('[data-el="done"]').onclick = function () { send('tana.done', this); };
+    sh.q('[data-el="done"]').onclick = function () { go('tana.done', this, '送信中…', '袋出し済みにしました'); };
+    // 予約をやめるは確認を出さず、下に5秒「元に戻す」（同じ日で予約し直す）
     sh.q('[data-el="cancel"]').onclick = function () {
-      if (!confirm(name + '（' + total + '個）の予約をやめますか')) return;
-      send('tana.cancel', this);
+      go('tana.cancel', this, '送信中…', name + '（' + total + '個）の予約をやめました', undoer(site, room.room, recs, true));
     };
   }
 
   /**
    * 袋出しを記録（済み／予約・並べた日・面・合計の個数）。
-   * 面は押して選ぶ／もう一度押すと外す。長押しするとそのままなぞって続けて選べる。満杯の面・予約の面は選べない
+   * 面はタップで選ぶ／もう一度タップで外す（長押し・なぞるは直し5でなくした）。満杯の面・予約の面は選べない
    * （満杯の面は「追加」から開いたときだけ済みで選べる）。空きが残っている面（置いている個数＜1面の個数）は済みなら選べて、
    * 個数は残りの数（直し3。斜めの2色になる）。予約で選べるのは空の面だけ。
    * 合計は選んだ面の空きの合計から始まり、直すと選んだ順に空きの数ずつ埋め、端数は最後の面に入れる
@@ -740,16 +797,17 @@ table.cal{width:calc(100% - 24px);margin:0 12px;border-collapse:collapse;table-l
     function capOf(f) { return full(f) ? Math.max(1, rec.per - used(f)) : rec.per; }
     function firstDay() { return rec.resv ? addDays(base, 1) : base; }
     (preset || []).forEach(function (f) { if (canPick(f) && rec.order.indexOf(f) < 0) rec.order.push(f); });
-    var sh = sheet('<div class="ttl"><span data-el="ttl"></span></div>' +
+    var sh = sheet('',
+      // 1面の個数を選ぶ部屋（寄居の真ん中）だけ、上の方に「1面 42｜68」
+      (room.choices.length > 1 ? '<div class="perrow"><span>1面</span><div class="pills" data-el="per"></div></div>' : '') +
       '<div class="pills" data-el="mode" style="margin-top:12px"><button type="button" data-m="done">袋出し済み</button><button type="button" data-m="resv">袋出し予約</button></div>' +
       '<h3 data-el="dh"></h3><div class="pills" data-el="dates"></div><input type="date" class="hidedate" data-el="pick">' +
-      (room.choices.length > 1 ? '<h3>1面の個数</h3><div class="chips" data-el="per"></div>' : '') +
-      '<h3>② 置いた面</h3><div class="mini" data-el="mini"></div>' +
+      '<h3>② 置いた面（タップで選ぶ・もう一度で外す）</h3><div class="mini" data-el="mini"></div>' +
       '<div class="tot"><span data-el="n"></span><span>合計<input type="text" inputmode="numeric" autocomplete="off" data-el="total">個</span></div>' +
       '<div class="err" data-el="err"></div><button type="button" class="btn" data-el="go">記録する</button>');
     var pick = sh.q('[data-el="pick"]'), mini = sh.q('[data-el="mini"]'), totIn = sh.q('[data-el="total"]');
     function drawMode() {
-      sh.q('[data-el="ttl"]').textContent = (rec.resv ? '袋出しを予約' : '袋出しを記録') + '　' + room.room + 'の部屋';
+      sh.q('[data-el="ttl"]').textContent = siteRoom(room) + '　' + (rec.resv ? '袋出しを予約' : '袋出しを記録');
       Array.prototype.forEach.call(sh.q('[data-el="mode"]').children, function (b) {
         var on = (b.dataset.m === 'resv') === rec.resv;
         b.classList.toggle('on', on); b.classList.toggle('rv', on && rec.resv);
@@ -785,7 +843,7 @@ table.cal{width:calc(100% - 24px);margin:0 12px;border-collapse:collapse;table-l
     };
     function drawPer() {
       var el = sh.q('[data-el="per"]'); if (!el) return;
-      el.innerHTML = room.choices.map(function (n) { return '<button type="button" data-n="' + n + '" class="' + (n === rec.per ? 'on' : '') + '">' + n + '個</button>'; }).join('');
+      el.innerHTML = room.choices.map(function (n) { return '<button type="button" data-n="' + n + '" class="' + (n === rec.per ? 'on' : '') + '">' + n + '</button>'; }).join('');
     }
     if (sh.q('[data-el="per"]')) sh.q('[data-el="per"]').onclick = function (e) {
       var b = e.target.closest('button'); if (!b) return;
@@ -842,54 +900,26 @@ table.cal{width:calc(100% - 24px);margin:0 12px;border-collapse:collapse;table-l
       drawMini(); drawTot();
     });
     totIn.addEventListener('focus', function () { try { totIn.select(); } catch (er) { /* 無視 */ } });
-    // 面を選ぶ：押す＝選ぶ／外す、長押し＝そのままなぞって続けて選ぶ
-    var pr = null;
-    function cellAt(x, y) {
-      var el = document.elementFromPoint(x, y); el = el && el.closest ? el.closest('button[data-f]') : null;
-      return el && mini.contains(el) ? el.dataset.f : null;
-    }
-    function addFace(f) {
-      if (!f || !canPick(f) || rec.order.indexOf(f) >= 0) return false;
-      rec.order.push(f); return true;
-    }
-    mini.addEventListener('pointerdown', function (e) {
-      var f = cellAt(e.clientX, e.clientY); if (!f || (e.button && e.button !== 0)) return;
-      pr = { f: f, id: e.pointerId, x: e.clientX, y: e.clientY, paint: false };
-      try { mini.setPointerCapture(e.pointerId); } catch (er) { /* 無視 */ }
-      pr.timer = setTimeout(function () {
-        if (!pr) return;
-        pr.paint = true;
-        if (addFace(pr.f)) resetTotal();
-        try { if (navigator.vibrate) navigator.vibrate(15); } catch (er) { /* 無視 */ }
-      }, 400);
-    });
-    mini.addEventListener('pointermove', function (e) {
-      if (!pr || e.pointerId !== pr.id) return;
-      if (pr.paint) { if (addFace(cellAt(e.clientX, e.clientY))) resetTotal(); return; }
-      if (Math.abs(e.clientX - pr.x) > 10 || Math.abs(e.clientY - pr.y) > 10) { clearTimeout(pr.timer); pr = null; }
-    });
-    mini.addEventListener('touchmove', function (e) { if (pr && pr.paint) e.preventDefault(); }, { passive: false });   // なぞる間は画面を動かさない
-    mini.addEventListener('pointerup', function (e) {
-      if (!pr || e.pointerId !== pr.id) return;
-      var p = pr; pr = null; clearTimeout(p.timer);
-      if (p.paint) return;
-      var i = rec.order.indexOf(p.f);
-      if (i >= 0) rec.order.splice(i, 1); else if (!addFace(p.f)) return;
+    // 面を選ぶ：タップ＝選ぶ／もう一度タップ＝外す（枠は描き直さないので click でよい）
+    mini.addEventListener('click', function (e) {
+      var b = e.target.closest('button[data-f]'); if (!b) return;
+      var f = b.dataset.f, i = rec.order.indexOf(f);
+      if (i >= 0) rec.order.splice(i, 1);
+      else if (canPick(f)) rec.order.push(f);
+      else return;
       resetTotal();
     });
-    mini.addEventListener('pointercancel', function () { if (pr) { clearTimeout(pr.timer); pr = null; } });
     mini.addEventListener('contextmenu', function (e) { e.preventDefault(); });
     sh.q('[data-el="go"]').onclick = function () {
       if (!rec.order.length || this.disabled) return;
-      var btn = this, cnt = split(), resv = rec.resv;
+      var btn = this, cnt = split(), resv = rec.resv, faces = rec.order.slice();
       sh.q('[data-el="err"]').textContent = '';
-      C.runOnce('tana', btn, '送信中…', function () {
+      send(sh, btn, resv ? '予約中…' : '記録中…', function () {
         var q = { opId: rec.opId, site: site, room: room.room, date: rec.date,
-                  faces: rec.order.map(function (f) { return { face: f, count: cnt[f] }; }) };
+                  faces: faces.map(function (f) { return { face: f, count: cnt[f] }; }) };
         if (resv) q.reserve = true;
         return gas('tana.add', q).then(function (res) {
-          setTana(site, Object.assign({}, tanaOf(site), { faces: res.faces || [] }));
-          sh.close();
+          sh.close(); done(site, res, faces, resv ? '予約しました' : '記録しました');
         }, function (err) {
           // 同じ opId で送り直せば二重にならない
           sh.q('[data-el="err"]').textContent = err && err.network ? '送れませんでした。もう一度押してください' : '記録できません：' + (err && err.message || err);
@@ -921,7 +951,7 @@ table.cal{width:calc(100% - 24px);margin:0 12px;border-collapse:collapse;table-l
   var BUILD = document.querySelector('meta[name="sg-build"]').content, KEY = 'sg.build.reloaded.' + location.pathname, last = 0;
   function busy() {
     var C = window.TougouCommon;
-    return !!(document.querySelector('.dim') || !document.getElementById('multiFoot').hidden || (C && C.isRunning && C.isRunning('tana')));
+    return !!(document.querySelector('.dim') || !document.getElementById('toastUndo').hidden && !document.getElementById('toast').hidden || (C && C.isRunning && C.isRunning('tana')));
   }
   function check() {
     if (!window.fetch || Date.now() - last < 30000) return;
