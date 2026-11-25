@@ -7,7 +7,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#2f5d3a">
 <link rel="manifest" href="manifest.webmanifest">
-<meta name="sg-build" content="kari-20261125-3">
+<meta name="sg-build" content="kari-20261125-4">
 <title>刈り取り記録 | 栄ガーデン</title>
 <!--
   刈り取り記録（指示 20261125-1400。杉さんの要望 2026-11-25 13:39）。中の従業員向け。
@@ -19,6 +19,7 @@
   - ログインは作業記録と同じ（名前を選ぶだけ。SgLogin.initWork）
   - 追加の決定（指示 20261125-1410。杉さん決定 14:04）：合計は傷を除く（1番＋2番以降）。傷は合計の下に別に出す。
     右上は「寄居｜森林公園｜合算」。合算は見るだけ（入力欄を隠し、kari.list site=all の一覧だけ。行を押しても何もしない）
+  - 直し1（指示 20261125-1525。杉さん決定 15:22）：kg は表示も入力も小数2桁（72.90・68.00）。3桁目以降は四捨五入せず断る
 -->
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -129,8 +130,9 @@ td.none{text-align:center;color:#888;padding:18px}
     var p = parts(ymd);
     return p[0] !== parts(today)[0] ? p[0] + '/' + md(ymd) : md(ymd) + '（' + WEEK[new Date(p[0], p[1] - 1, p[2]).getDay()] + '）';
   }
-  function r1(v) { return Math.round(v * 10) / 10; }
-  function kgText(v) { return v === null || v === undefined ? '–' : r1(v).toFixed(1); }
+  // kg は小数2桁（杉さん決定 2026-11-25 15:22。指示 20261125-1525）
+  function r2(v) { return Math.round(v * 100) / 100; }
+  function kgText(v) { return v === null || v === undefined ? '–' : r2(v).toFixed(2); }
   function newId() { return 'K' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
 
   var today = C.ymd(C.now()), yday = addDays(today, -1);
@@ -150,7 +152,7 @@ td.none{text-align:center;color:#888;padding:18px}
     KINDS.forEach(function (k) { if (op.p.values[k] !== null) r[k] = op.p.values[k]; });
     var any = false, s = 0;
     SALE.forEach(function (k) { if (r[k] !== null) { any = true; s += r[k]; } });
-    r.total = any ? r1(s) : null;
+    r.total = any ? r2(s) : null;
     r.pend = true;
     return r;
   }
@@ -196,17 +198,17 @@ td.none{text-align:center;color:#888;padding:18px}
     if (st.site === ALL || st.dirty && !force) return;
     var d = dayOf(st.site, st.date);
     if (d === undefined) { if (force) KINDS.forEach(function (k) { inputOf(k).value = ''; }); loadOne(st.site, st.date); }
-    else KINDS.forEach(function (k) { inputOf(k).value = d && d[k] !== null ? String(r1(d[k])) : ''; });
+    else KINDS.forEach(function (k) { inputOf(k).value = d && d[k] !== null ? String(r2(d[k])) : ''; });
     st.dirty = false;
     drawSum();
   }
   function inputOf(k) { return document.querySelector('input[data-k="' + k + '"]'); }
-  /** 欄の値を読む。'' は空欄（null）。小数1桁まで */
+  /** 欄の値を読む。'' は空欄（null）。小数2桁まで（3桁目以降は四捨五入せず、入れられない数として断る） */
   function readKg(s) {
     s = String(s || '').replace(/[０-９．]/g, function (c) { return String.fromCharCode(c.charCodeAt(0) - 0xFEE0); }).replace(/[,，\s]/g, '');
     if (s === '') return null;
     if (/^\d*\.$/.test(s)) s = s.slice(0, -1);
-    if (!/^\d+(\.\d)?$|^\.\d$/.test(s)) return NaN;
+    if (!/^\d+(\.\d{1,2})?$|^\.\d{1,2}$/.test(s)) return NaN;
     var v = Number(s);
     return v > 1000 ? NaN : v;
   }
@@ -216,12 +218,12 @@ td.none{text-align:center;color:#888;padding:18px}
     KINDS.forEach(function (k) {
       var inp = inputOf(k), v = readKg(inp.value);
       inp.classList.toggle('bad', v !== null && isNaN(v));
-      if (v !== null && isNaN(v)) { if (!bad) bad = NAMES[k] + 'は kg の数（小数1桁まで）で入れてください'; vals[k] = null; return; }
+      if (v !== null && isNaN(v)) { if (!bad) bad = NAMES[k] + 'は kg の数（小数2桁まで）で入れてください'; vals[k] = null; return; }
       vals[k] = v;
       if (v !== null) any = true;
       if (v !== null && SALE.indexOf(k) >= 0) { anySale = true; s += v; }
     });
-    return { vals: vals, bad: bad, any: any, sum: anySale ? r1(s) : null };
+    return { vals: vals, bad: bad, any: any, sum: anySale ? r2(s) : null };
   }
   function drawSum() {
     if (st.site === ALL) return;
