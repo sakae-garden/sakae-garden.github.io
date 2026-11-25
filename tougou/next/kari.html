@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#2f5d3a">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="sg-build" content="kari-20261125-3">
+<title>刈り取り記録 | 栄ガーデン</title>
+<!--
+  刈り取り記録（指示 20261125-1400。杉さんの要望 2026-11-25 13:39）。中の従業員向け。
+  - ホワイトボードに書いた1日分の刈り取りの重さ（1番・2番以降・傷。kg）を翌朝まとめて入れる。収穫日の初期値は昨日
+  - 保存は GAS kari.set（その日・その拠点の値を置き換える。足し算にしない）。空欄の種別は送らない（0 にしない＝前の値のまま）
+  - これまでの記録は kari.list（新しい順に14日分ずつ）。行を押すとその日を上の欄に出して直せる
+  - 送るのは袋出し管理と同じ裏の順番待ち（localStorage sg.kari.q）。押したらすぐ一覧に出し、通信の失敗は4/10/20秒で3回送り直す
+  - 日付を選ぶは袋出し管理 直し7 と同じ（ボタンの上に透明な本物の input type=date を重ねる。iPhone は JS からは開けない）
+  - ログインは作業記録と同じ（名前を選ぶだけ。SgLogin.initWork）
+  - 追加の決定（指示 20261125-1410。杉さん決定 14:04）：合計は傷を除く（1番＋2番以降）。傷は合計の下に別に出す。
+    右上は「寄居｜森林公園｜合算」。合算は見るだけ（入力欄を隠し、kari.list site=all の一覧だけ。行を押しても何もしない）
+-->
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{min-height:100%}
+body{max-width:480px;margin:0 auto;font-family:"Noto Sans JP","Hiragino Sans",sans-serif;background:#f6f3ec;color:#222;-webkit-tap-highlight-color:transparent;-webkit-touch-callout:none}
+button{font-family:inherit;color:inherit;background:none;border:0;cursor:pointer}
+.top{position:sticky;top:0;z-index:10;display:flex;justify-content:space-between;align-items:center;background:#2f5d3a;color:#fff;padding:calc(env(safe-area-inset-top) + 9px) 12px 9px 16px;font-size:18px;font-weight:700}
+.sites{display:flex;gap:2px;background:rgba(0,0,0,.2);border-radius:9px;padding:3px}
+.sites button{height:30px;padding:0 10px;border-radius:7px;font-size:13px;font-weight:700;color:rgba(255,255,255,.7)}
+.sites .on{background:#fff;color:#2f5d3a}
+.wrap{padding:6px 16px 0}
+h3{font-size:16px;color:#555;margin:14px 0 8px}
+.pills{display:flex;gap:8px}
+.pills>button,.dpick>button{flex:1;min-width:0;height:54px;border-radius:27px;border:2px solid #ccc;background:#fff;font-size:19px}
+.pills .on{border-color:#2f5d3a;background:#e5f0e7;font-weight:700}
+/* 日付を選ぶ（袋出し管理 直し7 と同じ）：見えているのはボタン、指が触れるのはその上に重ねた透明な本物の input type=date */
+.dpick{position:relative;flex:1;display:flex;min-width:0}
+.dpick input{position:absolute;inset:0;width:100%;height:100%;margin:0;padding:0;border:0;opacity:0;font-size:16px;-webkit-appearance:none;appearance:none;z-index:1;cursor:pointer}
+.kg{display:flex;align-items:center;gap:10px;margin-top:12px}
+.kg label{flex:0 0 112px;font-size:22px;font-weight:700}
+.kg input{flex:1;min-width:0;height:68px;font-size:30px;font-weight:700;text-align:right;padding:0 14px;border:2px solid #9ca3af;border-radius:12px;font-family:inherit;color:#222;background:#fff;outline:none;-webkit-user-select:text;user-select:text}
+.kg input:focus{border-color:#1f6fd1}
+.kg input.bad{border-color:#d9443f;background:#fdf1f0}
+.kg span{flex:0 0 30px;font-size:20px;color:#555}
+.sum{display:flex;align-items:baseline;justify-content:space-between;margin:16px 2px 0;padding-top:12px;border-top:2px solid #ddd;font-size:22px;font-weight:700}
+.sum b{font-size:34px}.sum small{font-size:20px;font-weight:400;color:#555;margin-left:6px}
+/* 傷は合計に入れない（杉さん決定 2026-11-25）。合計の下に小さく別に出す */
+.kizu{display:flex;align-items:baseline;justify-content:space-between;margin:4px 2px 0;font-size:17px;color:#666}
+.kizu b{font-size:20px}.kizu small{font-size:15px;color:#666;margin-left:6px}
+#entry[hidden]{display:none}
+.err{font-size:16px;color:#b91c1c;margin-top:10px}
+.err:empty{display:none}
+.btn{display:block;width:100%;margin-top:14px;height:68px;background:#1f6fd1;color:#fff;border-radius:14px;font-size:24px;font-weight:700}
+.btn:disabled{opacity:.4}
+.past{margin-top:26px}
+.past h3{margin-left:2px}
+table{width:100%;border-collapse:collapse;background:#fff;border-radius:10px;overflow:hidden;font-size:16px;table-layout:fixed}
+th{font-size:13px;font-weight:400;color:#777;padding:8px 4px;text-align:right;background:#fbfaf7}
+th:first-child,td:first-child{text-align:left;padding-left:12px}
+th:first-child{width:28%}
+th .nw{font-size:11px;white-space:nowrap;letter-spacing:-.5px}
+td{padding:13px 4px;border-top:1px solid #eee;text-align:right;white-space:nowrap}
+td:last-child,th:last-child{padding-right:12px}
+td.tot{font-weight:700}
+td.kz{color:#666}
+tr[data-d]{cursor:pointer}
+tr[data-d]:active{background:#f2f0ea}
+tr.sel td{background:#e5f0e7}
+td .pd{display:inline-block;margin-left:4px;color:#1f6fd1;animation:spin 1.2s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+td.none{text-align:center;color:#888;padding:18px}
+.morebtn{display:block;width:100%;margin:10px 0;height:52px;border-radius:12px;border:1.5px solid #ccc;background:#fff;font-size:17px;font-weight:700;color:#2f5d3a}
+.morebtn[hidden]{display:none}
+.loading{text-align:center;color:#777;font-size:15px;padding:10px}
+.loading[hidden]{display:none}
+.toast{position:fixed;left:50%;bottom:calc(28px + env(safe-area-inset-bottom));transform:translateX(-50%);z-index:400;max-width:calc(100% - 24px);background:#333;color:#fff;border-radius:12px;padding:14px 20px;font-size:17px;box-shadow:0 2px 10px rgba(0,0,0,.3)}
+.toast[hidden]{display:none}
+.spacer{height:calc(40px + env(safe-area-inset-bottom))}
+</style>
+</head>
+<body>
+<div class="top"><span>刈り取り記録</span><div class="sites" id="siteSeg"><button type="button" data-s="yorii">寄居</button><button type="button" data-s="shinrin">森林公園</button><button type="button" data-s="all">合算</button></div></div>
+<div class="wrap">
+  <div id="entry">
+  <h3>収穫日</h3>
+  <div class="pills" id="dates"><button type="button" id="yday"></button><span class="dpick"><button type="button" id="pickBtn" tabindex="-1">日付を選ぶ</button><input type="date" id="pick" aria-label="日付を選ぶ"></span></div>
+  <div class="kg"><label for="v1">1番</label><input id="v1" type="text" inputmode="decimal" autocomplete="off" data-k="shukaku_1"><span>kg</span></div>
+  <div class="kg"><label for="v2">2番以降</label><input id="v2" type="text" inputmode="decimal" autocomplete="off" data-k="shukaku_2plus"><span>kg</span></div>
+  <div class="kg"><label for="vc">傷</label><input id="vc" type="text" inputmode="decimal" autocomplete="off" data-k="shukaku_c"><span>kg</span></div>
+  <div class="sum"><span>合計（傷なし）</span><span><b id="sum">–</b><small>kg</small></span></div>
+  <div class="kizu"><span>傷</span><span><b id="kizu">–</b><small>kg</small></span></div>
+  <div class="err" id="err"></div>
+  <button type="button" class="btn" id="save" disabled>保存する</button>
+  </div>
+
+  <div class="past">
+    <h3>これまでの記録</h3>
+    <table><thead><tr><th>収穫日</th><th>1番</th><th>2番以降</th><th>合計<br><span class="nw">（傷なし）</span></th><th>傷</th></tr></thead><tbody id="list"></tbody></table>
+    <div class="loading" id="load" hidden>読み込み中…</div>
+    <button type="button" class="morebtn" id="more" hidden>もっと前を見る</button>
+  </div>
+  <div class="spacer"></div>
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<script src="js/common.js"></script>
+<script src="js/login.js"></script>
+<script>
+(function () {
+  'use strict';
+  var C = window.TougouCommon, L = window.SgLogin;
+  var KINDS = ['shukaku_1', 'shukaku_2plus', 'shukaku_c'];
+  var SALE = ['shukaku_1', 'shukaku_2plus'];   // 合計に入れる種別（傷は入れない。杉さん決定 2026-11-25）
+  var ALL = 'all';                             // 合算（寄居＋森林公園）。見るだけ
+  var WEEK = ['日', '月', '火', '水', '木', '金', '土'];
+  var LS = { site: 'sg.kari.site', list: 'sg.kari.list.', q: 'sg.kari.q' };
+  var RETRY_MS = [4000, 10000, 20000];
+
+  function $(id) { return document.getElementById(id); }
+  function lsGet(k) { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) { return null; } }
+  function lsPut(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* 覚えられないだけ */ } }
+  function pad(n) { return String(n).padStart(2, '0'); }
+  function parts(ymd) { return String(ymd).split('-').map(Number); }
+  function addDays(ymd, n) { var p = parts(ymd), t = new Date(p[0], p[1] - 1, p[2] + n); return t.getFullYear() + '-' + pad(t.getMonth() + 1) + '-' + pad(t.getDate()); }
+  function md(ymd) { var p = parts(ymd); return p[1] + '/' + p[2]; }
+  /** 一覧の収穫日「11/24（月）」。今年でなければ年も「2025/12/30」 */
+  function mdw(ymd) {
+    var p = parts(ymd);
+    return p[0] !== parts(today)[0] ? p[0] + '/' + md(ymd) : md(ymd) + '（' + WEEK[new Date(p[0], p[1] - 1, p[2]).getDay()] + '）';
+  }
+  function r1(v) { return Math.round(v * 10) / 10; }
+  function kgText(v) { return v === null || v === undefined ? '–' : r1(v).toFixed(1); }
+  function newId() { return 'K' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
+
+  var today = C.ymd(C.now()), yday = addDays(today, -1);
+  var st = {
+    site: ['shinrin', ALL].indexOf(lsGet(LS.site)) >= 0 ? lsGet(LS.site) : 'yorii',
+    date: yday, picked: false, dirty: false,
+    list: {}, busy: {}, one: {}, oneBusy: {}
+  };
+  var queue = (lsGet(LS.q) || []).filter(function (o) { return o && o.p && o.site; });
+  var authOk = false, pumping = null, nextAt = 0, retryT = null;
+  function saveQ() { lsPut(LS.q, queue); }
+
+  // ---------------------------------------------------------------- 記録（届いた一覧に、送り終えていない保存を重ねる）
+  function baseOf(site) { return st.list[site] || lsGet(LS.list + site) || null; }
+  function overlay(row, op) {
+    var r = Object.assign({ date: op.p.date, shukaku_1: null, shukaku_2plus: null, shukaku_c: null }, row || {});
+    KINDS.forEach(function (k) { if (op.p.values[k] !== null) r[k] = op.p.values[k]; });
+    var any = false, s = 0;
+    SALE.forEach(function (k) { if (r[k] !== null) { any = true; s += r[k]; } });
+    r.total = any ? r1(s) : null;
+    r.pend = true;
+    return r;
+  }
+  /** 一覧に出す行（新しい順） */
+  function rowsOf(site) {
+    var b = baseOf(site), rows = b ? b.rows.slice() : [];
+    var oldest = b && b.more && rows.length ? rows[rows.length - 1].date : '';
+    queue.forEach(function (o) {
+      if (o.site !== site || o.p.date < oldest) return;
+      var i = -1;
+      rows.forEach(function (r, j) { if (r.date === o.p.date) i = j; });
+      if (i >= 0) rows[i] = overlay(rows[i], o); else rows.push(overlay(null, o));
+    });
+    return rows.sort(function (a, b) { return a.date < b.date ? 1 : a.date > b.date ? -1 : 0; });
+  }
+  /** 選んだ日の記録。undefined＝まだ分からない（読み込み中）・null＝記録なし */
+  function dayOf(site, date) {
+    var b = baseOf(site), row;
+    var hit = rowsOf(site).filter(function (r) { return r.date === date; })[0];
+    if (hit) return hit;
+    var oldest = b && b.rows.length ? b.rows[b.rows.length - 1].date : '';
+    if (b && (!b.more || date >= oldest)) row = null;
+    else if (st.one[site] && st.one[site].hasOwnProperty(date)) row = st.one[site][date];
+    else return undefined;
+    queue.forEach(function (o) { if (o.site === site && o.p.date === date) row = overlay(row, o); });
+    return row;
+  }
+
+  // ---------------------------------------------------------------- 描く
+  function drawSites() {
+    Array.prototype.forEach.call($('siteSeg').children, function (b) { b.classList.toggle('on', b.dataset.s === st.site); });
+  }
+  function drawDates() {
+    var y = $('yday'), pb = $('pickBtn'), pick = $('pick');
+    y.textContent = '昨日 ' + md(yday);
+    y.className = st.picked ? '' : 'on';
+    pb.className = st.picked ? 'on' : '';
+    pb.textContent = st.picked ? md(st.date) : '日付を選ぶ';
+    pick.min = addDays(today, -400); pick.max = today; pick.value = st.date;
+  }
+  /** 選んだ日の記録を欄に出す（入れかけのときは触らない） */
+  function fill(force) {
+    if (st.site === ALL || st.dirty && !force) return;
+    var d = dayOf(st.site, st.date);
+    if (d === undefined) { if (force) KINDS.forEach(function (k) { inputOf(k).value = ''; }); loadOne(st.site, st.date); }
+    else KINDS.forEach(function (k) { inputOf(k).value = d && d[k] !== null ? String(r1(d[k])) : ''; });
+    st.dirty = false;
+    drawSum();
+  }
+  function inputOf(k) { return document.querySelector('input[data-k="' + k + '"]'); }
+  /** 欄の値を読む。'' は空欄（null）。小数1桁まで */
+  function readKg(s) {
+    s = String(s || '').replace(/[０-９．]/g, function (c) { return String.fromCharCode(c.charCodeAt(0) - 0xFEE0); }).replace(/[,，\s]/g, '');
+    if (s === '') return null;
+    if (/^\d*\.$/.test(s)) s = s.slice(0, -1);
+    if (!/^\d+(\.\d)?$|^\.\d$/.test(s)) return NaN;
+    var v = Number(s);
+    return v > 1000 ? NaN : v;
+  }
+  var NAMES = { shukaku_1: '1番', shukaku_2plus: '2番以降', shukaku_c: '傷' };
+  function readAll() {
+    var vals = {}, bad = '', any = false, anySale = false, s = 0;
+    KINDS.forEach(function (k) {
+      var inp = inputOf(k), v = readKg(inp.value);
+      inp.classList.toggle('bad', v !== null && isNaN(v));
+      if (v !== null && isNaN(v)) { if (!bad) bad = NAMES[k] + 'は kg の数（小数1桁まで）で入れてください'; vals[k] = null; return; }
+      vals[k] = v;
+      if (v !== null) any = true;
+      if (v !== null && SALE.indexOf(k) >= 0) { anySale = true; s += v; }
+    });
+    return { vals: vals, bad: bad, any: any, sum: anySale ? r1(s) : null };
+  }
+  function drawSum() {
+    if (st.site === ALL) return;
+    var a = readAll();
+    $('sum').textContent = kgText(a.sum);
+    $('kizu').textContent = kgText(a.vals.shukaku_c);
+    $('err').textContent = a.bad;
+    // 選んだ日の記録をまだ読んでいる間は保存させない（前の値を知らずに置き換えないように）。読めなかったときは保存できる
+    $('save').disabled = !!a.bad || !a.any ||
+      dayOf(st.site, st.date) === undefined && (!authOk || !!st.busy[st.site] || !!st.oneBusy[st.site + '|' + st.date]);
+  }
+  function drawList() {
+    var rows = rowsOf(st.site), b = baseOf(st.site), all = st.site === ALL;
+    $('list').innerHTML = rows.length ? rows.map(function (r) {
+      // 合算は見るだけ（行を押しても欄に出さない）
+      return (all ? '<tr>' : '<tr data-d="' + r.date + '" class="' + (r.date === st.date ? 'sel' : '') + '">') + '<td>' + mdw(r.date) + (r.pend ? '<i class="pd">⟳</i>' : '') + '</td>' +
+        '<td>' + kgText(r.shukaku_1) + '</td><td>' + kgText(r.shukaku_2plus) + '</td><td class="tot">' + kgText(r.total) + '</td><td class="kz">' + kgText(r.shukaku_c) + '</td></tr>';
+    }).join('') : (b ? '<tr><td class="none" colspan="5">記録はまだありません</td></tr>' : '');
+    $('load').hidden = !st.busy[st.site];
+    $('more').hidden = !(b && b.more) || !!st.busy[st.site];
+  }
+  function drawAll(force) { drawSites(); $('entry').hidden = st.site === ALL; drawDates(); fill(force); drawList(); }
+
+  // ---------------------------------------------------------------- 読む
+  function gas(action, params) { return C.api(action, params); }
+  function loadList(site, more) {
+    if (st.busy[site] || !authOk) return;   // ログインの前に呼ぶと、ログインし直しの仕組みがまだ無くて入口へ飛ばされる
+    var b = baseOf(site), before = more && b && b.rows.length ? b.rows[b.rows.length - 1].date : '';
+    st.busy[site] = true; drawList();
+    gas('kari.list', before ? { site: site, before: before } : { site: site }).then(function (res) {
+      var rows = res.rows || [];
+      // もっと前を見るの続き：今の一覧の下に足す。最初の14日分は覚えておく（次に開いたときにすぐ出す）
+      var d = more && b ? { rows: b.rows.concat(rows), more: !!res.more } : { rows: rows, more: !!res.more };
+      st.list[site] = d;
+      if (!more) lsPut(LS.list + site, d);
+    }, function (err) {
+      if (st.site === site) toast('読み込めません' + (err && err.network ? '' : '：' + (err && err.message || err)), 4000);
+    }).then(function () {
+      st.busy[site] = false;
+      if (st.site === site) { fill(); drawList(); drawSum(); }
+    });
+  }
+  /** 一覧より前の日を選んだとき、その日だけ読む */
+  function loadOne(site, date) {
+    var key = site + '|' + date;
+    if (st.oneBusy[key] || !authOk || st.busy[site]) return;   // 一覧を読んでいる間は待つ（届いたら fill からもう一度来る）
+    st.oneBusy[key] = true;
+    gas('kari.list', { site: site, date: date }).then(function (res) {
+      st.one[site] = st.one[site] || {};
+      st.one[site][date] = (res.rows || [])[0] || null;
+    }, function () {
+      st.one[site] = st.one[site] || {};
+      st.one[site][date] = null;   // 読めないときは空欄から入れられるようにする
+    }).then(function () {
+      st.oneBusy[key] = false;
+      if (st.site === site && st.date === date) fill();
+    });
+    drawSum();
+  }
+
+  // ---------------------------------------------------------------- 保存（裏の順番待ち。袋出し管理 直し6 と同じ考え方）
+  function retryable(err) { return !!err && (err.network || /ロック|lock|timed? ?out|時間内|混み合|too many/i.test(err.message || '')); }
+  function pump() {
+    if (pumping || !authOk || !queue.length) return;
+    if (Date.now() < nextAt) { clearTimeout(retryT); retryT = setTimeout(pump, nextAt - Date.now() + 50); return; }
+    if (navigator.onLine === false) return;   // 電波が戻ったら（online）続ける
+    var o = pumping = queue[0];
+    o.sent = true; saveQ();
+    gas('kari.set', { op: o.p }).then(function (res) {
+      pumping = null; nextAt = 0;
+      var i = queue.indexOf(o); if (i >= 0) queue.splice(i, 1);
+      saveQ();
+      if (res && res.row) put(o.site, res.row);
+      redraw(o.site);
+      if (st.site === ALL) loadList(ALL);   // 合算を見ている間に届いたら読み直す
+      pump();
+    }, function (err) {
+      pumping = null;
+      if (retryable(err) && o.n < RETRY_MS.length) {
+        o.n++; saveQ(); nextAt = Date.now() + RETRY_MS[o.n - 1];
+        toast('送れませんでした。もう一度送ります（' + o.n + '/' + RETRY_MS.length + '）', 2500);
+        pump(); return;
+      }
+      var i = queue.indexOf(o); if (i >= 0) queue.splice(i, 1);
+      saveQ(); nextAt = 0;
+      redraw(o.site);
+      toast(md(o.p.date) + 'の記録を保存できませんでした' + (err && err.network ? '' : '：' + (err && err.message || err)), 8000);
+      pump();
+    });
+  }
+  /** 届いた1日分を一覧（と覚えた一覧）に入れる */
+  function put(site, row) {
+    var b = baseOf(site);
+    if (b) {
+      var rows = b.rows.filter(function (r) { return r.date !== row.date; });
+      var oldest = b.more && b.rows.length ? b.rows[b.rows.length - 1].date : '';
+      if (row.date >= oldest) rows.push(row);
+      rows.sort(function (x, y) { return x.date < y.date ? 1 : x.date > y.date ? -1 : 0; });
+      st.list[site] = { rows: rows, more: b.more };
+      lsPut(LS.list + site, st.list[site]);
+    }
+    st.one[site] = st.one[site] || {};
+    st.one[site][row.date] = row;
+  }
+  function redraw(site) { if (st.site === site) { fill(); drawList(); } }
+  window.addEventListener('online', pump);
+  document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') pump(); });
+
+  $('save').onclick = function () {
+    var a = readAll();
+    if (a.bad || !a.any) return;
+    var o = { k: newId(), site: st.site, n: 0, sent: false, p: { opId: newId(), date: st.date, site: st.site, values: a.vals } };
+    queue.push(o); saveQ();
+    st.dirty = false;
+    KINDS.forEach(function (k) { inputOf(k).blur(); });
+    fill(); drawList();
+    toast('保存しました', 1500);
+    pump();
+  };
+
+  // ---------------------------------------------------------------- 操作
+  KINDS.forEach(function (k) {
+    inputOf(k).addEventListener('input', function () { st.dirty = true; drawSum(); });
+  });
+  function setDate(d, picked) {
+    st.date = d; st.picked = picked; st.dirty = false;
+    drawDates(); fill(true); drawList();
+  }
+  $('yday').onclick = function () { setDate(yday, false); };
+  // iPhone のカレンダーは min／max の外も選べてしまうので、外なら理由を出して元の日に戻す。「消去」で空になったら元の日のまま
+  $('pick').onchange = function () {
+    var v = $('pick').value;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) { drawDates(); return; }
+    if (v > today) { drawDates(); toast('今日より先の日は選べません', 2500); return; }
+    if (v < $('pick').min) { drawDates(); toast('400日より前の日は選べません', 2500); return; }
+    setDate(v, v !== yday);
+  };
+  $('list').onclick = function (e) {
+    var tr = e.target.closest('tr[data-d]'); if (!tr) return;
+    setDate(tr.dataset.d, tr.dataset.d !== yday);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+  $('more').onclick = function () { loadList(st.site, true); };
+  $('siteSeg').onclick = function (e) {
+    var b = e.target.closest('button'); if (!b || b.dataset.s === st.site) return;
+    st.site = b.dataset.s; lsPut(LS.site, st.site);
+    st.dirty = false;
+    drawAll(true);
+    loadList(st.site);
+  };
+
+  var toastT;
+  function toast(msg, ms) {
+    $('toast').textContent = msg; $('toast').hidden = false;
+    clearTimeout(toastT); toastT = setTimeout(function () { $('toast').hidden = true; }, ms || 1500);
+  }
+
+  // 読み直しの判定（下の script）が、入れかけ・送りかけのときに読み直さないように
+  window.sgKariBusy = function () { return st.dirty || queue.length > 0; };
+
+  // ---------------------------------------------------------------- 始める
+  drawAll(true);
+  var ready = L.initWork({ lazy: true });
+  function start() { authOk = true; loadList(st.site); pump(); }
+  ready.then(start, start);
+})();
+</script>
+<script>
+// 新しい版が出ていたら読み直す（袋出し管理 直し3 と同じ）。開いたとき・アプリに戻ったときに、この HTML をキャッシュなしで読んで sg-build を比べる。
+// 入れかけ・送り終えていない保存があるときは読み直さない（次に戻ったときにまた見る）。電波が無ければ今の画面のまま
+(function () {
+  var BUILD = document.querySelector('meta[name="sg-build"]').content, KEY = 'sg.build.reloaded.' + location.pathname, last = 0;
+  function busy() { return !!(window.sgKariBusy && window.sgKariBusy()); }
+  function check() {
+    if (!window.fetch || Date.now() - last < 30000) return;
+    last = Date.now();
+    fetch(location.pathname, { cache: 'no-store' }).then(function (r) { return r.ok ? r.text() : ''; }).then(function (t) {
+      var m = /<meta name="sg-build" content="([^"]+)"/.exec(t);
+      if (!m || m[1] === BUILD || busy()) return;
+      try { if (sessionStorage.getItem(KEY) === m[1]) return; sessionStorage.setItem(KEY, m[1]); } catch (e) { return; }   // 読み直しても古いままなら繰り返さない
+      var urls = [location.pathname].concat(Array.prototype.map.call(document.scripts, function (s) { return s.src; }).filter(function (u) { return u && u.indexOf(location.origin + '/') === 0; }));
+      Promise.all(urls.map(function (u) { return fetch(u, { cache: 'reload' }).catch(function () {}); })).then(function () { location.reload(); });
+    }).catch(function () { /* 電波が無いときは今の画面のまま */ });
+  }
+  check();
+  document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') check(); });
+  window.addEventListener('pageshow', function (e) { if (e.persisted) check(); });
+})();
+</script>
+</body>
+</html>
