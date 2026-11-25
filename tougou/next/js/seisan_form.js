@@ -39,6 +39,8 @@
  *   kgAdd     … true なら収穫（1番・2番以降・傷。kg）も「足していく」入力にする（kari.add・kari.cancel。指示 20261112-0900
  *               杉さん決定「重さは作業した人が自分のスマホで入れる」）。layout:'work' では「送る」の上に刈り取りのカード
  *               （1番・2番〜・傷 の3欄）を出し、「その他」の上書きの欄は出さない
+ *   noKari    … true なら刈り取り（収穫の kg）の欄を出さず、送らない（2026-11-25 杉さん承認。重さは刈り取り記録 kari.html で入れる）。
+ *               欄は隠して残す（下書き・送り直しの処理を変えないため）。入力済みの一覧と取消はそのまま
  * 戻り値 { ready: Promise, reload() }
  */
 (function (root) {
@@ -182,7 +184,7 @@
           '<input type="text" class="wnum" data-k="' + k + '" inputmode="decimal" autocomplete="off" placeholder="">' +
           '<span class="wunit">kg</span></div>' + addBox(k) + '</div>';
       };
-      return '<div class="wcard wkari" data-card="kari"><div class="wname">刈り取り</div>' +
+      return '<div class="wcard wkari" data-card="kari"' + (o.noKari ? ' hidden' : '') + '><div class="wname">刈り取り</div>' +
         row('shukaku_1', '1番') + row('shukaku_2plus', '2番〜') + row('shukaku_c', '傷') + '</div>';
     }
     return '<div class="wsites" data-el="sites"></div>' +
@@ -229,7 +231,10 @@
     // kinds に無い種別（収穫）はその場所を選んでいる間は出さず、送らない
     var EXTRA = o.extraSites || [];
     function extraOf(id) { return EXTRA.filter(function (x) { return x.id === id; })[0] || null; }
-    function allowed(k) { var x = extraOf(st.site); return !x || !!(x.kinds && x.kinds[k]); }
+    function allowed(k) {
+      if (o.noKari && KARI_KINDS[k]) return false;   // 刈り取りの重さは刈り取り記録で入れる（欄は隠れたまま・送らない）
+      var x = extraOf(st.site); return !x || !!(x.kinds && x.kinds[k]);
+    }
     var msg = o.msg || function () {};
     var additive = !!o.additive;
     var isAdd = function (k) { return additive && (!!ADD_KINDS[k] || (!!o.kgAdd && !!KARI_KINDS[k])); };
