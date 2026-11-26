@@ -7,7 +7,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#2f5d3a">
 <link rel="manifest" href="manifest.webmanifest">
-<meta name="sg-build" content="fukuro-20261118-8">
+<meta name="sg-build" content="fukuro-20261126-9">
 <title>袋出し管理 | 栄ガーデン</title>
 <!--
   袋出し管理（指示 20261117-0850。杉さん承認 2026-11-17 08:38）。中の従業員向け。
@@ -41,6 +41,9 @@
     tana.add kinsho）。栄で済みにすると GAS が培養舎の一番古い仕入れ分から減らす（予約は済みにしたとき）。残りが足りなければ記録しない。
     栽培舎の面に小さな「栄」の印。培養舎タブ＝拠点ごとの仕入れ分（baiyou.list。古い順・一番古い分に「次に出す分」）・行を押して個数を直す
     （baiyou.adjust）・「＋ 仕入れを足す」（baiyou.add）。どちらも誰でも。送るのは棚と同じ順番待ち
+  - 直し9（指示 20261126-2205）：同じ日に置いた月夜野と栄が1色に見えた。面の中を「並べた日＋菌床」の組で分け（同じ日でも斜めの2色）、
+    栄の部分は日付の色の上に斜線＋太めの濃い緑の枠・「栄」の札を大きく。数字は「月29」「栄13」の2行（同じ日）・「29+栄13」（日が違う）。
+    凡例に「斜線＝栄（自社培養）」。直す・予約・記録の画面の面と色見本も同じ斜線
 -->
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -187,6 +190,20 @@ table.cal{width:calc(100% - 24px);margin:0 12px;border-collapse:collapse;table-l
 /* 直し8：栄の印・培養舎 */
 .sk{display:inline-block;min-width:15px;height:15px;padding:0 2px;border-radius:3px;background:#fff;color:#8a5a00;font-size:10px;font-style:normal;font-weight:700;line-height:15px;text-align:center;box-shadow:0 0 0 1px #c99a3a}
 .f .sk{position:absolute;right:2px;bottom:2px}
+/* 直し9：栄＝斜線＋太めの濃い緑の枠（月夜野は無地。日付の色はそのまま）。月夜野と混ざった面は栄の側の半分だけ（h1＝左上・h2＝右下） */
+.kz{position:absolute;inset:0;pointer-events:none;border-radius:inherit;background:repeating-linear-gradient(45deg,rgba(20,83,45,.38) 0 2px,transparent 2px 7px);box-shadow:inset 0 0 0 3px #14532d}
+.kz.h1{clip-path:polygon(0 0,100% 0,0 100%)}
+.kz.h2{clip-path:polygon(100% 0,100% 100%,0 100%)}
+.f b,.f s{position:relative}
+.f .old,.f .pd,.f .sk{z-index:1}
+.f.hk b,.f.hk s{text-shadow:0 0 3px #fff,0 0 3px #fff,0 0 2px #fff}
+.f.mix.hk s{font-size:11px;font-weight:700;letter-spacing:0;line-height:1.2}
+.f .sk{min-width:20px;height:20px;line-height:20px;font-size:14px;border-radius:4px;background:#14532d;color:#fff;box-shadow:0 0 0 1.5px #fff}
+.f .sk.tl{top:2px;left:2px;right:auto;bottom:auto}
+.ksw{background-image:repeating-linear-gradient(45deg,rgba(20,83,45,.5) 0 2px,transparent 2px 5px)!important;box-shadow:inset 0 0 0 2px #14532d}
+.mini .c{position:relative;overflow:hidden}
+.mini .c span{position:relative}
+.mini .kz{background:repeating-linear-gradient(45deg,rgba(20,83,45,.45) 0 2px,transparent 2px 6px);box-shadow:inset 0 0 0 2px #14532d}
 .eh .sk,.rec .sk{margin-left:6px;vertical-align:1px}
 .kleft{font-size:13px;color:#555;margin-top:6px}
 .kleft:empty{display:none}
@@ -495,34 +512,53 @@ table.cal{width:calc(100% - 24px);margin:0 12px;border-collapse:collapse;table-l
     Object.keys(m).forEach(function (k) { m[k].sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; }); });
     return m;
   }
-  /** 並べた日ごとにまとめる [{ date, count }] */
-  function byDate(recs) {
-    var o = [], at = {};
-    (recs || []).forEach(function (x) {
-      if (!(x.date in at)) { at[x.date] = o.length; o.push({ date: x.date, count: 0 }); }
-      o[at[x.date]].count += Number(x.count) || 0;
-    });
-    return o;
-  }
   function isResv(recs) { return (recs || []).some(function (x) { return x.reserve; }); }
   function isSakae(recs) { return (recs || []).some(function (x) { return x.kinsho === SAKAE; }); }
   var SK = '<i class="sk">栄</i>';
+  /** 直し9：並べた日＋菌床ごとにまとめる [{ date, sk, count }]。同じ日でも月夜野と栄は別（同じ日なら月夜野が先） */
+  function groups(recs) {
+    var o = [], at = {};
+    (recs || []).forEach(function (x) {
+      var sk = x.kinsho === SAKAE, k = x.date + (sk ? '|栄' : '');
+      if (!(k in at)) { at[k] = o.length; o.push({ date: x.date, sk: sk, count: 0 }); }
+      o[at[k]].count += Number(x.count) || 0;
+    });
+    return o.sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : a.sk - b.sk; });
+  }
+  /** 栄の部分の斜線と枠（1つなら面全体、2つ以上なら斜めの2色のうち栄の側） */
+  function kzHtml(g) {
+    if (g.length < 2) return g.length && g[0].sk ? '<i class="kz"></i>' : '';
+    return (g[0].sk ? '<i class="kz h1"></i>' : '') + (g[1] && g[1].sk ? '<i class="kz h2"></i>' : '');
+  }
   function faceHtml(room, name, recs, h, base, pm) {
-    var g = byDate(recs), sel = pm[name] ? ' pend' : '', pd = (pm[name] ? '<i class="pd">⟳</i>' : '') + (isSakae(recs) ? SK : '');   // 栄の菌床は右下に小さく「栄」（月夜野は印なし）
+    var g = groups(recs), sel = pm[name] ? ' pend' : '', pd = pm[name] ? '<i class="pd">⟳</i>' : '';
     var attr = ' data-face="' + name + '" style="height:' + h + 'px;';
     if (!g.length) return '<div class="f empty' + sel + '"' + attr + '">' + pd + '<s>空</s></div>';
     if (isResv(recs)) {   // 袋出し予約（予約の面にはほかの記録を足せない）
-      return '<div class="f resv' + sel + '"' + attr + '">' + pd + '<b>' + parts(g[0].date)[2] + '<small>日</small></b><s>' + g.reduce(function (s, x) { return s + x.count; }, 0) + '個</s></div>';
+      return '<div class="f resv' + sel + '"' + attr + '">' + pd + (isSakae(recs) ? SK : '') + '<b>' + parts(g[0].date)[2] + '<small>日</small></b><s>' + g.reduce(function (s, x) { return s + x.count; }, 0) + '個</s></div>';
     }
     var old = dayNo(base) - dayNo(g[0].date) > OLD_DAYS ? '<i class="old"></i>' : '';
+    var kz = kzHtml(g), hk = isSakae(recs) ? ' hk' : '';
+    // 「栄」の札は栄の側の角に（右下。栄が左上の半分だけなら左上）
+    var sk = !hk ? '' : g.length > 1 && g[0].sk && !g[1].sk ? SK.replace('"sk"', '"sk tl"') : SK;
     if (g.length === 1) {
-      return '<div class="f' + sel + '"' + attr + 'background:' + colorOf(g[0].date) + '">' + pd + old +
+      return '<div class="f' + hk + sel + '"' + attr + 'background:' + colorOf(g[0].date) + '">' + kz + pd + old + sk +
         '<b>' + parts(g[0].date)[2] + '<small>日</small></b><s>' + g[0].count + '個</s></div>';
     }
-    var bg = 'linear-gradient(135deg,' + colorOf(g[0].date) + ' 50%,' + colorOf(g[1].date) + ' 50%)';
-    var top = g.length === 2 ? '<b>' + parts(g[0].date)[2] + '</b><b>' + parts(g[1].date)[2] + '</b>' : '<b>' + parts(g[0].date)[2] + '他</b>';
-    var cnt = g.length === 2 ? g[0].count + '+' + g[1].count : String(g.reduce(function (s, x) { return s + x.count; }, 0));
-    return '<div class="f mix' + sel + '"' + attr + 'background:' + bg + '">' + pd + old + top + '<s>' + cnt + '個</s></div>';
+    // 斜めの2色は角から角へ（to bottom right）。栄の斜線の半分（clip-path）と境目をそろえる
+    var bg = 'linear-gradient(to bottom right,' + colorOf(g[0].date) + ' 50%,' + colorOf(g[1].date) + ' 50%)';
+    var lab = function (x) { return (x.sk ? '栄' : '') + x.count; }, top, cnt;
+    if (g.length === 2 && g[0].date === g[1].date) {   // 同じ日の月夜野と栄（面の幅が狭いので2行）
+      top = '<b>' + parts(g[0].date)[2] + '<small>日</small></b>';
+      cnt = '<s>月' + g[0].count + '</s><s>栄' + g[1].count + '</s>';
+    } else if (g.length === 2) {   // 栄が入るときは幅に収めるため「個」を省く
+      top = '<b>' + parts(g[0].date)[2] + '</b><b>' + parts(g[1].date)[2] + '</b>';
+      cnt = '<s>' + lab(g[0]) + '+' + lab(g[1]) + (hk ? '' : '個') + '</s>';
+    } else {
+      top = '<b>' + parts(g[0].date)[2] + '他</b>';
+      cnt = '<s>' + g.reduce(function (s, x) { return s + x.count; }, 0) + '個</s>';
+    }
+    return '<div class="f mix' + hk + sel + '"' + attr + 'background:' + bg + '">' + kz + pd + old + sk + top + cnt + '</div>';
   }
   function shelfHtml(r, s, fm, base, pm) {
     var h = Math.min(92, Math.floor(400 / r.depth) - 2);
@@ -587,7 +623,7 @@ table.cal{width:calc(100% - 24px);margin:0 12px;border-collapse:collapse;table-l
     });
     $('tleg').innerHTML = Object.keys(dates).sort().map(function (x) { return '<span><i style="background:' + colorOf(x) + '"></i>' + md(x) + '</span>'; }).join('') +
       (anyResv ? '<span><i style="background:#d9443f"></i>予約</span>' : '') +
-      (anySk ? '<span>' + SK + ' 栄（自社培養）</span>' : '') +
+      (anySk ? '<span><i class="ksw" style="background:#fff"></i>斜線＝栄（自社培養）</span>' : '') +
       (anyOld ? '<span><span class="old"></span>' + OLD_DAYS + '日超</span>' : '');
   }
   function goView(i) {
@@ -889,7 +925,7 @@ table.cal{width:calc(100% - 24px);margin:0 12px;border-collapse:collapse;table-l
     var d = tanaOf(st.site), site = st.site, base = (d && d.today) || today;
     var sh = sheet(esc(siteRoom(room)) + '　' + esc(name),
       '<div style="margin-top:4px">' + recs.map(function (x, i) {
-        return '<div class="erow" data-i="' + i + '"><div class="eh"><span><i style="background:' + colorOf(x.date) + '"></i>並べた日' + (x.kinsho === SAKAE ? SK : '') + '</span><span class="who">' + esc(x.surname || '') + '</span></div>' +
+        return '<div class="erow" data-i="' + i + '"><div class="eh"><span><i' + (x.kinsho === SAKAE ? ' class="ksw"' : '') + ' style="background:' + colorOf(x.date) + '"></i>並べた日' + (x.kinsho === SAKAE ? SK : '') + '</span><span class="who">' + esc(x.surname || '') + '</span></div>' +
           '<div class="ein"><span class="dpick"><button type="button" class="dbox" tabindex="-1" data-el="dl">' + md(x.date) + '</button>' +
           '<input type="date" data-k="date" aria-label="並べた日" value="' + esc(x.date) + '" min="' + addDays(base, -120) + '" max="' + base + '"></span>' +
           '<span><input type="text" inputmode="numeric" autocomplete="off" data-k="count" value="' + x.count + '">個</span></div>' +
@@ -949,7 +985,7 @@ table.cal{width:calc(100% - 24px);margin:0 12px;border-collapse:collapse;table-l
     var total = recs.reduce(function (s, x) { return s + (Number(x.count) || 0); }, 0);
     var sh = sheet(esc(siteRoom(room)) + '　' + esc(name),
       '<div style="margin-top:4px">' + recs.map(function (x) {
-        return '<div class="rec"><span><i style="background:#d9443f"></i>' + md(x.date) + ' に袋出し予約' + (x.kinsho === SAKAE ? SK : '') + '</span><span><b>' + x.count + '個</b> <span class="who">' + esc(x.surname || '') + '</span></span></div>';
+        return '<div class="rec"><span><i' + (x.kinsho === SAKAE ? ' class="ksw"' : '') + ' style="background:#d9443f"></i>' + md(x.date) + ' に袋出し予約' + (x.kinsho === SAKAE ? SK : '') + '</span><span><b>' + x.count + '個</b> <span class="who">' + esc(x.surname || '') + '</span></span></div>';
       }).join('') + '</div>' +
       '<div class="err" data-el="err" style="margin-top:8px"></div>' +
       '<button type="button" class="btn" data-el="done" style="margin-top:8px">袋出し済みにする（並べた日＝今日）</button>' +
@@ -1090,7 +1126,8 @@ table.cal{width:calc(100% - 24px);margin:0 12px;border-collapse:collapse;table-l
         var f = b.dataset.f, on = rec.order.indexOf(f) >= 0;
         var part = !on && full(f) && canPick(f) && used(f) < rec.per;   // 空きが残っている面（斜めの灰。数字は空きの数）
         b.className = 'c ' + (on ? 'sel' : isResv(fm[f]) ? 'r' : !canPick(f) ? 'x' : part ? 'h' : '');
-        b.textContent = on ? (cnt[f] !== capOf(f) ? String(cnt[f]) : '') : part ? String(capOf(f)) : '';   // 選んだ面は空きと違う数（端数）だけ出す
+        var t = on ? (cnt[f] !== capOf(f) ? String(cnt[f]) : '') : part ? String(capOf(f)) : '';   // 選んだ面は空きと違う数（端数）だけ出す
+        b.innerHTML = (on ? '' : kzHtml(groups(fm[f]))) + (t ? '<span>' + t + '</span>' : '');   // 直し9：栄の部分は棚と同じ斜線と枠
       });
     }
     function resetTotal() {
