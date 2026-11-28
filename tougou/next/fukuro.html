@@ -7,7 +7,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#2f5d3a">
 <link rel="manifest" href="manifest.webmanifest">
-<meta name="sg-build" content="fukuro-20261128-10">
+<meta name="sg-build" content="fukuro-20261126-9">
 <title>袋出し管理 | 栄ガーデン</title>
 <!--
   袋出し管理（指示 20261117-0850。杉さん承認 2026-11-17 08:38）。中の従業員向け。
@@ -44,8 +44,6 @@
   - 直し9（指示 20261126-2205）：同じ日に置いた月夜野と栄が1色に見えた。面の中を「並べた日＋菌床」の組で分け（同じ日でも斜めの2色）、
     栄の部分は日付の色の上に斜線＋太めの濃い緑の枠・「栄」の札を大きく。数字は「月29」「栄13」の2行（同じ日）・「29+栄13」（日が違う）。
     凡例に「斜線＝栄（自社培養）」。直す・予約・記録の画面の面と色見本も同じ斜線
-  - 直し10（指示 20261128-1915）：細い面では斜めの少ない側が読めない → 組が2〜3の面は上下の段に（上が古い・同じ日なら月夜野が上）。
-    段の高さは個数の比で1段30px以上（足りなければ等分）。栄の段はしま模様＋上に濃い緑の線＋「栄」のバッジ。4組以上は「4組 計120」だけ
 -->
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -104,6 +102,7 @@ table.cal{width:calc(100% - 24px);margin:0 12px;border-collapse:collapse;table-l
 .f b{font-size:17px;white-space:nowrap;line-height:1.15}.f b small{font-size:10px;font-weight:400}
 .f s{text-decoration:none;font-size:10px;color:#333;white-space:nowrap}
 .f.empty{background:#fff;border:1.5px dashed #bbb}.f.empty s{color:#aaa}
+.f.mix b{font-size:12px;line-height:1.1}.f.mix s{font-size:9px;letter-spacing:-.4px}
 .f .old{position:absolute;top:3px;right:3px;width:8px;height:8px;border-radius:50%;background:#222;box-shadow:0 0 0 1.5px #fff}
 .f.resv{background:#d9443f}.f.resv b,.f.resv s{color:#fff}
 .f .pd{position:absolute;top:2px;left:3px;width:15px;height:15px;border-radius:50%;background:#fff;color:#1f6fd1;font-size:12px;font-style:normal;line-height:15px;text-align:center;box-shadow:0 0 0 1px #1f6fd1;animation:spin 1.2s linear infinite}
@@ -193,21 +192,14 @@ table.cal{width:calc(100% - 24px);margin:0 12px;border-collapse:collapse;table-l
 .f .sk{position:absolute;right:2px;bottom:2px}
 /* 直し9：栄＝斜線＋太めの濃い緑の枠（月夜野は無地。日付の色はそのまま）。月夜野と混ざった面は栄の側の半分だけ（h1＝左上・h2＝右下） */
 .kz{position:absolute;inset:0;pointer-events:none;border-radius:inherit;background:repeating-linear-gradient(45deg,rgba(20,83,45,.38) 0 2px,transparent 2px 7px);box-shadow:inset 0 0 0 3px #14532d}
+.kz.h1{clip-path:polygon(0 0,100% 0,0 100%)}
+.kz.h2{clip-path:polygon(100% 0,100% 100%,0 100%)}
 .f b,.f s{position:relative}
 .f .old,.f .pd,.f .sk{z-index:1}
 .f.hk b,.f.hk s{text-shadow:0 0 3px #fff,0 0 3px #fff,0 0 2px #fff}
+.f.mix.hk s{font-size:11px;font-weight:700;letter-spacing:0;line-height:1.2}
 .f .sk{min-width:20px;height:20px;line-height:20px;font-size:14px;border-radius:4px;background:#14532d;color:#fff;box-shadow:0 0 0 1.5px #fff}
-/* 直し10：組が2〜3の面は上下の段（上が古い。同じ日なら月夜野が上）。栄の段＝しま模様＋上に濃い緑の線＋「栄」のバッジ */
-.f.stk{justify-content:flex-start}
-.f .sg{flex:none;width:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative;overflow:hidden}
-.f .sg b{font-size:13px;line-height:1.05}.f .sg b small{font-size:9px}.f .sg s{font-size:10px;line-height:1.05}
-.f .sg.k{background-image:repeating-linear-gradient(45deg,rgba(20,83,45,.38) 0 2px,transparent 2px 7px);border-top:2px solid #14532d}
-.f .sg.k b,.f .sg.k s{text-shadow:0 0 3px #fff,0 0 3px #fff,0 0 2px #fff}
-.f .sg em{font-style:normal;font-size:13px;font-weight:700;white-space:nowrap;line-height:1.1;display:flex;align-items:center;gap:1px;letter-spacing:-.3px}
-.f .sg .sk{position:static;min-width:14px;height:14px;line-height:14px;font-size:11px;padding:0 1px;border-radius:3px;box-shadow:0 0 0 1px #fff;letter-spacing:0}
-.f .sg em.e2{font-size:12px}
-.f.many{background:#e5e7eb}.f.many b{font-size:14px}.f.many s{font-size:11px;font-weight:700}
-.mini .kz.p{box-shadow:none;border-top:2px solid #14532d}
+.f .sk.tl{top:2px;left:2px;right:auto;bottom:auto}
 .ksw{background-image:repeating-linear-gradient(45deg,rgba(20,83,45,.5) 0 2px,transparent 2px 5px)!important;box-shadow:inset 0 0 0 2px #14532d}
 .mini .c{position:relative;overflow:hidden}
 .mini .c span{position:relative}
@@ -533,33 +525,10 @@ table.cal{width:calc(100% - 24px);margin:0 12px;border-collapse:collapse;table-l
     });
     return o.sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : a.sk - b.sk; });
   }
-  var SEG_MAX = 3, SEG_MIN = 30;
-  /** 直し10：上下の段の高さ（個数の比。1段は min 以上を優先し、多い段を縮める。min が収まらなければ等分） */
-  function segH(g, H, min) {
-    var n = g.length, out = [], fix = {}, i, k;
-    if (n * min >= H) { for (i = 0; i < n; i++) out.push(Math.floor(H / n)); out[n - 1] += H - Math.floor(H / n) * n; return out; }
-    for (k = 0; k < n; k++) {   // 最低に満たない段を min に固定し、残りを比で分け直す（段は3つまでなので数回で落ち着く）
-      var rest = H, tot = 0, more = false;
-      for (i = 0; i < n; i++) if (fix[i]) rest -= min; else tot += g[i].count;
-      for (i = 0; i < n; i++) {
-        out[i] = fix[i] ? min : tot > 0 ? rest * g[i].count / tot : rest / (n - Object.keys(fix).length);
-        if (!fix[i] && out[i] < min) { fix[i] = 1; more = true; }
-      }
-      if (!more) break;
-    }
-    var r = out.map(Math.floor), s = r.reduce(function (a, b) { return a + b; }, 0);
-    r[r.length - 1] += H - s;   // 端数は一番下の段に
-    return r;
-  }
-  /** 栄の部分のしま模様と線（1つなら面全体に枠、2〜3段なら栄の段だけ上に線。記録の画面の小さな面に使う。高さは％） */
+  /** 栄の部分の斜線と枠（1つなら面全体、2つ以上なら斜めの2色のうち栄の側） */
   function kzHtml(g) {
     if (g.length < 2) return g.length && g[0].sk ? '<i class="kz"></i>' : '';
-    if (g.length > SEG_MAX) return '';
-    var hs = segH(g, 100, 40), top = 0;   // 小さな面（高さ30px）は少ない段も見えるよう1段40%以上（3段なら等分）
-    return g.map(function (x, i) {
-      var t = top; top += hs[i];
-      return x.sk ? '<i class="kz p" style="top:' + t + '%;bottom:auto;height:' + hs[i] + '%"></i>' : '';
-    }).join('');
+    return (g[0].sk ? '<i class="kz h1"></i>' : '') + (g[1] && g[1].sk ? '<i class="kz h2"></i>' : '');
   }
   function faceHtml(room, name, recs, h, base, pm) {
     var g = groups(recs), sel = pm[name] ? ' pend' : '', pd = pm[name] ? '<i class="pd">⟳</i>' : '';
@@ -569,23 +538,27 @@ table.cal{width:calc(100% - 24px);margin:0 12px;border-collapse:collapse;table-l
       return '<div class="f resv' + sel + '"' + attr + '">' + pd + (isSakae(recs) ? SK : '') + '<b>' + parts(g[0].date)[2] + '<small>日</small></b><s>' + g.reduce(function (s, x) { return s + x.count; }, 0) + '個</s></div>';
     }
     var old = dayNo(base) - dayNo(g[0].date) > OLD_DAYS ? '<i class="old"></i>' : '';
+    var kz = kzHtml(g), hk = isSakae(recs) ? ' hk' : '';
+    // 「栄」の札は栄の側の角に（右下。栄が左上の半分だけなら左上）
+    var sk = !hk ? '' : g.length > 1 && g[0].sk && !g[1].sk ? SK.replace('"sk"', '"sk tl"') : SK;
     if (g.length === 1) {
-      var hk = g[0].sk ? ' hk' : '';
-      return '<div class="f' + hk + sel + '"' + attr + 'background:' + colorOf(g[0].date) + '">' + kzHtml(g) + pd + old + (hk ? SK : '') +
+      return '<div class="f' + hk + sel + '"' + attr + 'background:' + colorOf(g[0].date) + '">' + kz + pd + old + sk +
         '<b>' + parts(g[0].date)[2] + '<small>日</small></b><s>' + g[0].count + '個</s></div>';
     }
-    if (g.length > SEG_MAX) {   // 4組以上は分けずに数字だけ（押すと中身が出る）
-      return '<div class="f many' + sel + '"' + attr + '">' + pd + old + '<b>' + g.length + '組</b><s>計' + g.reduce(function (s, x) { return s + x.count; }, 0) + '</s></div>';
+    // 斜めの2色は角から角へ（to bottom right）。栄の斜線の半分（clip-path）と境目をそろえる
+    var bg = 'linear-gradient(to bottom right,' + colorOf(g[0].date) + ' 50%,' + colorOf(g[1].date) + ' 50%)';
+    var lab = function (x) { return (x.sk ? '栄' : '') + x.count; }, top, cnt;
+    if (g.length === 2 && g[0].date === g[1].date) {   // 同じ日の月夜野と栄（面の幅が狭いので2行）
+      top = '<b>' + parts(g[0].date)[2] + '<small>日</small></b>';
+      cnt = '<s>月' + g[0].count + '</s><s>栄' + g[1].count + '</s>';
+    } else if (g.length === 2) {   // 栄が入るときは幅に収めるため「個」を省く
+      top = '<b>' + parts(g[0].date)[2] + '</b><b>' + parts(g[1].date)[2] + '</b>';
+      cnt = '<s>' + lab(g[0]) + '+' + lab(g[1]) + (hk ? '' : '個') + '</s>';
+    } else {
+      top = '<b>' + parts(g[0].date)[2] + '他</b>';
+      cnt = '<s>' + g.reduce(function (s, x) { return s + x.count; }, 0) + '個</s>';
     }
-    // 直し10：上下の段（上が古い）。同じ日の段がほかにあれば「月29」「栄13」、日が違えば各段に「日」と「個」
-    var hs = segH(g, h, SEG_MIN);
-    var segs = g.map(function (x, i) {
-      var same = g.some(function (y, j) { return j !== i && y.date === x.date; }), body;
-      if (same) body = x.sk ? '<em>' + SK + x.count + '</em>' : '<em>月' + x.count + '</em>';
-      else body = '<b>' + parts(x.date)[2] + '<small>日</small></b>' + (x.sk ? '<em class="e2">' + SK + x.count + '</em>' : '<s>' + x.count + '個</s>');   // 栄は幅に収めるため「個」を省く
-      return '<div class="sg' + (x.sk ? ' k' : '') + '" style="height:' + hs[i] + 'px;background-color:' + colorOf(x.date) + '">' + body + '</div>';
-    }).join('');
-    return '<div class="f stk' + sel + '"' + attr + '">' + pd + old + segs + '</div>';
+    return '<div class="f mix' + hk + sel + '"' + attr + 'background:' + bg + '">' + kz + pd + old + sk + top + cnt + '</div>';
   }
   function shelfHtml(r, s, fm, base, pm) {
     var h = Math.min(92, Math.floor(400 / r.depth) - 2);
@@ -1154,7 +1127,7 @@ table.cal{width:calc(100% - 24px);margin:0 12px;border-collapse:collapse;table-l
         var part = !on && full(f) && canPick(f) && used(f) < rec.per;   // 空きが残っている面（斜めの灰。数字は空きの数）
         b.className = 'c ' + (on ? 'sel' : isResv(fm[f]) ? 'r' : !canPick(f) ? 'x' : part ? 'h' : '');
         var t = on ? (cnt[f] !== capOf(f) ? String(cnt[f]) : '') : part ? String(capOf(f)) : '';   // 選んだ面は空きと違う数（端数）だけ出す
-        b.innerHTML = (on ? '' : kzHtml(groups(fm[f]))) + (t ? '<span>' + t + '</span>' : '');   // 直し9：栄の部分は棚と同じ斜線と枠（直し10：2〜3組は上下の段）
+        b.innerHTML = (on ? '' : kzHtml(groups(fm[f]))) + (t ? '<span>' + t + '</span>' : '');   // 直し9：栄の部分は棚と同じ斜線と枠
       });
     }
     function resetTotal() {
